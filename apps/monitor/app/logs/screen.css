@@ -1,0 +1,67 @@
+/* /logs only (from design/monitoring-ui/logs.html <style>). Tokens and shared components live in design-system.css;
+   page classes are prefixed lg- (DESIGN.md §5b: promote a class used by two screens instead of copying it). */
+
+/* Query bar: free text + submit, then applied filters, then quick filters */
+.lg-query { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.lg-query > .search { flex: 1 1 360px; width: auto; }
+.lg-query .search__input { padding-right: 44px; }
+.lg-query .search > .kbd { position: absolute; right: 9px; pointer-events: none; }
+.lg-query__hint { flex: 1 1 100%; }
+.lg-filters { margin-top: var(--sp-2); padding: var(--sp-1) 0 var(--sp-2); border-bottom: 1px solid var(--line); }
+.lg-filters .filterbar { padding: var(--sp-1) 0; gap: var(--sp-2) var(--sp-4); }
+.lg-fchip-lvl { font-family: var(--font-mono); }
+.lg-filters .search.lg-user { flex: none; width: 196px; }
+.lg-filters .select__control { max-width: 260px; }
+
+/* Histogram: two stacked small multiples that share the time axis */
+.lg-hist { margin-top: var(--sp-4); }
+.lg-hist .chart__sub .num { color: var(--ink-2); }
+/* app: the bars picked by a drag (HistBrush) */
+.lg-hist .c-hit.is-sel { fill: var(--accent); fill-opacity: 0.12; }
+/* a bucket not fully inside the range (first / still filling last): lighter, so it never reads as a drop */
+.lg-hist .lg-bar--partial { fill-opacity: 0.4; }
+
+/* Log table */
+.lg-results { margin-top: var(--sp-4); }
+.lg-results .panel__head { align-items: center; }
+.lg-table td { vertical-align: top; line-height: 22px; }
+.lg-table td.lg-time .ts, .lg-table td .svc { line-height: 22px; }
+.lg-table td .lvl { vertical-align: 0; margin-top: 2px; }
+.lg-table td.lg-tog { padding-right: 0; }
+.lg-table .lg-msgcell { width: 100%; min-width: 380px; }
+.lg-th-sub { font-weight: 400; }
+.lg-msg { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; }
+.lg-src { font: 400 var(--fs-12)/22px var(--font-mono); color: var(--muted); white-space: nowrap; }
+/* app: the title is a DrawerLink (an <a>), styled like the mockup's button */
+.lg-title { padding: 0; border: 0; background: none; text-align: left; font: 400 var(--fs-13)/22px var(--font-ui); color: var(--ink-2); cursor: pointer; border-radius: var(--r-1); text-decoration: none; overflow-wrap: anywhere; }
+.lg-title:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.lg-row--wrn .lg-title, .lg-row--err .lg-title, .lg-row--ftl .lg-title { color: var(--ink); font-weight: 500; }
+.lg-row--hint .lg-title { font-weight: 600; }
+.lg-msg > .kv-list { display: inline-flex; }
+.lg-table td.num { white-space: nowrap; }
+.lg-acts { margin-left: auto; }
+
+/* Drawer content */
+.lg-drawer .drawer__body { gap: var(--sp-5); }
+.lg-frames-title { margin: var(--sp-3) 0 var(--sp-1h); }
+.lg-drawer .disclosure + .disclosure { margin-top: var(--sp-2); }
+.lg-drawer .disclosure__body .code { margin-top: var(--sp-1); }
+.lg-drawer .drawer__foot .btn-copy.btn--cta { margin-left: auto; }
+.lg-json-note { margin-bottom: var(--sp-1h); }
+/* app: NEW + "ตั้งแต่ <version>" after the error-group link */
+.lg-new { display: inline-flex; align-items: center; gap: var(--sp-1h); margin-left: var(--sp-2); vertical-align: 1px; }
+/* app: multi-line values (messages, SQL, causes) keep their line breaks */
+.lg-drawer .lg-pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 599px) {
+  .lg-filters .search.lg-user { width: 100%; }
+  .lg-filters .select, .lg-filters .select__control { max-width: 100%; }
+  .lg-acts { margin-left: 0; }
+  .lg-drawer .drawer__foot .btn-copy.btn--cta { margin-left: 0; }
+  /* each log line: time · level · duration, then the readable message (title, category, chips), then service/role */
+  .lg-table > tbody > tr { grid-template-columns: 24px auto auto minmax(0, 1fr); grid-template-areas: "tog time lvl dur" "msg msg msg msg" "svc svc svc svc"; }
+  .lg-table.table--reflow > tbody > tr > td.lg-msgcell { grid-area: msg; width: auto; min-width: 0; }
+  .lg-tog { grid-area: tog; } .lg-time { grid-area: time; } .lg-lvl { grid-area: lvl; } .lg-svc { grid-area: svc; }
+  .lg-table.table--reflow > tbody > tr > td.lg-dur { grid-area: dur; text-align: right; }
+  .lg-table td, .lg-table td.lg-time .ts, .lg-table td .svc { line-height: 20px; }
+}

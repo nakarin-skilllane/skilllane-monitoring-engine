@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Read from undefined value · Error · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/app.js"></script>
+<style>
+  /* error-detail.html and error-detail-null-read.html. Prefix: ed-. Tokens and components live in assets/styles.css. */
+  .ed-what-cat { margin-top: var(--sp-3); display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1h) var(--sp-2); font-size: var(--fs-13); color: var(--ink-2); line-height: var(--lh-ui); }
+
+  /* เกิดอะไรขึ้น + กรณีนี้: two sections side by side, the fix gets the weight */
+  .ed-explain { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: var(--sp-4) var(--sp-6); margin-top: var(--sp-8); align-items: start; }
+  .ed-explain > .section { margin-top: 0; }
+  .ed-what { padding: var(--sp-1) 0 var(--sp-1) var(--sp-3); border-left: 2px solid var(--line-strong); font-size: var(--fs-14); line-height: var(--lh-text); color: var(--ink-2); max-width: 62ch; }
+  .ed-fix { padding: var(--sp-3) var(--sp-5) var(--sp-4); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--ink); border-radius: var(--r-3); }
+  .ed-fix__text { font-size: var(--fs-16); font-weight: 500; line-height: var(--lh-text); color: var(--ink); max-width: 72ch; }
+  .ed-fix__foot { margin-top: var(--sp-2); }
+
+  /* แก้ที่ไหน: hairline grid of six cells */
+  .ed-where { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-3); overflow: hidden; }
+  .ed-where__cell { display: grid; gap: var(--sp-1); align-content: start; min-width: 0; padding: var(--sp-3) var(--sp-4); background: var(--surface); }
+  .ed-where dt { font-size: var(--fs-12); color: var(--ink-2); line-height: var(--lh-ui); }
+  .ed-where dd { margin: 0; display: grid; gap: var(--sp-1); min-width: 0; }
+  .ed-where__v { display: flex; align-items: flex-start; gap: var(--sp-1h); min-width: 0; font: 400 13px/1.5 var(--font-mono); color: var(--ink); overflow-wrap: anywhere; }
+  .ed-where__v > .btn-copy { margin-top: -1px; }
+  .ed-where__v > .lvl { margin-top: 1px; }
+  .ed-where__cell--target .ed-where__v { color: var(--danger); font-weight: 600; }
+  .ed-where__more { font-size: var(--fs-12); color: var(--muted); line-height: var(--lh-ui); }
+
+  @media (max-width: 1099px) { .ed-where { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 899px) { .ed-explain { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 599px) { .ed-where { grid-template-columns: minmax(0, 1fr); } .ed-fix { padding: var(--sp-3) var(--sp-4); } }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html" aria-current="page"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h">1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h" selected>24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">16 ต.ค. 14:20 – 17 ต.ค. 14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><a href="errors.html">Error</a><span class="crumbs__sep" aria-hidden="true">/</span><span>NULL_READ</span></nav>
+          <h1 class="page-title">Read from undefined value</h1>
+          <div class="page-head__meta">
+            <span class="lvl lvl--err">ERR</span>
+            <span class="tag" title="error_code">NULL_READ</span>
+            <span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span>
+            <span class="badge-new">NEW</span><span class="badge-new__since">ตั้งแต่ 31.4.0</span>
+            <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span>
+            <span class="idchip" title="error_type"><span class="idchip__k">type</span><span class="idchip__v">TypeError</span></span>
+            <span class="idchip"><span class="idchip__k">fingerprint</span><span class="idchip__v">4820193377146551809</span><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4820193377146551809" aria-label="คัดลอก fingerprint"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span>
+          </div>
+          <p class="page-sub mt-2">error group ใหม่หลัง deploy: เกิดอะไร ต้องแก้อะไร แก้ที่ไหน ใครโดน · <span class="env env--prod">prod</span> · 24 ชั่วโมงล่าสุด (16 ต.ค. 14:20 – 17 ต.ค. 14:20 ICT)</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="trace-detail.html?traceId=c51e0a9d3b7f42e6a08d1f3b5e7c9a24"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>เปิด trace ตัวอย่าง</a>
+          <a class="btn" href="logs.html?q=NULL_READ&amp;route=GET%20%2Fclasses%2F%3Aid%2Freport&amp;level=error&amp;from=now-24h"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>ดู log ทั้งหมดของ error นี้</a>
+          <button class="btn btn--cta btn-copy" type="button" data-copy-target="#ed-ai-md"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+        </div>
+      </header>
+
+      <!-- screen content starts here -->
+      <div class="callouts">
+        <div class="callout callout--error" role="status">
+          <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l3.75 3.75v5l-3.75 3.75h-5L1.75 10.5v-5z"/><path d="M8 5v3.5M8 10.9v.1"/></svg>
+          <p class="callout__title">ใหม่ใน 31.4.0: ไม่เคยเกิดบน 31.3.2 ในข้อมูลที่เก็บไว้</p>
+          <p class="callout__text">deploy <span class="tag">31.4.0</span> <span class="ts">08:00</span> · ครั้งแรก <span class="ts">08:03</span> · 65 จาก 66 ครั้งอยู่ใน 1 ชั่วโมงล่าสุด · ก่อน deploy route นี้ไม่มี 5xx และ p95 300 ms (ตอนนี้ 1.9 % · 420 ms)</p>
+          <div class="callout__actions"><a class="btn btn--sm" href="overview.html#ov-routes-t">เทียบ route ก่อน deploy</a></div>
+        </div>
+      </div>
+      <div class="kpis kpis--4 mt-4" aria-label="สรุป error group">
+        <div class="kpi">
+          <span class="kpi__label">ครั้งใน 24 ชั่วโมง</span>
+          <span class="kpi__value">66<span class="kpi__unit">ครั้ง</span></span>
+          <div class="kpi__foot"><span class="kpi__delta">65 ใน 1 ชั่วโมงล่าสุด · สูงสุด 65 ช่วง 13:20–14:20</span></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">User ที่โดน</span>
+          <span class="kpi__value">21<span class="kpi__unit">คน</span></span>
+          <div class="kpi__foot"><span class="kpi__delta">นับ user_id ไม่ซ้ำ · route เดียว · 3 โรงเรียนในตัวอย่าง</span></div>
+        </div>
+        <div class="kpi kpi--alert">
+          <span class="kpi__label">ครั้งแรก</span>
+          <span class="kpi__value">17 ต.ค. 08:03</span>
+          <div class="kpi__foot"><span class="kpi__delta kpi__delta--bad">บน 31.4.0 · 3 นาทีหลัง deploy จึงเป็น NEW</span></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">ล่าสุด</span>
+          <span class="kpi__value">17 ต.ค. 14:16</span>
+          <div class="kpi__foot"><span class="kpi__delta">4 นาทีที่แล้ว · บน 31.4.0 · ยังเกิดอยู่</span></div>
+        </div>
+      </div>
+
+      <div class="ed-explain">
+        <section class="section" aria-labelledby="h-what">
+          <div class="section__head">
+            <h2 class="section__title" id="h-what">เกิดอะไรขึ้น</h2>
+            <span class="section__meta">เหมือนกันทุกครั้งของ error ชนิดนี้ · <span class="mono">error_hint_detail</span></span>
+          </div>
+          <p class="ed-what">A property was read from a value that is undefined. Usually a relation that was not loaded or a lookup that found nothing; load the relation or guard the value.</p>
+          <p class="ed-what-cat"><span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span><span>โค้ดอ่านค่าจาก object ที่ไม่มีอยู่จริง ต้องแก้โค้ดแล้ว deploy ใหม่ ไม่ใช่ข้อมูลที่ผู้ใช้ส่งมาผิดและไม่ใช่ระบบภายนอกล่ม</span></p>
+        </section>
+        <section class="section" aria-labelledby="h-case">
+          <div class="section__head">
+            <h2 class="section__title" id="h-case">กรณีนี้</h2>
+            <span class="section__meta">จากครั้งล่าสุด <span class="ts">14:16:51.262</span> · <span class="mono">error_fix</span></span>
+          </div>
+          <div class="ed-fix">
+            <span class="err-row__detail-label">ต้องแก้อะไร</span>
+            <p class="ed-fix__text">&quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.</p>
+            <ul class="kv-list ed-fix__foot" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li>
+              <li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/report</span></li>
+              <li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li>
+              <li class="kv"><span class="kv__k">source</span><span class="kv__v">GetClassReportHandler.execute</span></li>
+              <li class="kv"><span class="kv__k">target</span><span class="kv__v">school</span></li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <section class="section" aria-labelledby="h-where">
+        <div class="section__head">
+          <h2 class="section__title" id="h-where">แก้ที่ไหน</h2>
+          <span class="section__meta">จาก error group และ log ครั้งล่าสุด · ชื่อเล็กใต้หัวข้อคือชื่อ column ใน ClickHouse</span>
+        </div>
+        <dl class="ed-where">
+          <div class="ed-where__cell">
+            <dt>Route<span class="fname">http_method · http_route</span></dt>
+            <dd><span class="ed-where__v"><span><span class="method">GET</span> /classes/:id/report</span></span><span class="ed-where__more">ทุกครั้งมาจาก route นี้</span></dd>
+          </div>
+          <div class="ed-where__cell">
+            <dt>Usecase<span class="fname">usecase</span></dt>
+            <dd><span class="ed-where__v">GetClassReportQuery</span></dd>
+          </div>
+          <div class="ed-where__cell">
+            <dt>Function ต้นทาง<span class="fname">origin_function</span></dt>
+            <dd><span class="ed-where__v"><span>GetClassReportHandler.execute</span><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="GetClassReportHandler.execute" aria-label="คัดลอกชื่อ function"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></dd>
+          </div>
+          <div class="ed-where__cell">
+            <dt>ไฟล์<span class="fname">origin_file</span></dt>
+            <dd><span class="ed-where__v"><span>src/domain/class-report/get-class-report.handler.ts</span><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="src/domain/class-report/get-class-report.handler.ts" aria-label="คัดลอก path ของไฟล์"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span><span class="ed-where__more">บรรทัด 42 ตาม frame แรกของแอปใน stack · ไฟล์นี้เปลี่ยนใน 31.4.0</span></dd>
+          </div>
+          <div class="ed-where__cell ed-where__cell--target">
+            <dt>ค่าที่ผิด (target)<span class="fname">error_target</span></dt>
+            <dd><span class="ed-where__v">school</span><span class="ed-where__more">relation ของ <span class="mono">ClassroomEntity</span> และ <span class="mono">StudentEntity</span> ที่ไม่ได้ถูกโหลด</span></dd>
+          </div>
+          <div class="ed-where__cell">
+            <dt>ขั้นที่พัง<span class="fname">failed_step</span></dt>
+            <dd><span class="ed-where__v t-muted">–</span><span class="ed-where__more">ว่าง: error เกิดในโค้ดของแอปเอง ไม่ใช่ระหว่างเรียก DB หรือระบบอื่น</span></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="section" aria-labelledby="h-actual">
+        <div class="section__head">
+          <h2 class="section__title" id="h-actual">Error จริง</h2>
+          <span class="section__meta">ครั้งล่าสุด <span class="ts">17 ต.ค. 14:16:51.262</span> · trace <a class="mono" href="trace-detail.html?traceId=c51e0a9d3b7f42e6a08d1f3b5e7c9a24">c51e0a9d…</a></span>
+        </div>
+        <div class="stack">
+          <div class="code-block">
+            <div class="code-block__head">
+              <span class="code-block__title">error จริง · <span class="mono">error_type [error_code] error_message</span></span>
+              <button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy-target="#ed-actual"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอก</span></button>
+            </div>
+<pre class="code code--wrap" id="ed-actual"><span class="c-err">TypeError [NULL_READ] Cannot read properties of undefined (reading 'school')</span></pre>
+          </div>
+          <div class="code-block">
+            <div class="code-block__head">
+              <span class="code-block__title">Stack · frame ในโค้ดของแอปก่อน (2 จาก 4 frame) · <span class="mono">error_stack</span></span>
+              <button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy-target="#ed-stack-full"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอก stack เต็ม</span></button>
+            </div>
+<pre class="code stacktrace" id="ed-stack-app"><span class="fr fr--head">TypeError: Cannot read properties of undefined (reading 'school')</span>
+<span class="fr fr--app">    at GetClassReportHandler.execute (<span class="fr__loc">src/domain/class-report/get-class-report.handler.ts:42:38</span>)</span>
+<span class="fr fr--app">    at ClassReportController.getReport (<span class="fr__loc">src/domain/class-report/class-report.controller.ts:27:28</span>)</span>
+<span class="stacktrace__gap">    … อีก 2 frame จาก node_modules (@nestjs) อยู่ใน stack เต็มด้านล่าง</span></pre>
+          </div>
+          <details class="disclosure">
+            <summary>Stack เต็มตามลำดับจริง<span class="disclosure__meta">4 frame · 2 ในโค้ดแอป · 2 จาก library</span></summary>
+            <div class="disclosure__body">
+<pre class="code stacktrace" id="ed-stack-full"><span class="fr fr--head">TypeError: Cannot read properties of undefined (reading 'school')</span>
+<span class="fr fr--app">    at GetClassReportHandler.execute (<span class="fr__loc">src/domain/class-report/get-class-report.handler.ts:42:38</span>)</span>
+<span class="fr">    at QueryBus.execute (node_modules/@nestjs/cqrs/dist/query-bus.js:39:28)</span>
+<span class="fr fr--app">    at ClassReportController.getReport (<span class="fr__loc">src/domain/class-report/class-report.controller.ts:27:28</span>)</span>
+<span class="fr">    at node_modules/@nestjs/core/router/router-execution-context.js:46:28</span></pre>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="h-when">
+        <div class="section__head">
+          <h2 class="section__title" id="h-when">เกิดเมื่อไหร่</h2>
+          <span class="section__meta">ทุกชั่วโมงใน 24 ชั่วโมงล่าสุด และทุกนาทีในชั่วโมงล่าสุด · เส้นตั้ง = deploy school-core-api</span>
+        </div>
+        <figure class="chart ed-chart">
+          <div class="chart__head">
+            <h3 class="chart__title" id="ed-chart-title">จำนวนครั้งต่อชั่วโมง</h3>
+            <span class="chart__sub">prod · 16 ต.ค. 14:20 – 17 ต.ค. 14:20 ICT · รวม 66 ครั้ง · ช่องละ 1 ชั่วโมงเริ่มที่ :20 (ช่องเดียวกับแท่งในหน้า Error)</span>
+          </div>
+          <div class="chart__plot" data-time-axis>
+<svg viewBox="0 0 1140 236" role="img" aria-labelledby="ed-chart-title ed-chart-desc" style="--chart-min:1026px">
+  <desc id="ed-chart-desc">จำนวนครั้งต่อชั่วโมง 16 ต.ค. 14:20 ถึง 17 ต.ค. 14:20 รวม 66 ครั้ง ครั้งแรก 08:03 หลัง deploy 31.4.0 เวลา 08:00 แล้ว 65 ครั้งในช่วง 13:20 ถึง 14:20 ไม่เคยเกิดก่อน deploy</desc>
+  <line class="c-grid" x1="40" x2="1120" y1="144.571" y2="144.571"/>
+  <line class="c-grid" x1="40" x2="1120" y1="93.1429" y2="93.1429"/>
+  <line class="c-grid" x1="40" x2="1120" y1="41.7143" y2="41.7143"/>
+  <text class="c-tick c-tick--end" x="32" y="200">0</text>
+  <text class="c-tick c-tick--end" x="32" y="148.571">20</text>
+  <text class="c-tick c-tick--end" x="32" y="97.1429">40</text>
+  <text class="c-tick c-tick--end" x="32" y="45.7143">60</text>
+  <line class="c-axis" x1="40" x2="1120" y1="196" y2="196"/>
+  <line class="c-axis" x1="115" x2="115" y1="196" y2="200"/>
+  <text class="c-tick c-tick--mid" x="115" y="214">16:00</text>
+  <text class="c-tick c-tick--mid" x="115" y="230">16 ต.ค.</text>
+  <line class="c-axis" x1="295" x2="295" y1="196" y2="200"/>
+  <text class="c-tick c-tick--mid" x="295" y="214">20:00</text>
+  <line class="c-axis" x1="475" x2="475" y1="196" y2="200"/>
+  <text class="c-tick c-tick--mid" x="475" y="214">00:00</text>
+  <text class="c-tick c-tick--mid" x="475" y="230">17 ต.ค.</text>
+  <line class="c-axis" x1="655" x2="655" y1="196" y2="200"/>
+  <text class="c-tick c-tick--mid" x="655" y="214">04:00</text>
+  <line class="c-axis" x1="835" x2="835" y1="196" y2="200"/>
+  <text class="c-tick c-tick--mid" x="835" y="214">08:00</text>
+  <line class="c-axis" x1="1015" x2="1015" y1="196" y2="200"/>
+  <text class="c-tick c-tick--mid" x="1015" y="214">12:00</text>
+  <path class="c-bar" d="M815.5 196V194.714Q815.5 193.429 816.786 193.429H838.214Q839.5 193.429 839.5 194.714V196Z"/>
+  <path class="c-bar" d="M1085.5 196V30.8571Q1085.5 28.8571 1087.5 28.8571H1107.5Q1109.5 28.8571 1109.5 30.8571V196Z"/>
+  <line class="c-event" x1="835" x2="835" y1="16" y2="196"/>
+  <text class="c-label c-label--muted" x="829" y="30" text-anchor="end">31.3.2</text>
+  <text class="c-event-label" x="841" y="30">deploy 31.4.0 · 08:00</text>
+  <text class="c-label" x="1097.5" y="22.8571" text-anchor="middle">65</text>
+  <g>
+    <rect class="c-hit" x="40" y="16" width="45" height="180" data-tip="16 ต.ค. 14:20–15:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="85" y="16" width="45" height="180" data-tip="16 ต.ค. 15:20–16:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="130" y="16" width="45" height="180" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="175" y="16" width="45" height="180" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="220" y="16" width="45" height="180" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="265" y="16" width="45" height="180" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="310" y="16" width="45" height="180" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="355" y="16" width="45" height="180" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="400" y="16" width="45" height="180" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="445" y="16" width="45" height="180" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="490" y="16" width="45" height="180" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="535" y="16" width="45" height="180" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="580" y="16" width="45" height="180" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="625" y="16" width="45" height="180" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="670" y="16" width="45" height="180" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="715" y="16" width="45" height="180" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="760" y="16" width="45" height="180" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง|31.3.2::version"/>
+    <rect class="c-hit" x="805" y="16" width="45" height="180" data-tip="17 ต.ค. 07:20–08:20 · ครั้งแรก 08:03 หลัง deploy 31.4.0|1::ครั้ง|31.3.2 0 · 31.4.0 1::version"/>
+    <rect class="c-hit" x="850" y="16" width="45" height="180" data-tip="17 ต.ค. 08:20–09:20|0::ครั้ง|31.4.0::version"/>
+    <rect class="c-hit" x="895" y="16" width="45" height="180" data-tip="17 ต.ค. 09:20–10:20|0::ครั้ง|31.4.0::version"/>
+    <rect class="c-hit" x="940" y="16" width="45" height="180" data-tip="17 ต.ค. 10:20–11:20|0::ครั้ง|31.4.0::version"/>
+    <rect class="c-hit" x="985" y="16" width="45" height="180" data-tip="17 ต.ค. 11:20–12:20|0::ครั้ง|31.4.0::version"/>
+    <rect class="c-hit" x="1030" y="16" width="45" height="180" data-tip="17 ต.ค. 12:20–13:20|0::ครั้ง|31.4.0::version"/>
+    <rect class="c-hit" x="1075" y="16" width="45" height="180" data-tip="17 ต.ค. 13:20–14:20|65::ครั้ง|31.4.0::version"/>
+  </g>
+</svg>
+          </div>
+          <div class="chart__foot">
+            <span>ก่อน deploy (31.3.2) 0 ครั้ง · หลัง deploy (31.4.0) 66 ครั้ง · 08:03 ครั้งเดียว แล้วเกิดต่อเนื่องตั้งแต่ 13:20 (ครูเปิดรายงานชั้นเรียนช่วงบ่าย)</span>
+            <details class="chart__table">
+              <summary class="summary-line">ดูเป็นตาราง</summary>
+              <div class="table-wrap"><table class="table table--dense"><thead><tr><th scope="col">ช่วงเวลา (ICT)</th><th scope="col" class="num">ครั้ง</th><th scope="col">Version</th></tr></thead><tbody><tr><td class="ts">17 ต.ค. 13:20–14:20</td><td class="num">65</td><td class="nowrap"><span class="tag">31.4.0</span></td></tr><tr><td class="ts">17 ต.ค. 12:20–13:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.4.0</span></td></tr><tr><td class="ts">17 ต.ค. 11:20–12:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.4.0</span></td></tr><tr><td class="ts">17 ต.ค. 10:20–11:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.4.0</span></td></tr><tr><td class="ts">17 ต.ค. 09:20–10:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.4.0</span></td></tr><tr><td class="ts">17 ต.ค. 08:20–09:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.4.0</span></td></tr><tr><td class="ts">17 ต.ค. 07:20–08:20</td><td class="num">1</td><td class="nowrap"><span class="tag">31.3.2 0 · 31.4.0 1</span> <span class="t-muted small">ครั้งแรก 08:03 หลัง deploy 31.4.0</span></td></tr><tr><td class="ts">17 ต.ค. 06:20–07:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">17 ต.ค. 05:20–06:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">17 ต.ค. 04:20–05:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">17 ต.ค. 03:20–04:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">17 ต.ค. 02:20–03:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">17 ต.ค. 01:20–02:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">17 ต.ค. 00:20–01:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 23:20–00:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 22:20–23:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 21:20–22:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 20:20–21:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 19:20–20:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 18:20–19:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 17:20–18:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 16:20–17:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 15:20–16:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td class="ts">16 ต.ค. 14:20–15:20</td><td class="num t-muted">0</td><td class="nowrap"><span class="tag">31.3.2</span></td></tr><tr><td><b>รวม</b></td><td class="num"><b>66</b></td><td class="t-muted small">31.3.2 = 0 · 31.4.0 = 66</td></tr></tbody></table></div>
+            </details>
+          </div>
+        </figure>
+        <figure class="chart chart--bare mt-4">
+          <div class="chart__head">
+            <h3 class="chart__title" id="ed-min-title">ชั่วโมงล่าสุด ต่อนาที</h3>
+            <span class="chart__sub">13:20–14:20 · 65 ครั้ง = 5xx ทั้งหมดของ GET /classes/:id/report (1.9 % ของ 3,480) · ตารางต่อนาทีเดียวกับหน้าภาพรวม</span>
+          </div>
+          <div class="chart__plot" data-time-axis>
+<svg viewBox="0 0 1140 110" role="img" aria-labelledby="ed-min-title ed-min-desc" style="--chart-min:1026px">
+  <desc id="ed-min-desc">จำนวนครั้งต่อนาที 13:20 ถึง 14:20 รวม 65 ครั้ง 0 ถึง 3 ครั้งต่อนาที ครั้งล่าสุด 14:16 ไม่มีเลยตั้งแต่ 14:17</desc>
+  <line class="c-grid" x1="40" x2="1120" y1="48" y2="48"/>
+  <line class="c-grid" x1="40" x2="1120" y1="12" y2="12"/>
+  <text class="c-tick c-tick--end" x="32" y="88">0</text>
+  <text class="c-tick c-tick--end" x="32" y="52">2</text>
+  <text class="c-tick c-tick--end" x="32" y="16">4</text>
+  <line class="c-axis" x1="40" x2="1120" y1="84" y2="84"/>
+  <text class="c-tick c-tick--mid" x="49.0" y="102">13:20</text>
+  <text class="c-tick c-tick--mid" x="229.0" y="102">13:30</text>
+  <text class="c-tick c-tick--mid" x="409.0" y="102">13:40</text>
+  <text class="c-tick c-tick--mid" x="589.0" y="102">13:50</text>
+  <text class="c-tick c-tick--mid" x="769.0" y="102">14:00</text>
+  <text class="c-tick c-tick--mid" x="949.0" y="102">14:10</text>
+  <path class="c-bar" d="M62.0 84V68.0Q62.0 66.0 64.0 66.0H70.0Q72.0 66.0 72.0 68.0V84Z"/>
+  <path class="c-bar" d="M80.0 84V50.0Q80.0 48.0 82.0 48.0H88.0Q90.0 48.0 90.0 50.0V84Z"/>
+  <path class="c-bar" d="M98.0 84V68.0Q98.0 66.0 100.0 66.0H106.0Q108.0 66.0 108.0 68.0V84Z"/>
+  <path class="c-bar" d="M134.0 84V50.0Q134.0 48.0 136.0 48.0H142.0Q144.0 48.0 144.0 50.0V84Z"/>
+  <path class="c-bar" d="M152.0 84V68.0Q152.0 66.0 154.0 66.0H160.0Q162.0 66.0 162.0 68.0V84Z"/>
+  <path class="c-bar" d="M170.0 84V68.0Q170.0 66.0 172.0 66.0H178.0Q180.0 66.0 180.0 68.0V84Z"/>
+  <path class="c-bar" d="M224.0 84V50.0Q224.0 48.0 226.0 48.0H232.0Q234.0 48.0 234.0 50.0V84Z"/>
+  <path class="c-bar" d="M242.0 84V50.0Q242.0 48.0 244.0 48.0H250.0Q252.0 48.0 252.0 50.0V84Z"/>
+  <path class="c-bar" d="M260.0 84V50.0Q260.0 48.0 262.0 48.0H268.0Q270.0 48.0 270.0 50.0V84Z"/>
+  <path class="c-bar" d="M278.0 84V68.0Q278.0 66.0 280.0 66.0H286.0Q288.0 66.0 288.0 68.0V84Z"/>
+  <path class="c-bar" d="M314.0 84V68.0Q314.0 66.0 316.0 66.0H322.0Q324.0 66.0 324.0 68.0V84Z"/>
+  <path class="c-bar" d="M332.0 84V68.0Q332.0 66.0 334.0 66.0H340.0Q342.0 66.0 342.0 68.0V84Z"/>
+  <path class="c-bar" d="M350.0 84V50.0Q350.0 48.0 352.0 48.0H358.0Q360.0 48.0 360.0 50.0V84Z"/>
+  <path class="c-bar" d="M368.0 84V68.0Q368.0 66.0 370.0 66.0H376.0Q378.0 66.0 378.0 68.0V84Z"/>
+  <path class="c-bar" d="M386.0 84V50.0Q386.0 48.0 388.0 48.0H394.0Q396.0 48.0 396.0 50.0V84Z"/>
+  <path class="c-bar" d="M422.0 84V50.0Q422.0 48.0 424.0 48.0H430.0Q432.0 48.0 432.0 50.0V84Z"/>
+  <path class="c-bar" d="M440.0 84V50.0Q440.0 48.0 442.0 48.0H448.0Q450.0 48.0 450.0 50.0V84Z"/>
+  <path class="c-bar" d="M476.0 84V50.0Q476.0 48.0 478.0 48.0H484.0Q486.0 48.0 486.0 50.0V84Z"/>
+  <path class="c-bar" d="M494.0 84V50.0Q494.0 48.0 496.0 48.0H502.0Q504.0 48.0 504.0 50.0V84Z"/>
+  <path class="c-bar" d="M512.0 84V50.0Q512.0 48.0 514.0 48.0H520.0Q522.0 48.0 522.0 50.0V84Z"/>
+  <path class="c-bar" d="M530.0 84V50.0Q530.0 48.0 532.0 48.0H538.0Q540.0 48.0 540.0 50.0V84Z"/>
+  <path class="c-bar" d="M548.0 84V68.0Q548.0 66.0 550.0 66.0H556.0Q558.0 66.0 558.0 68.0V84Z"/>
+  <path class="c-bar" d="M602.0 84V50.0Q602.0 48.0 604.0 48.0H610.0Q612.0 48.0 612.0 50.0V84Z"/>
+  <path class="c-bar" d="M638.0 84V50.0Q638.0 48.0 640.0 48.0H646.0Q648.0 48.0 648.0 50.0V84Z"/>
+  <path class="c-bar" d="M656.0 84V50.0Q656.0 48.0 658.0 48.0H664.0Q666.0 48.0 666.0 50.0V84Z"/>
+  <path class="c-bar" d="M692.0 84V50.0Q692.0 48.0 694.0 48.0H700.0Q702.0 48.0 702.0 50.0V84Z"/>
+  <path class="c-bar" d="M710.0 84V68.0Q710.0 66.0 712.0 66.0H718.0Q720.0 66.0 720.0 68.0V84Z"/>
+  <path class="c-bar" d="M728.0 84V68.0Q728.0 66.0 730.0 66.0H736.0Q738.0 66.0 738.0 68.0V84Z"/>
+  <path class="c-bar" d="M782.0 84V68.0Q782.0 66.0 784.0 66.0H790.0Q792.0 66.0 792.0 68.0V84Z"/>
+  <path class="c-bar" d="M800.0 84V68.0Q800.0 66.0 802.0 66.0H808.0Q810.0 66.0 810.0 68.0V84Z"/>
+  <path class="c-bar" d="M836.0 84V50.0Q836.0 48.0 838.0 48.0H844.0Q846.0 48.0 846.0 50.0V84Z"/>
+  <path class="c-bar" d="M854.0 84V50.0Q854.0 48.0 856.0 48.0H862.0Q864.0 48.0 864.0 50.0V84Z"/>
+  <path class="c-bar" d="M872.0 84V50.0Q872.0 48.0 874.0 48.0H880.0Q882.0 48.0 882.0 50.0V84Z"/>
+  <path class="c-bar" d="M890.0 84V68.0Q890.0 66.0 892.0 66.0H898.0Q900.0 66.0 900.0 68.0V84Z"/>
+  <path class="c-bar" d="M926.0 84V50.0Q926.0 48.0 928.0 48.0H934.0Q936.0 48.0 936.0 50.0V84Z"/>
+  <path class="c-bar" d="M944.0 84V68.0Q944.0 66.0 946.0 66.0H952.0Q954.0 66.0 954.0 68.0V84Z"/>
+  <path class="c-bar" d="M962.0 84V68.0Q962.0 66.0 964.0 66.0H970.0Q972.0 66.0 972.0 68.0V84Z"/>
+  <path class="c-bar" d="M980.0 84V50.0Q980.0 48.0 982.0 48.0H988.0Q990.0 48.0 990.0 50.0V84Z"/>
+  <path class="c-bar" d="M1016.0 84V68.0Q1016.0 66.0 1018.0 66.0H1024.0Q1026.0 66.0 1026.0 68.0V84Z"/>
+  <path class="c-bar" d="M1034.0 84V68.0Q1034.0 66.0 1036.0 66.0H1042.0Q1044.0 66.0 1044.0 68.0V84Z"/>
+  <path class="c-bar" d="M1052.0 84V32.0Q1052.0 30.0 1054.0 30.0H1060.0Q1062.0 30.0 1062.0 32.0V84Z"/>
+  <text class="c-label c-label--muted" x="1065.0" y="26.0">ล่าสุด 14:16</text>
+  <g>
+    <rect class="c-hit" x="40.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:20|0::ครั้ง"/>
+    <rect class="c-hit" x="58.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:21|1::ครั้ง"/>
+    <rect class="c-hit" x="76.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:22|2::ครั้ง"/>
+    <rect class="c-hit" x="94.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:23|1::ครั้ง"/>
+    <rect class="c-hit" x="112.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:24|0::ครั้ง"/>
+    <rect class="c-hit" x="130.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:25|2::ครั้ง"/>
+    <rect class="c-hit" x="148.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:26|1::ครั้ง"/>
+    <rect class="c-hit" x="166.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:27|1::ครั้ง"/>
+    <rect class="c-hit" x="184.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:28|0::ครั้ง"/>
+    <rect class="c-hit" x="202.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:29|0::ครั้ง"/>
+    <rect class="c-hit" x="220.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:30|2::ครั้ง"/>
+    <rect class="c-hit" x="238.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:31|2::ครั้ง"/>
+    <rect class="c-hit" x="256.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:32|2::ครั้ง"/>
+    <rect class="c-hit" x="274.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:33|1::ครั้ง"/>
+    <rect class="c-hit" x="292.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:34|0::ครั้ง"/>
+    <rect class="c-hit" x="310.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:35|1::ครั้ง"/>
+    <rect class="c-hit" x="328.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:36|1::ครั้ง"/>
+    <rect class="c-hit" x="346.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:37|2::ครั้ง"/>
+    <rect class="c-hit" x="364.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:38|1::ครั้ง"/>
+    <rect class="c-hit" x="382.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:39|2::ครั้ง"/>
+    <rect class="c-hit" x="400.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:40|0::ครั้ง"/>
+    <rect class="c-hit" x="418.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:41|2::ครั้ง"/>
+    <rect class="c-hit" x="436.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:42|2::ครั้ง"/>
+    <rect class="c-hit" x="454.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:43|0::ครั้ง"/>
+    <rect class="c-hit" x="472.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:44|2::ครั้ง"/>
+    <rect class="c-hit" x="490.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:45|2::ครั้ง"/>
+    <rect class="c-hit" x="508.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:46|2::ครั้ง"/>
+    <rect class="c-hit" x="526.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:47|2::ครั้ง"/>
+    <rect class="c-hit" x="544.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:48|1::ครั้ง"/>
+    <rect class="c-hit" x="562.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:49|0::ครั้ง"/>
+    <rect class="c-hit" x="580.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:50|0::ครั้ง"/>
+    <rect class="c-hit" x="598.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:51|2::ครั้ง"/>
+    <rect class="c-hit" x="616.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:52|0::ครั้ง"/>
+    <rect class="c-hit" x="634.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:53|2::ครั้ง"/>
+    <rect class="c-hit" x="652.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:54|2::ครั้ง"/>
+    <rect class="c-hit" x="670.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:55|0::ครั้ง"/>
+    <rect class="c-hit" x="688.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:56|2::ครั้ง"/>
+    <rect class="c-hit" x="706.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:57|1::ครั้ง"/>
+    <rect class="c-hit" x="724.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:58|1::ครั้ง"/>
+    <rect class="c-hit" x="742.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 13:59|0::ครั้ง"/>
+    <rect class="c-hit" x="760.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:00|0::ครั้ง"/>
+    <rect class="c-hit" x="778.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:01|1::ครั้ง"/>
+    <rect class="c-hit" x="796.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:02|1::ครั้ง"/>
+    <rect class="c-hit" x="814.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:03|0::ครั้ง"/>
+    <rect class="c-hit" x="832.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:04|2::ครั้ง"/>
+    <rect class="c-hit" x="850.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:05|2::ครั้ง"/>
+    <rect class="c-hit" x="868.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:06|2::ครั้ง"/>
+    <rect class="c-hit" x="886.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:07|1::ครั้ง"/>
+    <rect class="c-hit" x="904.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:08|0::ครั้ง"/>
+    <rect class="c-hit" x="922.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:09|2::ครั้ง"/>
+    <rect class="c-hit" x="940.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:10|1::ครั้ง"/>
+    <rect class="c-hit" x="958.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:11|1::ครั้ง"/>
+    <rect class="c-hit" x="976.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:12|2::ครั้ง"/>
+    <rect class="c-hit" x="994.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:13|0::ครั้ง"/>
+    <rect class="c-hit" x="1012.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:14|1::ครั้ง"/>
+    <rect class="c-hit" x="1030.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:15|1::ครั้ง"/>
+    <rect class="c-hit" x="1048.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:16|3::ครั้ง"/>
+    <rect class="c-hit" x="1066.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:17|0::ครั้ง"/>
+    <rect class="c-hit" x="1084.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:18|0::ครั้ง"/>
+    <rect class="c-hit" x="1102.0" y="12" width="18.0" height="72" data-tip="17 ต.ค. 14:19|0::ครั้ง"/>
+  </g>
+</svg>
+          </div>
+        </figure>
+      </section>
+
+      <section class="section" aria-labelledby="h-scope">
+        <div class="section__head">
+          <h2 class="section__title" id="h-scope">Route และ version ที่โดน</h2>
+          <span class="section__meta">24 ชั่วโมงล่าสุด · สัดส่วนจาก 66 ครั้ง</span>
+        </div>
+        <div class="grid grid--2">
+          <div class="panel">
+            <div class="panel__head">
+              <h3 class="panel__title">Route และ usecase</h3>
+              <span class="panel__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></span>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th scope="col">ชนิด</th><th scope="col">ชื่อ</th><th scope="col" class="num">ครั้ง</th><th scope="col" class="num">สัดส่วน</th></tr></thead>
+                <tbody>
+                  <tr><td class="t-ink2">route</td><td class="mono nowrap"><span class="method">GET</span> /classes/:id/report</td><td class="num">66</td><td class="num"><span class="dur-cell">100 %<span class="dur"><i style="--w:100"></i></span></span></td></tr>
+                  <tr><td class="t-ink2">usecase</td><td class="mono nowrap">GetClassReportQuery</td><td class="num">66</td><td class="num"><span class="dur-cell">100 %<span class="dur"><i style="--w:100"></i></span></span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="panel__foot">route นี้ใน 1 ชั่วโมงล่าสุด: 3,480 request · error rate <span class="t-danger">1.9 %</span> · p95 420 ms (07:00–08:00 บน 31.3.2: 0 % · 300 ms) · <a href="traces.html?route=GET%20%2Fclasses%2F%3Aid%2Freport&amp;status=error">ดู trace ที่ error</a></div>
+          </div>
+          <div class="panel">
+            <div class="panel__head">
+              <h3 class="panel__title">Version ของ school-core-api</h3>
+              <span class="panel__meta">deploy 31.4.0 เวลา 08:00 (เดิม 31.3.2)</span>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th scope="col">Version</th><th scope="col" class="num">ครั้ง</th><th scope="col" class="num">สัดส่วน</th><th scope="col">ครั้งแรก</th><th scope="col">ล่าสุด</th></tr></thead>
+                <tbody>
+                  <tr><td class="nowrap"><span class="tag">31.4.0</span> <span class="t-muted small">ปัจจุบัน</span></td><td class="num">66</td><td class="num"><span class="dur-cell">100 %<span class="dur dur--bad"><i style="--w:100"></i></span></span></td><td class="ts">17 ต.ค. 08:03</td><td class="ts">17 ต.ค. 14:16</td></tr>
+                  <tr><td class="nowrap"><span class="tag">31.3.2</span></td><td class="num t-muted">0</td><td class="num t-muted">0 %</td><td class="t-muted">–</td><td class="t-muted">–</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="panel__foot">ไม่เคยเกิดบน 31.3.2 ในข้อมูลที่เก็บไว้ จึงเป็น error ใหม่ของ 31.4.0 (ป้าย NEW) · แก้แล้วดูว่า version ถัดไปเป็น 0</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="h-recent">
+        <div class="section__head">
+          <h2 class="section__title" id="h-recent">ครั้งล่าสุด</h2>
+          <span class="section__meta">8 จาก 20 ครั้งล่าสุด · ทุกครั้งตอบ 500 · เวลา 17 ต.ค. ICT</span>
+          <div class="section__actions"><a class="btn btn--sm" href="logs.html?q=NULL_READ&amp;route=GET%20%2Fclasses%2F%3Aid%2Freport&amp;level=error&amp;from=now-24h">ดู log ทั้งหมด 66 ครั้ง</a></div>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">เวลา</th>
+                <th scope="col">User</th>
+                <th scope="col">โรงเรียน</th>
+                <th scope="col">Version</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="num">เวลาที่ใช้</th>
+                <th scope="col">Trace</th>
+              </tr>
+            </thead>
+            <tbody>
+                <tr>
+                  <td class="ts">14:16:51.262</td>
+                  <td class="nowrap"><a class="mono" href="logs.html?userId=u_3318">u_3318</a> <span class="t-muted small">teacher</span></td>
+                  <td class="mono">s_042</td>
+                  <td><span class="tag">31.4.0</span></td>
+                  <td><span class="http http--5xx">500</span></td>
+                  <td class="num">196 ms</td>
+                  <td class="nowrap"><span class="idchip"><a href="trace-detail.html?traceId=c51e0a9d3b7f42e6a08d1f3b5e7c9a24" title="c51e0a9d3b7f42e6a08d1f3b5e7c9a24">c51e0a9d3b7f42e6a08d1f3b5e7c9a24</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="c51e0a9d3b7f42e6a08d1f3b5e7c9a24" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span> <span class="tag">ตัวอย่าง</span></td>
+                </tr>
+                <tr>
+                  <td class="ts">14:16:48.921</td>
+                  <td class="nowrap"><a class="mono" href="logs.html?userId=u_3318">u_3318</a> <span class="t-muted small">teacher</span></td>
+                  <td class="mono">s_042</td>
+                  <td><span class="tag">31.4.0</span></td>
+                  <td><span class="http http--5xx">500</span></td>
+                  <td class="num">212 ms</td>
+                  <td class="nowrap"><span class="idchip"><a href="trace-detail.html?traceId=3712aa9b46b99c5cbdc4ea38fe5367b0" title="3712aa9b46b99c5cbdc4ea38fe5367b0">3712aa9b46b99c5cbdc4ea38fe5367b0</a></span></td>
+                </tr>
+                <tr>
+                  <td class="ts">14:16:47.891</td>
+                  <td class="nowrap"><a class="mono" href="logs.html?userId=u_0412">u_0412</a> <span class="t-muted small">admin</span></td>
+                  <td class="mono">s_007</td>
+                  <td><span class="tag">31.4.0</span></td>
+                  <td><span class="http http--5xx">500</span></td>
+                  <td class="num">171 ms</td>
+                  <td class="nowrap"><span class="idchip"><a href="trace-detail.html?traceId=3d8b2f6e1c0a47958f2e6d4c1b0a9e77" title="3d8b2f6e1c0a47958f2e6d4c1b0a9e77">3d8b2f6e1c0a47958f2e6d4c1b0a9e77</a></span></td>
+                </tr>
+                <tr>
+                  <td class="ts">14:15:33.402</td>
+                  <td class="nowrap"><a class="mono" href="logs.html?userId=u_1029">u_1029</a> <span class="t-muted small">teacher</span></td>
+                  <td class="mono">s_118</td>
+                  <td><span class="tag">31.4.0</span></td>
+                  <td><span class="http http--5xx">500</span></td>
+                  <td class="num">188 ms</td>
+                  <td class="nowrap"><span class="idchip"><a href="trace-detail.html?traceId=5be2c90a7d14f3e68a0c9d2e4b71f053" title="5be2c90a7d14f3e68a0c9d2e4b71f053">5be2c90a7d14f3e68a0c9d2e4b71f053</a></span></td>
+                </tr>
+                <tr>
+                  <td class="ts">14:14:09.775</td>
+                  <td class="nowrap"><a class="mono" href="logs.html?userId=u_3318">u_3318</a> <span class="t-muted small">teacher</span></td>
+                  <td class="mono">s_042</td>
+                  <td><span class="tag">31.4.0</span></td>
+                  <td><span class="http http--5xx">500</span></td>
+                  <td class="num">205 ms</td>
+                  <td class="nowrap"><span class="idchip"><a href="trace-detail.html?traceId=a9f1d3c07e5b4826b1d0c4e8f2a73596" title="a9f1d3c07e5b4826b1d0c4e8f2a73596">a9f1d3c07e5b4826b1d0c4e8f2a73596</a></span></td>
+                </tr>
+                <tr>
+                  <td class="ts">14:12:52.118</td>
+                  <td class="nowrap"><a class="mono" href="logs.html?userId=u_0412">u_0412</a> <span class="t-muted small">admin</span></td>
+                  <td class="mono">s_007</td>
+                  <td><span class="tag">31.4.0</span></td>
+                  <td><span class="http http--5xx">500</span></td>
+                  <td class="num">163 ms</td>
+                  <td class="nowrap"><span class="idchip"><a href="trace-detail.html?traceId=0d7e4b1c9a2f45e3b8c6d1a0f9e27b4c" title="0d7e4b1c9a2f45e3b8c6d1a0f9e27b4c">0d7e4b1c9a2f45e3b8c6d1a0f9e27b4c</a></span></td>
+                </tr>
+                <tr>
+                  <td class="ts">14:12:17.640</td>
+                  <td class="nowrap"><a class="mono" href="logs.html?userId=u_1029">u_1029</a> <span class="t-muted small">teacher</span></td>
+                  <td class="mono">s_118</td>
+                  <td><span class="tag">31.4.0</span></td>
+                  <td><span class="http http--5xx">500</span></td>
+                  <td class="num">230 ms</td>
+                  <td class="nowrap"><span class="idchip"><a href="trace-detail.html?traceId=e48c2a9f1b3d4c07a6e5f0d9b2c18a73" title="e48c2a9f1b3d4c07a6e5f0d9b2c18a73">e48c2a9f1b3d4c07a6e5f0d9b2c18a73</a></span></td>
+                </tr>
+                <tr>
+                  <td class="ts">14:11:40.905</td>
+                  <td class="nowrap"><a class="mono" href="logs.html?userId=u_3318">u_3318</a> <span class="t-muted small">teacher</span></td>
+                  <td class="mono">s_042</td>
+                  <td><span class="tag">31.4.0</span></td>
+                  <td><span class="http http--5xx">500</span></td>
+                  <td class="num">179 ms</td>
+                  <td class="nowrap"><span class="idchip"><a href="trace-detail.html?traceId=72b0f5d8c1e94a36b9d2e0c4a8f61d15" title="72b0f5d8c1e94a36b9d2e0c4a8f61d15">72b0f5d8c1e94a36b9d2e0c4a8f61d15</a></span></td>
+                </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="h-ai">
+        <div class="section__head">
+          <h2 class="section__title" id="h-ai">คัดลอกให้ AI</h2>
+          <span class="section__meta">ข้อความในกล่องนี้คือสิ่งที่ถูกคัดลอกทุกตัวอักษร ไม่มีข้อมูลส่วนบุคคล</span>
+        </div>
+        <div class="ai-box">
+          <div class="code-block">
+            <div class="code-block__head">
+              <span class="code-block__title">Markdown · <span class="mono">error-group.md</span></span>
+              <button class="btn btn--sm btn--primary btn-copy" type="button" data-copy-target="#ed-ai-md"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+            </div>
+<pre class="code code--wrap" id="ed-ai-md"><span class="c-key">### Read from undefined value</span> (NULL_READ, category: bug) · NEW since 31.4.0
+- level: error
+- service: school-core-api/api
+- env: prod
+- this_case: &quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.
+- what: A property was read from a value that is undefined. Usually a relation that was not loaded or a lookup that found nothing; load the relation or guard the value.
+- where: GET /classes/:id/report · usecase GetClassReportQuery
+- origin: GetClassReportHandler.execute · src/domain/class-report/get-class-report.handler.ts
+- target: school
+- error: TypeError [NULL_READ] Cannot read properties of undefined (reading 'school')
+- stack:
+  - at GetClassReportHandler.execute (src/domain/class-report/get-class-report.handler.ts:42:38)
+  - at ClassReportController.getReport (src/domain/class-report/class-report.controller.ts:27:28)
+  - at QueryBus.execute (node_modules/@nestjs/cqrs/dist/query-bus.js:39:28)
+- trace_id: c51e0a9d3b7f42e6a08d1f3b5e7c9a24 (latest occurrence)
+- fingerprint: 4820193377146551809
+- counts: 66 times · 21 users · 2026-10-16 14:20 to 2026-10-17 14:20 ICT · first 2026-10-17 08:03 (31.4.0, deploy 08:00) · last 2026-10-17 14:16 · 31.3.2 = 0, 31.4.0 = 66
+- fields: see docs/DATA-DICTIONARY.md</pre>
+          </div>
+          <div class="panel ai-box__notes">
+            <div class="panel__head"><h3 class="panel__title">ใส่อะไร ไม่ใส่อะไร</h3></div>
+            <div class="panel__body">
+              <div>
+                <h3>ใส่</h3>
+                <ul>
+                  <li>หัวข้อ, code, category, NEW, เกิดอะไรขึ้น, กรณีนี้</li>
+                  <li>แก้ที่ไหน: route, usecase, function, ไฟล์, target</li>
+                  <li>error จริง และ stack 3 frame แรก (โค้ดแอปก่อน)</li>
+                  <li>จำนวนครั้ง, จำนวน user, ช่วงเวลา, version</li>
+                  <li>trace id ตัวอย่างหนึ่งตัว ให้ AI อ้างอิงกลับได้</li>
+                </ul>
+              </div>
+              <div>
+                <h3>ไม่ใส่</h3>
+                <ul>
+                  <li><span class="mono">user_id</span>, <span class="mono">organization_id</span> และ role ของ user</li>
+                  <li>id ของชั้นเรียนใน path, query string, request body</li>
+                  <li>IP, user agent, header</li>
+                </ul>
+              </div>
+              <p class="hint">ชื่อ key ชุดเดียวกับทุกหน้า (<span class="mono">this_case</span>, <span class="mono">what</span>, <span class="mono">origin</span>, <span class="mono">trace_id</span>; DESIGN.md §6b) และอธิบายไว้ในพจนานุกรมข้อมูล</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- screen content ends here -->
+
+      <details class="design-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <p>หน้าของ error group 2 ซึ่งเป็นเรื่องหลักของ demo หลัง deploy: เกิดหลัง 31.4.0 เท่านั้น ใช้ layout เดียวกับ <a href="error-detail.html">error-detail.html</a> (group 1) เพิ่ม callout ว่าใหม่ใน version นี้, KPI ครั้งแรกแบบเตือน, กราฟต่อนาทีของชั่วโมงล่าสุด และตาราง version ที่ 31.3.2 เป็น 0 · ลิงก์ไปหน้านี้มาจาก callout ในภาพรวม, แถว route, รายการ error group, หน้า Error, Log และ Trace</p>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>ทั้งหน้า: <code>GET /api/errors/:fingerprint?env=prod&amp;from=now-24h</code> (endpoint เดียวกับ group 1) · NEW = <code>group.isNew</code> (<code>firstSeenVersion</code> = 31.4.0, SPEC §12 C)</li>
+              <li>callout และตาราง Version: <code>versions</code> ของ <code>/api/errors/:fingerprint</code> และ <code>/api/meta</code> <code>deploys</code> · ค่าก่อน deploy ของ route: <code>/api/overview</code> ช่วง 07:00–08:00 แบบเดียวกับคอลัมน์ Δ ในภาพรวม</li>
+              <li>กราฟรายชั่วโมง: <code>series</code> รวมเป็นชั่วโมงที่ :20 · กราฟต่อนาที: เรียก <code>/api/errors/:fingerprint?from=now-1h</code> (step 1 นาที) ตัวเลขตรงกับ 5xx ต่อนาทีของ route นี้ในภาพรวม</li>
+              <li><code>failedStep</code> ว่างจึงแสดง – พร้อมเหตุผล · <code>target</code> = <code>school</code> และ fix บอกชื่อ entity ที่เกี่ยวข้อง</li>
+              <li>ครั้งล่าสุด: <code>recent</code> (LogRow) เหมือน group 1; trace id 3 ตัวแรกตรงกับหน้า Log และ Trace ที่เหลือเป็นค่าสมมติ · fingerprint, เลขบรรทัดใน stack และ hint detail เป็นค่าตัวอย่าง</li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li>Motion: ป้าย NEW มีแสงวิ่งผ่านหนึ่งครั้ง · แท่งรายชั่วโมงโตจากแกน · KPI นับขึ้นครั้งแรกที่เห็น</li>
+              <li>เหมือน error-detail.html: คัดลอกให้ AI, คัดลอก fingerprint / function / ไฟล์ / trace id, "ดูเป็นตาราง", stack เต็มใน details</li>
+              <li>"เทียบ route ก่อน deploy" ไปตาราง route ในภาพรวมที่มีคอลัมน์ Δ · "ดู log ทั้งหมด" ใช้ <code>q=NULL_READ</code> + route จนกว่า <code>/api/logs</code> จะรับ <code>fingerprint</code></li>
+              <li>trace id ในตาราง เปิด trace-detail (mockup มีหน้า detail ของ Trace A เท่านั้น)</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li>หน้า detail ของ group ที่เป็น NEW ควรมีปุ่ม "ดู diff ของ 31.4.0" ไปที่ repo หรือ CI ไหม (ต้องรู้ commit ของแต่ละ version)</li>
+              <li>hint detail ของ NULL_READ ใน library เขียนแบบไหน (ข้อความในหน้านี้เป็นตัวอย่าง)</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+    </main>
+  </div>
+</div>
+</body>
+</html>

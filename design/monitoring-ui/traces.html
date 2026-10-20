@@ -1,0 +1,995 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trace · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/app.js"></script>
+<style>
+  /* traces.html only. Page prefix .tr-. Tokens and shared components from assets/styles.css, no literal colours. */
+
+  /* Filter row */
+  .tr-filters { margin-bottom: var(--sp-4); }
+  .tr-search { max-width: 340px; flex-basis: 240px; }
+
+  /* Scatter: status colour per dot, ring + letter for the traces other screens refer to */
+  .tr-ok { --c: var(--bar-neutral); }
+  .tr-slow { --c: var(--warn-solid); }
+  .tr-bad { --c: var(--danger-solid); }
+  .tr-ring { fill: none; stroke: var(--ink); stroke-width: 1.25; }
+  .tr-label-v { font-weight: 400; fill: var(--ink-2); }
+  .tr-thresh { stroke: var(--warn-solid); stroke-width: 1; opacity: 0.6; shape-rendering: crispEdges; }
+  /* Motion: points pop in left to right (styles.css section 5); rings and A/B/C labels come last */
+  :root[data-motion="on"] .chart:not(.is-in) .tr-ring { opacity: 0; }
+  :root[data-motion="on"] .chart.is-in .tr-ring { transform-box: fill-box; transform-origin: center; animation: mo-pop var(--dur-2) var(--ease-out) var(--dur-4) backwards; }
+  :root[data-motion="on"] .chart.is-in .c-label { animation-delay: var(--dur-4); }
+  .tr-hits a, .tr-hits g[tabindex] { cursor: pointer; outline: none; }
+  .tr-hits a:focus-visible .c-hit, .tr-hits g[tabindex]:focus-visible .c-hit { fill: var(--hover-bg); stroke: var(--focus); stroke-width: 1.5; }
+  .tr-legend-sep { width: 1px; height: 14px; background: var(--line); }
+  .chart__sub code { font-size: 11.5px; }
+
+  /* Marked traces A, B, C: the letter used on the chart and in the table */
+  .tr-mark {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 18px; height: 18px; border-radius: 50%; border: 1.25px solid var(--ink);
+    font: 600 var(--fs-11)/1 var(--font-mono); color: var(--ink); vertical-align: 1px;
+  }
+  .tr-marks { display: grid; gap: var(--sp-1); margin: var(--sp-2) 0 0; padding: var(--sp-2) 0 0; list-style: none; border-top: 1px solid var(--line-soft); font-size: var(--fs-13); }
+  .tr-marks li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; line-height: var(--lh-ui); }
+  .tr-marks .tr-marks__what { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); }
+  .tr-marks .tr-marks__note { color: var(--ink-2); font-size: var(--fs-12); }
+  .tr-marks a { overflow-wrap: anywhere; }
+
+  /* Trace table */
+  .tr-name { color: var(--ink); text-decoration: none; font-family: var(--font-mono); font-size: 12.5px; }
+  .tr-name:hover { color: var(--accent); text-decoration: underline; text-decoration-color: currentColor; }
+  @media (min-width: 900px) { .table tr.tr-detail-row > td { padding-left: 52px; } }
+  .row-detail__body .err-row { padding: 0; border: 0; }
+  .row-detail__body .err-row:hover { background: transparent; }
+  .tr-detail__actions { margin-top: var(--sp-1); }
+  .tr-table .col-tight { padding-right: 0; }
+  .tr-table .dur-cell { grid-template-columns: auto 60px; }
+  .tr-foot { margin-top: var(--sp-2); }
+  .tr-lead { margin-bottom: var(--sp-3); }
+  @media (max-width: 599px) {
+    /* each trace: time · status · duration, then route or job, then service · spans · errors · trace id */
+    .tr-table > tbody > tr { grid-template-columns: 24px auto auto minmax(0, 1fr); grid-template-areas: "tog time st dur" ". what what what" ". svc svc svc" ". spans err id"; }
+    .tr-c-tog { grid-area: tog; } .tr-c-time { grid-area: time; } .tr-c-st { grid-area: st; } .tr-c-what { grid-area: what; white-space: normal !important; }
+    .tr-c-svc { grid-area: svc; } .tr-c-spans { grid-area: spans; } .tr-c-err { grid-area: err; } .tr-c-id { grid-area: id; justify-self: end; }
+    .tr-table.table--reflow > tbody > tr > td.tr-c-dur { grid-area: dur; justify-self: end; }
+    .tr-table .tr-c-dur .dur-cell { grid-template-columns: auto 48px; }
+    .tr-table > tbody > tr.row-detail { padding-left: var(--sp-3); }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html" aria-current="page"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h" selected>1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h">24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">17 ต.ค. 13:20–14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><span>Trace</span></nav>
+          <h1 class="page-title">Trace</h1>
+          <p class="page-sub">Request หรือ job ไหนช้า หรือ error ในช่วงเวลานี้ · <span class="env env--prod">prod</span> · 1 ชั่วโมงล่าสุด (13:20–14:20 ICT)</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn--quiet btn-copy" type="button" data-copy="skilllane-monitor/traces?env=prod&amp;from=now-1h"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg><span class="btn-copy__label">คัดลอกลิงก์</span></button>
+          <a class="btn" href="logs.html">เปิด Log ช่วงเดียวกัน</a>
+        </div>
+      </header>
+
+      <!-- screen content starts here -->
+
+      <!-- Filters: one row above everything they scope (scatter + table). Values go to GET /api/traces. -->
+      <div class="filterbar tr-filters" role="group" aria-label="ตัวกรอง trace">
+        <label class="select">
+          <span class="sr-only">Service</span>
+          <select class="select__control" name="service">
+            <option value="" selected>ทุก service</option>
+            <option>school-core-api</option>
+            <option>school-etl-api</option>
+            <option>video-transcoder-api</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <label class="select">
+          <span class="sr-only">Role</span>
+          <select class="select__control" name="role">
+            <option value="" selected>ทุก role</option>
+            <option>api</option>
+            <option>worker</option>
+            <option>persister</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <label class="select">
+          <span class="sr-only">Route หรือ job</span>
+          <select class="select__control" name="route">
+            <option value="" selected>ทุก route และ job</option>
+            <optgroup label="HTTP · school-core-api">
+              <option>GET /question-bank/my</option>
+              <option>GET /me</option>
+              <option>GET /classes/:id/students</option>
+              <option>GET /exams/:id</option>
+              <option>POST /exams/:id/submit</option>
+              <option>GET /classes/:id/report</option>
+              <option>POST /question-bank/import</option>
+              <option>POST /reports/:id/generate</option>
+            </optgroup>
+            <optgroup label="HTTP · video-transcoder-api">
+              <option>GET /videos/:id/status</option>
+              <option>POST /videos/:id/transcode</option>
+            </optgroup>
+            <optgroup label="Job · message · cron">
+              <option>report:generate</option>
+              <option>notification:send</option>
+              <option>export:class-score</option>
+              <option>school.events.score</option>
+              <option>AttendanceSyncService.sync</option>
+              <option>ReportCleanupService.purge</option>
+            </optgroup>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <div class="seg" role="group" aria-label="สถานะ trace" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="true">ทั้งหมด</button>
+          <button class="seg__btn" type="button" aria-pressed="false">error</button>
+          <button class="seg__btn" type="button" aria-pressed="false">ok</button>
+        </div>
+        <label class="select">
+          <span class="sr-only">เวลาที่ใช้ขั้นต่ำ</span>
+          <select class="select__control" name="minMs">
+            <option value="" selected>ทุกความยาว</option>
+            <option value="100">นานกว่า 100 ms</option>
+            <option value="500">นานกว่า 500 ms</option>
+            <option value="1000">นานกว่า 1 s</option>
+            <option value="2000">นานกว่า 2 s (ช้า)</option>
+            <option value="5000">นานกว่า 5 s</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <form class="search search--sm tr-search" role="search" action="trace-detail.html">
+          <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+          <label class="sr-only" for="trace-q">เปิด trace จาก trace id</label>
+          <input class="search__input" id="trace-q" type="search" name="traceId" placeholder="trace id 32 ตัวอักษร" autocomplete="off" spellcheck="false" pattern="[0-9a-fA-F]{8,32}">
+        </form>
+        <button class="btn btn--sm btn--quiet filterbar__end" type="button" disabled>ล้างตัวกรอง</button>
+      </div>
+
+      <!-- Scatter: one dot per entry span. x = time, y = duration (log). -->
+      <figure class="chart" aria-labelledby="sc-title">
+        <div class="chart__head">
+          <h2 class="chart__title" id="sc-title">เวลาที่ใช้ของแต่ละ trace</h2>
+          <span class="chart__sub">100 trace ตัวอย่างจาก 1 ชั่วโมง (<code>sample=errors,slow,spread</code>) · error และ trace ที่ช้าขึ้นก่อน จึงไม่ใช่สัดส่วนจริง · แกนตั้งแบบ log</span>
+          <ul class="legend">
+            <li class="legend__item"><span class="legend__key legend__key--dot" style="--c:var(--bar-neutral)"></span>ok</li>
+            <li class="legend__item"><span class="legend__key legend__key--dot" style="--c:var(--warn-solid)"></span>ช้า (request ≥ 2 s)</li>
+            <li class="legend__item"><span class="legend__key legend__key--dot" style="--c:var(--danger-solid)"></span>error</li>
+            <li class="legend__item" aria-hidden="true"><span class="tr-legend-sep"></span></li>
+            <li class="legend__item"><span class="legend__key legend__key--dot" style="--c:var(--muted)"></span>HTTP request</li>
+            <li class="legend__item"><span class="legend__key" style="--c:var(--muted)"></span>job · message · cron</li>
+          </ul>
+        </div>
+        <div class="chart__plot" data-time-axis>
+<svg viewBox="0 0 1140 300" role="img" aria-labelledby="sc-title sc-desc" style="--chart-min:1026px">
+  <desc id="sc-desc">100 trace ตัวอย่างระหว่าง 13:20 ถึง 14:20 แกนนอนคือเวลา แกนตั้งคือเวลาที่ใช้แบบ log จาก 5 ms ถึง 20 s มี error 14 จุด request ที่ช้ากว่า 2 วินาที 6 จุด ทำเครื่องหมาย A, B, C</desc>
+  <text class="c-axis-title" x="0" y="11">เวลาที่ใช้ (log)</text>
+  <line class="c-grid" x1="60" x2="1124" y1="247.3" y2="247.3"/>
+  <text class="c-tick c-tick--end" x="52" y="251.3">10 ms</text>
+  <line class="c-grid" x1="60" x2="1124" y1="214.4" y2="214.4"/>
+  <text class="c-tick c-tick--end" x="52" y="218.4">30 ms</text>
+  <line class="c-grid" x1="60" x2="1124" y1="178.4" y2="178.4"/>
+  <text class="c-tick c-tick--end" x="52" y="182.4">100 ms</text>
+  <line class="c-grid" x1="60" x2="1124" y1="145.6" y2="145.6"/>
+  <text class="c-tick c-tick--end" x="52" y="149.6">300 ms</text>
+  <line class="c-grid" x1="60" x2="1124" y1="109.6" y2="109.6"/>
+  <text class="c-tick c-tick--end" x="52" y="113.6">1 s</text>
+  <line class="c-grid" x1="60" x2="1124" y1="76.7" y2="76.7"/>
+  <text class="c-tick c-tick--end" x="52" y="80.7">3 s</text>
+  <line class="c-grid" x1="60" x2="1124" y1="40.7" y2="40.7"/>
+  <text class="c-tick c-tick--end" x="52" y="44.7">10 s</text>
+  <line class="c-axis" x1="60" x2="1124" y1="268" y2="268"/>
+  <line class="c-axis" x1="60" x2="60" y1="268" y2="272"/>
+  <text class="c-tick" x="60" y="286">13:20</text>
+  <line class="c-axis" x1="237.3" x2="237.3" y1="268" y2="272"/>
+  <text class="c-tick c-tick--mid" x="237.3" y="286">13:30</text>
+  <line class="c-axis" x1="414.7" x2="414.7" y1="268" y2="272"/>
+  <text class="c-tick c-tick--mid" x="414.7" y="286">13:40</text>
+  <line class="c-axis" x1="592" x2="592" y1="268" y2="272"/>
+  <text class="c-tick c-tick--mid" x="592" y="286">13:50</text>
+  <line class="c-axis" x1="769.3" x2="769.3" y1="268" y2="272"/>
+  <text class="c-tick c-tick--mid" x="769.3" y="286">14:00</text>
+  <line class="c-axis" x1="946.7" x2="946.7" y1="268" y2="272"/>
+  <text class="c-tick c-tick--mid" x="946.7" y="286">14:10</text>
+  <line class="c-axis" x1="1124" x2="1124" y1="268" y2="272"/>
+  <text class="c-tick c-tick--end" x="1124" y="286">14:20</text>
+  <rect class="c-band" x="460.5" y="20" width="13.3" height="248"/>
+  <line class="c-event" x1="460.5" x2="460.5" y1="20" y2="268"/>
+  <text class="c-event-label c-halo" x="479.8" y="34">Redis "cache" down 45.2 s</text>
+  <line class="tr-thresh" x1="60" x2="1124" y1="88.8" y2="88.8"/>
+  <text class="c-tick c-halo" x="66" y="83.8">2 s · เกณฑ์ช้า (request)</text>
+  <g aria-hidden="true">
+    <circle class="c-dot tr-ok" cx="62.2" cy="217.6" r="4"/>
+    <circle class="c-dot tr-ok" cx="92.9" cy="192.2" r="4"/>
+    <rect class="c-dot tr-ok" x="93.7" y="159.6" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="102" cy="111.5" r="4"/>
+    <circle class="c-dot tr-ok" cx="116.4" cy="158.8" r="4"/>
+    <circle class="c-dot tr-ok" cx="139.4" cy="107.5" r="4"/>
+    <circle class="c-dot tr-ok" cx="183.4" cy="105" r="4"/>
+    <rect class="c-dot tr-ok" x="204.4" y="217.1" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="209.4" cy="250.4" r="4"/>
+    <circle class="c-dot tr-ok" cx="218.2" cy="205.1" r="4"/>
+    <rect class="c-dot tr-ok" x="217.3" y="235.4" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="229.4" cy="233.2" r="4"/>
+    <circle class="c-dot tr-ok" cx="231.3" cy="181.9" r="4"/>
+    <rect class="c-dot tr-ok" x="233.3" y="95.9" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="245.2" cy="194.7" r="4"/>
+    <circle class="c-dot tr-ok" cx="247.6" cy="195.2" r="4"/>
+    <circle class="c-dot tr-ok" cx="258.3" cy="181.6" r="4"/>
+    <circle class="c-dot tr-ok" cx="267.7" cy="171.8" r="4"/>
+    <rect class="c-dot tr-ok" x="274.6" y="258.5" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="291.4" cy="197.4" r="4"/>
+    <circle class="c-dot tr-ok" cx="304.5" cy="175" r="4"/>
+    <circle class="c-dot tr-ok" cx="337.4" cy="124.7" r="4"/>
+    <circle class="c-dot tr-ok" cx="347.6" cy="103.1" r="4"/>
+    <circle class="c-dot tr-ok" cx="370.4" cy="187.4" r="4"/>
+    <circle class="c-dot tr-ok" cx="375.7" cy="250.4" r="4"/>
+    <circle class="c-dot tr-ok" cx="389.5" cy="253.9" r="4"/>
+    <circle class="c-dot tr-ok" cx="402.5" cy="202.3" r="4"/>
+    <rect class="c-dot tr-ok" x="407.9" y="88.8" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="414.4" cy="207.4" r="4"/>
+    <rect class="c-dot tr-ok" x="416.8" y="104.1" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="422.2" cy="133.4" r="4"/>
+    <rect class="c-dot tr-ok" x="422.1" y="240.4" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="440.2" cy="184" r="4"/>
+    <circle class="c-dot tr-ok" cx="486.8" cy="190.8" r="4"/>
+    <circle class="c-dot tr-ok" cx="493.3" cy="219.9" r="4"/>
+    <rect class="c-dot tr-ok" x="499.3" y="93.0" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="512.8" cy="181.9" r="4"/>
+    <circle class="c-dot tr-ok" cx="522.2" cy="105.8" r="4"/>
+    <circle class="c-dot tr-ok" cx="569.3" cy="225.1" r="4"/>
+    <rect class="c-dot tr-ok" x="601.4" y="243.3" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="647.3" cy="199.2" r="4"/>
+    <circle class="c-dot tr-ok" cx="649.2" cy="212.5" r="4"/>
+    <circle class="c-dot tr-ok" cx="650.3" cy="133.7" r="4"/>
+    <circle class="c-dot tr-ok" cx="657.5" cy="158.9" r="4"/>
+    <circle class="c-dot tr-ok" cx="667.4" cy="257.9" r="4"/>
+    <circle class="c-dot tr-ok" cx="669.3" cy="167.9" r="4"/>
+    <circle class="c-dot tr-ok" cx="678.7" cy="145.4" r="4"/>
+    <circle class="c-dot tr-ok" cx="726.4" cy="189.1" r="4"/>
+    <circle class="c-dot tr-ok" cx="731.9" cy="183.6" r="4"/>
+    <rect class="c-dot tr-ok" x="728.4" y="166.1" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="742.1" cy="189.5" r="4"/>
+    <circle class="c-dot tr-ok" cx="750" cy="89.6" r="4"/>
+    <rect class="c-dot tr-ok" x="750.3" y="227.4" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="760.9" cy="247.3" r="4"/>
+    <rect class="c-dot tr-ok" x="765.3" y="95.3" width="8" height="8" rx="1"/>
+    <rect class="c-dot tr-ok" x="765.3" y="111.5" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="783.4" cy="209" r="4"/>
+    <circle class="c-dot tr-ok" cx="798.4" cy="225.1" r="4"/>
+    <circle class="c-dot tr-ok" cx="825.1" cy="209.8" r="4"/>
+    <circle class="c-dot tr-ok" cx="829.3" cy="201.6" r="4"/>
+    <rect class="c-dot tr-ok" x="827.7" y="36.7" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="879.2" cy="161" r="4"/>
+    <circle class="c-dot tr-ok" cx="889.5" cy="223.7" r="4"/>
+    <circle class="c-dot tr-ok" cx="896.5" cy="241.8" r="4"/>
+    <circle class="c-dot tr-ok" cx="909.2" cy="186.2" r="4"/>
+    <circle class="c-dot tr-ok" cx="930.3" cy="225.1" r="4"/>
+    <circle class="c-dot tr-ok" cx="940" cy="194.7" r="4"/>
+    <rect class="c-dot tr-ok" x="945.4" y="209.4" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="959.3" cy="179.6" r="4"/>
+    <rect class="c-dot tr-ok" x="964.9" y="151.7" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="991.5" cy="97.2" r="4"/>
+    <circle class="c-dot tr-ok" cx="1001.6" cy="205.1" r="4"/>
+    <circle class="c-dot tr-ok" cx="1013.8" cy="182.2" r="4"/>
+    <rect class="c-dot tr-ok" x="1031.3" y="94.3" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="1059.1" cy="192.2" r="4"/>
+    <circle class="c-dot tr-ok" cx="1080.8" cy="237.2" r="4"/>
+    <circle class="c-dot tr-ok" cx="1104" cy="112.3" r="4"/>
+    <rect class="c-dot tr-ok" x="1108.4" y="217.1" width="8" height="8" rx="1"/>
+    <circle class="c-dot tr-ok" cx="1118.5" cy="213.4" r="4"/>
+    <circle class="c-dot tr-ok" cx="1123.4" cy="173.5" r="4"/>
+    <circle class="c-dot tr-slow" cx="196.3" cy="83.5" r="4.5"/>
+    <circle class="c-dot tr-slow" cx="529.1" cy="88.2" r="4.5"/>
+    <circle class="c-dot tr-slow" cx="612.6" cy="81.7" r="4.5"/>
+    <circle class="c-dot tr-slow" cx="746.9" cy="87.3" r="4.5"/>
+    <circle class="c-dot tr-slow" cx="830.9" cy="85.2" r="4.5"/>
+    <circle class="c-dot tr-slow" cx="979.8" cy="79.7" r="4.5"/>
+    <circle class="c-dot tr-bad" cx="145.9" cy="93.9" r="5"/>
+    <circle class="c-dot tr-bad" cx="260.5" cy="159.5" r="5"/>
+    <circle class="c-dot tr-bad" cx="397.9" cy="84.8" r="5"/>
+    <circle class="c-dot tr-bad" cx="462.4" cy="193.2" r="5"/>
+    <circle class="c-dot tr-bad" cx="467.5" cy="187.4" r="5"/>
+    <circle class="c-dot tr-bad" cx="471.6" cy="207.4" r="5"/>
+    <circle class="c-dot tr-bad" cx="567.2" cy="179.3" r="5"/>
+    <rect class="c-dot tr-bad" x="714.5" y="35.5" width="10" height="10" rx="1"/>
+    <rect class="c-dot tr-bad" x="728.2" y="35.4" width="10" height="10" rx="1"/>
+    <circle class="c-dot tr-bad" cx="803.6" cy="98.9" r="5"/>
+    <circle class="c-dot tr-bad" cx="876.6" cy="149.4" r="5"/>
+    <rect class="c-dot tr-bad" x="986.4" y="35.6" width="10" height="10" rx="1"/>
+    <circle class="c-dot tr-bad" cx="1067.5" cy="156" r="5"/>
+    <circle class="c-dot tr-bad" cx="1090.7" cy="91.3" r="5"/>
+    <circle class="tr-ring" cx="1090.7" cy="91.3" r="9"/>
+    <text class="c-label c-halo" text-anchor="end" x="1076.7" y="79.3">A <tspan class="tr-label-v">1,842 ms</tspan></text>
+    <circle class="tr-ring" cx="991.4" cy="40.6" r="9"/>
+    <text class="c-label c-halo" text-anchor="start" x="1005.4" y="44.6">C <tspan class="tr-label-v">10,040 ms</tspan></text>
+    <circle class="tr-ring" cx="979.8" cy="79.7" r="9"/>
+    <text class="c-label c-halo" text-anchor="end" x="965.8" y="77.7">B <tspan class="tr-label-v">2,712 ms</tspan></text>
+  </g>
+  <g class="tr-hits">
+    <circle class="c-hit" cx="62.2" cy="217.6" r="12" data-tip="17 ต.ค. 13:20:07.374|27 ms::POST /reports/:id/generate|202::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="92.9" cy="192.2" r="12" data-tip="17 ต.ค. 13:21:51.241|63 ms::GET /exams/:id|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="97.7" cy="163.6" r="12" data-tip="17 ต.ค. 13:22:07.637|164 ms::notification:send|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="102" cy="111.5" r="12" data-tip="17 ต.ค. 13:22:22.015|939 ms::GET /classes/:id/students|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="116.4" cy="158.8" r="12" data-tip="17 ต.ค. 13:23:10.824|193 ms::GET /classes/:id/report|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="139.4" cy="107.5" r="12" data-tip="17 ต.ค. 13:24:28.576|1,072 ms::GET /classes/:id/students|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="183.4" cy="105" r="12" data-tip="17 ต.ค. 13:26:57.565|1,167 ms::POST /question-bank/import|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="208.4" cy="221.1" r="12" data-tip="17 ต.ค. 13:28:22.162|24 ms::school.events.score|สำเร็จ::school-core-api/persister" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="209.4" cy="250.4" r="12" data-tip="17 ต.ค. 13:28:25.509|9 ms::GET /me|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="218.2" cy="205.1" r="12" data-tip="17 ต.ค. 13:28:55.229|41 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="221.3" cy="239.4" r="12" data-tip="17 ต.ค. 13:29:05.816|13 ms::school.events.score|สำเร็จ::school-core-api/persister" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="229.4" cy="233.2" r="12" data-tip="17 ต.ค. 13:29:33.037|16 ms::GET /me|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="231.3" cy="181.9" r="12" data-tip="17 ต.ค. 13:29:39.517|89 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="237.3" cy="99.9" r="12" data-tip="17 ต.ค. 13:30:00.006|1,380 ms::AttendanceSyncService.sync|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="245.2" cy="194.7" r="12" data-tip="17 ต.ค. 13:30:26.463|58 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="247.6" cy="195.2" r="12" data-tip="17 ต.ค. 13:30:34.749|57 ms::POST /exams/:id/submit|400::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="258.3" cy="181.6" r="12" data-tip="17 ต.ค. 13:31:11.048|90 ms::POST /videos/:id/transcode|202::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="267.7" cy="171.8" r="12" data-tip="17 ต.ค. 13:31:42.606|125 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="278.6" cy="262.5" r="12" data-tip="17 ต.ค. 13:32:19.776|6 ms::school.events.score|สำเร็จ::school-core-api/persister" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="291.4" cy="197.4" r="12" data-tip="17 ต.ค. 13:33:03.097|53 ms::GET /exams/:id|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="304.5" cy="175" r="12" data-tip="17 ต.ค. 13:33:47.098|112 ms::POST /exams/:id/submit|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="337.4" cy="124.7" r="12" data-tip="17 ต.ค. 13:35:38.706|602 ms::GET /classes/:id/students|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="347.6" cy="103.1" r="12" data-tip="17 ต.ค. 13:36:12.930|1,240 ms::GET /classes/:id/students|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="370.4" cy="187.4" r="12" data-tip="17 ต.ค. 13:37:30.144|74 ms::POST /videos/:id/transcode|202::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="375.7" cy="250.4" r="12" data-tip="17 ต.ค. 13:37:48.301|9 ms::GET /me|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="389.5" cy="253.9" r="12" data-tip="17 ต.ค. 13:38:34.939|8 ms::GET /me|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="402.5" cy="202.3" r="12" data-tip="17 ต.ค. 13:39:18.772|45 ms::GET /exams/:id|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="411.9" cy="92.8" r="12" data-tip="17 ต.ค. 13:39:50.571|1,754 ms::report:generate|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="414.4" cy="207.4" r="12" data-tip="17 ต.ค. 13:39:59.264|38 ms::GET /exams/:id|404::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="420.8" cy="108.1" r="12" data-tip="17 ต.ค. 13:40:20.874|1,052 ms::report:generate|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="422.2" cy="133.4" r="12" data-tip="17 ต.ค. 13:40:25.322|451 ms::GET /classes/:id/report|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="426.1" cy="244.4" r="12" data-tip="17 ต.ค. 13:40:38.659|11 ms::school.events.score|สำเร็จ::school-core-api/persister" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="440.2" cy="184" r="12" data-tip="17 ต.ค. 13:41:26.248|83 ms::POST /exams/:id/submit|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="486.8" cy="190.8" r="12" data-tip="17 ต.ค. 13:44:04.104|66 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="493.3" cy="219.9" r="12" data-tip="17 ต.ค. 13:44:25.918|25 ms::POST /reports/:id/generate|202::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="503.3" cy="97" r="12" data-tip="17 ต.ค. 13:45:00.003|1,525 ms::AttendanceSyncService.sync|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="512.8" cy="181.9" r="12" data-tip="17 ต.ค. 13:45:32.124|89 ms::POST /exams/:id/submit|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="522.2" cy="105.8" r="12" data-tip="17 ต.ค. 13:46:03.715|1,135 ms::GET /classes/:id/students|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="569.3" cy="225.1" r="12" data-tip="17 ต.ค. 13:48:43.212|21 ms::GET /videos/:id/status|200::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="605.4" cy="247.3" r="12" data-tip="17 ต.ค. 13:50:45.228|10 ms::school.events.score|สำเร็จ::school-core-api/persister" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="647.3" cy="199.2" r="12" data-tip="17 ต.ค. 13:53:06.967|50 ms::POST /videos/:id/transcode|202::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="649.2" cy="212.5" r="12" data-tip="17 ต.ค. 13:53:13.500|32 ms::GET /videos/:id/status|200::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="650.3" cy="133.7" r="12" data-tip="17 ต.ค. 13:53:17.217|446 ms::GET /classes/:id/students|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="657.5" cy="158.9" r="12" data-tip="17 ต.ค. 13:53:41.515|192 ms::GET /classes/:id/report|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="667.4" cy="257.9" r="12" data-tip="17 ต.ค. 13:54:15.240|7 ms::GET /me|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="669.3" cy="167.9" r="12" data-tip="17 ต.ค. 13:54:21.540|142 ms::POST /exams/:id/submit|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="678.7" cy="145.4" r="12" data-tip="17 ต.ค. 13:54:53.304|302 ms::GET /classes/:id/report|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="726.4" cy="189.1" r="12" data-tip="17 ต.ค. 13:57:34.685|70 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="731.9" cy="183.6" r="12" data-tip="17 ต.ค. 13:57:53.388|84 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="732.4" cy="170.1" r="12" data-tip="17 ต.ค. 13:57:55.008|132 ms::notification:send|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="742.1" cy="189.5" r="12" data-tip="17 ต.ค. 13:58:27.732|69 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="750" cy="89.6" r="12" data-tip="17 ต.ค. 13:58:54.648|1,950 ms::POST /question-bank/import|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="754.3" cy="231.4" r="12" data-tip="17 ต.ค. 13:59:09.022|17 ms::school.events.score|สำเร็จ::school-core-api/persister" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="760.9" cy="247.3" r="12" data-tip="17 ต.ค. 13:59:31.487|10 ms::GET /me|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="769.3" cy="99.3" r="12" data-tip="17 ต.ค. 14:00:00.009|1,410 ms::AttendanceSyncService.sync|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="769.3" cy="115.5" r="12" data-tip="17 ต.ค. 14:00:00.012|820 ms::ReportCleanupService.purge|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="783.4" cy="209" r="12" data-tip="17 ต.ค. 14:00:47.711|36 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="798.4" cy="225.1" r="12" data-tip="17 ต.ค. 14:01:38.323|21 ms::GET /exams/:id|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="825.1" cy="209.8" r="12" data-tip="17 ต.ค. 14:03:08.540|35 ms::GET /videos/:id/status|200::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="829.3" cy="201.6" r="12" data-tip="17 ต.ค. 14:03:22.899|46 ms::POST /exams/:id/submit|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="831.7" cy="40.7" r="12" data-tip="17 ต.ค. 14:03:30.888|9,995 ms::export:class-score|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="879.2" cy="161" r="12" data-tip="17 ต.ค. 14:06:11.569|179 ms::GET /classes/:id/report|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="889.5" cy="223.7" r="12" data-tip="17 ต.ค. 14:06:46.674|22 ms::GET /videos/:id/status|200::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="896.5" cy="241.8" r="12" data-tip="17 ต.ค. 14:07:10.209|12 ms::GET /me|200::school-core-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="909.2" cy="186.2" r="12" data-tip="17 ต.ค. 14:07:53.154|77 ms::POST /videos/:id/transcode|202::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <circle class="c-hit" cx="930.3" cy="225.1" r="12" data-tip="17 ต.ค. 14:09:04.606|21 ms::GET /videos/:id/status|200::video-transcoder-api/api" data-tip-keys="bar-neutral"/>
+    <a href="trace-detail.html?traceId=54267dadfeb6e1936c08445ffaf354a2" tabindex="-1"><circle class="c-hit" cx="940" cy="194.7" r="12" data-tip="17 ต.ค. 14:09:37.540|58 ms::POST /reports/:id/generate|202::school-core-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=2915e975211997626472806aa619ad15" tabindex="-1"><circle class="c-hit" cx="949.4" cy="213.4" r="12" data-tip="17 ต.ค. 14:10:09.166|31 ms::school.events.score|สำเร็จ::school-core-api/persister" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=69187ad5cdc62d5fa9dda8fd683f0c19" tabindex="-1"><circle class="c-hit" cx="959.3" cy="179.6" r="12" data-tip="17 ต.ค. 14:10:42.802|96 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=4333c5310a681bb9461f01c7a5a89f91" tabindex="-1"><circle class="c-hit" cx="968.9" cy="155.7" r="12" data-tip="17 ต.ค. 14:11:15.377|214 ms::notification:send|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=e6717f42ec430c12765e53280a607dfe" tabindex="-1"><circle class="c-hit" cx="991.5" cy="97.2" r="12" data-tip="17 ต.ค. 14:12:31.604|1,512 ms::POST /question-bank/import|200::school-core-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=8caf27c9c11e4a183a94532d7103456f" tabindex="-1"><circle class="c-hit" cx="1001.6" cy="205.1" r="12" data-tip="17 ต.ค. 14:13:05.991|41 ms::GET /exams/:id|404::school-core-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=950a697c77ebdf478e68598c31bf6c7f" tabindex="-1"><circle class="c-hit" cx="1013.8" cy="182.2" r="12" data-tip="17 ต.ค. 14:13:47.260|88 ms::POST /videos/:id/transcode|202::video-transcoder-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=7c5edde0428bf2af0e62f8b8d1706557" tabindex="-1"><circle class="c-hit" cx="1035.3" cy="98.3" r="12" data-tip="17 ต.ค. 14:15:00.004|1,460 ms::AttendanceSyncService.sync|สำเร็จ::school-core-api/worker" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=1d47ac84b4ff3dc7361e53b8fed3847b" tabindex="-1"><circle class="c-hit" cx="1059.1" cy="192.2" r="12" data-tip="17 ต.ค. 14:16:20.418|63 ms::POST /exams/:id/submit|400::school-core-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=68732c4165d17958823db1fdb53d5814" tabindex="-1"><circle class="c-hit" cx="1080.8" cy="237.2" r="12" data-tip="17 ต.ค. 14:17:33.870|14 ms::GET /me|200::school-core-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=4ef21622259ba36cbb173900cdaa7936" tabindex="-1"><circle class="c-hit" cx="1104" cy="112.3" r="12" data-tip="17 ต.ค. 14:18:52.316|912 ms::GET /classes/:id/students|200::school-core-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=cd1ab8bac49cafabf0d9bf2188c170e4" tabindex="-1"><circle class="c-hit" cx="1112.4" cy="221.1" r="12" data-tip="17 ต.ค. 14:19:20.907|24 ms::school.events.score|สำเร็จ::school-core-api/persister" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=6447212558de6ce04a35d8f440544444" tabindex="-1"><circle class="c-hit" cx="1118.5" cy="213.4" r="12" data-tip="17 ต.ค. 14:19:41.552|31 ms::GET /videos/:id/status|200::video-transcoder-api/api" data-tip-keys="bar-neutral"/></a>
+    <a href="trace-detail.html?traceId=efaf0dd109b4469d682fb01d51340289" tabindex="-1"><circle class="c-hit" cx="1123.4" cy="173.5" r="12" data-tip="17 ต.ค. 14:19:58.031|118 ms::GET /question-bank/my|200::school-core-api/api" data-tip-keys="bar-neutral"/></a>
+    <g tabindex="0" role="img" aria-label="13:27:41, GET /classes/:id/students, 200 · ช้า, 2,390 ms"><circle class="c-hit" cx="196.3" cy="83.5" r="12" data-tip="17 ต.ค. 13:27:41.208|2,390 ms::GET /classes/:id/students|200 · ช้า::school-core-api/api" data-tip-keys="warn-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:46:27, POST /question-bank/import, 200 · ช้า, 2,046 ms"><circle class="c-hit" cx="529.1" cy="88.2" r="12" data-tip="17 ต.ค. 13:46:27.310|2,046 ms::POST /question-bank/import|200 · ช้า::school-core-api/api" data-tip-keys="warn-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:51:09, GET /classes/:id/students, 200 · ช้า, 2,540 ms"><circle class="c-hit" cx="612.6" cy="81.7" r="12" data-tip="17 ต.ค. 13:51:09.774|2,540 ms::GET /classes/:id/students|200 · ช้า::school-core-api/api" data-tip-keys="warn-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:58:44, GET /classes/:id/students, 200 · ช้า, 2,105 ms"><circle class="c-hit" cx="746.9" cy="87.3" r="12" data-tip="17 ต.ค. 13:58:44.016|2,105 ms::GET /classes/:id/students|200 · ช้า::school-core-api/api" data-tip-keys="warn-solid"/></g>
+    <g tabindex="0" role="img" aria-label="14:03:28, GET /classes/:id/students, 200 · ช้า, 2,260 ms"><circle class="c-hit" cx="830.9" cy="85.2" r="12" data-tip="17 ต.ค. 14:03:28.451|2,260 ms::GET /classes/:id/students|200 · ช้า::school-core-api/api" data-tip-keys="warn-solid"/></g>
+    <a href="trace-detail.html?traceId=9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a" aria-label="Trace B, 14:11:52, GET /classes/:id/students, 200 · ช้า, 2,712 ms"><circle class="c-hit" cx="979.8" cy="79.7" r="12" data-tip="Trace B · 17 ต.ค. 14:11:52.090|2,712 ms::GET /classes/:id/students|200 · ช้า::school-core-api/api" data-tip-keys="warn-solid"/></a>
+    <g tabindex="0" role="img" aria-label="13:24:50, POST /question-bank/import, 500 · error, 1,688 ms"><circle class="c-hit" cx="145.9" cy="93.9" r="12" data-tip="17 ต.ค. 13:24:50.662|1,688 ms::POST /question-bank/import|500 · error::school-core-api/api|ORA-12899::Value too long for column" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:31:18, GET /classes/:id/report, 500 · error, 188 ms"><circle class="c-hit" cx="260.5" cy="159.5" r="12" data-tip="17 ต.ค. 13:31:18.405|188 ms::GET /classes/:id/report|500 · error::school-core-api/api|NULL_READ::Read from undefined value" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:39:03, POST /question-bank/import, 500 · error, 2,287 ms"><circle class="c-hit" cx="397.9" cy="84.8" r="12" data-tip="17 ต.ค. 13:39:03.117|2,287 ms::POST /question-bank/import|500 · error::school-core-api/api|ORA-12899::Value too long for column" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:42:41, GET /question-bank/my, 200 · span error, 61 ms"><circle class="c-hit" cx="462.4" cy="193.2" r="12" data-tip="17 ต.ค. 13:42:41.338|61 ms::GET /question-bank/my|200 · span error::school-core-api/api|ECONNREFUSED::Redis &quot;cache&quot; refused connection (อ่านจาก DB แทน ตอบ 200)" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:42:58, GET /question-bank/my, 200 · span error, 74 ms"><circle class="c-hit" cx="467.5" cy="187.4" r="12" data-tip="17 ต.ค. 13:42:58.817|74 ms::GET /question-bank/my|200 · span error::school-core-api/api|ECONNREFUSED::Redis &quot;cache&quot; refused connection (อ่านจาก DB แทน ตอบ 200)" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:43:12, GET /me, 200 · span error, 38 ms"><circle class="c-hit" cx="471.6" cy="207.4" r="12" data-tip="17 ต.ค. 13:43:12.604|38 ms::GET /me|200 · span error::school-core-api/api|ECONNREFUSED::Redis &quot;cache&quot; refused connection (อ่านจาก DB แทน ตอบ 200)" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:48:36, GET /classes/:id/report, 500 · error, 97 ms"><circle class="c-hit" cx="567.2" cy="179.3" r="12" data-tip="17 ต.ค. 13:48:36.212|97 ms::GET /classes/:id/report|500 · error::school-core-api/api|NULL_READ::Read from undefined value" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:57:11, report:generate, ล้มเหลว · ครั้งที่ 1/3, 10,064 ms"><circle class="c-hit" cx="719.5" cy="40.5" r="12" data-tip="17 ต.ค. 13:57:11.539|10,064 ms::report:generate|ล้มเหลว · ครั้งที่ 1/3::school-core-api/worker|rateLimitExceeded::Google API rate limited · job.retry" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="13:57:57, report:generate, ล้มเหลว · ครั้งที่ 3/3, 10,118 ms"><circle class="c-hit" cx="733.2" cy="40.4" r="12" data-tip="17 ต.ค. 13:57:57.794|10,118 ms::report:generate|ล้มเหลว · ครั้งที่ 3/3::school-core-api/worker|rateLimitExceeded::Google API rate limited · job.failed (ครบ 3/3)" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="14:01:55, POST /question-bank/import, 500 · error, 1,431 ms"><circle class="c-hit" cx="803.6" cy="98.9" r="12" data-tip="17 ต.ค. 14:01:55.902|1,431 ms::POST /question-bank/import|500 · error::school-core-api/api|ORA-12899::Value too long for column" data-tip-keys="danger-solid"/></g>
+    <g tabindex="0" role="img" aria-label="14:06:02, GET /classes/:id/report, 500 · error, 264 ms"><circle class="c-hit" cx="876.6" cy="149.4" r="12" data-tip="17 ต.ค. 14:06:02.861|264 ms::GET /classes/:id/report|500 · error::school-core-api/api|NULL_READ::Read from undefined value" data-tip-keys="danger-solid"/></g>
+    <a href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6" aria-label="Trace C, 14:12:31, report:generate, ล้มเหลว · ครั้งที่ 2/3, 10,040 ms"><circle class="c-hit" cx="991.4" cy="40.6" r="12" data-tip="Trace C · 17 ต.ค. 14:12:31.468|10,040 ms::report:generate|ล้มเหลว · ครั้งที่ 2/3::school-core-api/worker" data-tip-keys="danger-solid"/></a>
+    <a href="trace-detail.html?traceId=3712aa9b46b99c5cbdc4ea38fe5367b0" aria-label="14:16:48, GET /classes/:id/report, 500 · error, 212 ms"><circle class="c-hit" cx="1067.5" cy="156" r="12" data-tip="17 ต.ค. 14:16:48.733|212 ms::GET /classes/:id/report|500 · error::school-core-api/api" data-tip-keys="danger-solid"/></a>
+    <a href="trace-detail.html" aria-label="Trace A, 14:18:07, POST /question-bank/import, 500 · error, 1,842 ms"><circle class="c-hit" cx="1090.7" cy="91.3" r="12" data-tip="Trace A · 17 ต.ค. 14:18:07.412|1,842 ms::POST /question-bank/import|500 · error::school-core-api/api" data-tip-keys="danger-solid"/></a>
+  </g>
+</svg>
+        </div>
+        <ul class="tr-marks" aria-label="Trace ที่ทำเครื่องหมายบนกราฟ">
+          <li><span class="tr-mark" aria-hidden="true">A</span><span class="ts">14:18:07.412</span><span class="tr-marks__what"><span class="method">POST</span> /question-bank/import</span><span class="http http--5xx">500</span><b class="num">1,842 ms</b><span class="tr-marks__note">พังที่ oracle INSERT QUESTION_BANK</span><a class="mono small" href="trace-detail.html">4bf92f3577b34da6a3ce929d0e0e4736</a></li>
+          <li><span class="tr-mark" aria-hidden="true">B</span><span class="ts">14:11:52.090</span><span class="tr-marks__what"><span class="method">GET</span> /classes/:id/students</span><span class="http http--2xx">200</span><b class="num t-warn">2,712 ms · ช้า</b><span class="tr-marks__note">span ช้าสุด oracle SELECT STUDENT 2,430 ms</span><a class="mono small" href="trace-detail.html?traceId=9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a">9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a</a></li>
+          <li><span class="tr-mark" aria-hidden="true">C</span><span class="ts">14:12:31.468</span><span class="tr-marks__what"><span class="tag">BullMQ</span> report:generate #88412</span><span class="t-danger small">ล้มเหลว ครั้งที่ 2/3 · ครั้งที่ 3/3 สำเร็จ 14:13:15</span><b class="num">10,040 ms</b><span class="tr-marks__note">Google API rate limited</span><a class="mono small" href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6">e7c3d2a1f09e885ca13e9b0a8d4f21b6</a></li>
+        </ul>
+        <div class="chart__foot">
+          <span>error 14 · ช้า 6 จาก 100 จุด · แถบแดงจาง = Redis "cache" down 13:42:35–13:43:20 · แกนตั้งแบบ log: ทุก 2 เส้นเท่ากับ 10 เท่า</span>
+          <details class="chart__table">
+            <summary class="summary-line">ดูจุดที่ error และช้าเป็นตาราง</summary>
+            <div class="table-wrap"><table class="table table--dense">
+              <thead><tr><th scope="col">เวลา</th><th scope="col">Route หรือ job</th><th scope="col">Service</th><th scope="col">สถานะ</th><th scope="col">เด่นเพราะ</th><th scope="col" class="num">เวลาที่ใช้</th></tr></thead>
+              <tbody>
+<tr><td class="ts">14:18:07.412</td><td class="mono nowrap">POST /question-bank/import <span class="tr-mark">A</span></td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--5xx">500</span></td><td><span class="t-danger">error</span></td><td class="num">1,842 ms</td></tr>
+<tr><td class="ts">14:16:48.733</td><td class="mono nowrap">GET /classes/:id/report</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--5xx">500</span></td><td><span class="t-danger">error</span></td><td class="num">212 ms</td></tr>
+<tr><td class="ts">14:12:31.468</td><td class="mono nowrap">report:generate <span class="tr-mark">C</span></td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td><span class="t-danger">ล้มเหลว</span></td><td><span class="t-danger">error</span></td><td class="num">10,040 ms</td></tr>
+<tr><td class="ts">14:11:52.090</td><td class="mono nowrap">GET /classes/:id/students <span class="tr-mark">B</span></td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-warn">ช้า</span></td><td class="num">2,712 ms</td></tr>
+<tr><td class="ts">14:06:02.861</td><td class="mono nowrap">GET /classes/:id/report</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--5xx">500</span></td><td><span class="t-danger">error</span></td><td class="num">264 ms</td></tr>
+<tr><td class="ts">14:03:28.451</td><td class="mono nowrap">GET /classes/:id/students</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-warn">ช้า</span></td><td class="num">2,260 ms</td></tr>
+<tr><td class="ts">14:01:55.902</td><td class="mono nowrap">POST /question-bank/import</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--5xx">500</span></td><td><span class="t-danger">error</span></td><td class="num">1,431 ms</td></tr>
+<tr><td class="ts">13:58:44.016</td><td class="mono nowrap">GET /classes/:id/students</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-warn">ช้า</span></td><td class="num">2,105 ms</td></tr>
+<tr><td class="ts">13:57:57.794</td><td class="mono nowrap">report:generate</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td><span class="t-danger">ล้มเหลว</span></td><td><span class="t-danger">error</span></td><td class="num">10,118 ms</td></tr>
+<tr><td class="ts">13:57:11.539</td><td class="mono nowrap">report:generate</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td><span class="t-danger">ล้มเหลว</span></td><td><span class="t-danger">error</span></td><td class="num">10,064 ms</td></tr>
+<tr><td class="ts">13:51:09.774</td><td class="mono nowrap">GET /classes/:id/students</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-warn">ช้า</span></td><td class="num">2,540 ms</td></tr>
+<tr><td class="ts">13:48:36.212</td><td class="mono nowrap">GET /classes/:id/report</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--5xx">500</span></td><td><span class="t-danger">error</span></td><td class="num">97 ms</td></tr>
+<tr><td class="ts">13:46:27.310</td><td class="mono nowrap">POST /question-bank/import</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-warn">ช้า</span></td><td class="num">2,046 ms</td></tr>
+<tr><td class="ts">13:43:12.604</td><td class="mono nowrap">GET /me</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-danger">error</span></td><td class="num">38 ms</td></tr>
+<tr><td class="ts">13:42:58.817</td><td class="mono nowrap">GET /question-bank/my</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-danger">error</span></td><td class="num">74 ms</td></tr>
+<tr><td class="ts">13:42:41.338</td><td class="mono nowrap">GET /question-bank/my</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-danger">error</span></td><td class="num">61 ms</td></tr>
+<tr><td class="ts">13:39:03.117</td><td class="mono nowrap">POST /question-bank/import</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--5xx">500</span></td><td><span class="t-danger">error</span></td><td class="num">2,287 ms</td></tr>
+<tr><td class="ts">13:31:18.405</td><td class="mono nowrap">GET /classes/:id/report</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--5xx">500</span></td><td><span class="t-danger">error</span></td><td class="num">188 ms</td></tr>
+<tr><td class="ts">13:27:41.208</td><td class="mono nowrap">GET /classes/:id/students</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--2xx">200</span></td><td><span class="t-warn">ช้า</span></td><td class="num">2,390 ms</td></tr>
+<tr><td class="ts">13:24:50.662</td><td class="mono nowrap">POST /question-bank/import</td><td class="nowrap"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="http http--5xx">500</span></td><td><span class="t-danger">error</span></td><td class="num">1,688 ms</td></tr>
+              </tbody>
+            </table></div>
+          </details>
+        </div>
+      </figure>
+
+      <!-- Table: the same 100 rows as the scatter, newest first -->
+      <section class="section" aria-labelledby="h-list">
+        <div class="section__head">
+          <h2 class="section__title" id="h-list">รายการ trace</h2>
+          <span class="section__meta">100 แถวชุดเดียวกับกราฟ · ใหม่สุดก่อน · แสดง 18 แถวแรก</span>
+          <div class="section__actions">
+            <ul class="legend" aria-label="สี service">
+              <li class="legend__item"><span class="legend__key" style="--c:var(--svc-1)"></span>school-core-api</li>
+              <li class="legend__item"><span class="legend__key" style="--c:var(--svc-2)"></span>school-etl-api</li>
+              <li class="legend__item"><span class="legend__key" style="--c:var(--svc-3)"></span>video-transcoder-api</li>
+            </ul>
+          </div>
+        </div>
+        <p class="lead tr-lead">1 แถว = 1 trace แสดงจาก entry span คือ span แรกที่เข้ามาในระบบ (HTTP request, BullMQ job, Kafka message หรือ cron) เวลาที่ใช้ของแถวจึงเท่ากับเวลาของทั้ง trace คลิกแถวเพื่อเปิด waterfall</p>
+        <div class="table-wrap">
+          <table class="table table--dense table--reflow tr-table">
+            <caption class="sr-only">Entry span 18 แถวล่าสุดจาก 100 trace ตัวอย่าง prod 13:20–14:20 ICT</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="col-tight"><span class="sr-only">ขยาย</span></th>
+                <th scope="col" aria-sort="descending">เวลา</th>
+                <th scope="col">Service / role</th>
+                <th scope="col">Route หรือ job</th>
+                <th scope="col">สถานะ</th>
+                <th scope="col" class="num" aria-sort="none">เวลาที่ใช้</th>
+                <th scope="col" class="num">Span</th>
+                <th scope="col" class="num">Error</th>
+                <th scope="col" title="ทุก service ที่มี span ใน trace นี้">ผ่าน service</th>
+                <th scope="col">Trace id</th>
+              </tr>
+            </thead>
+            <tbody>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:19:58.031</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=efaf0dd109b4469d682fb01d51340289"><span class="method">GET</span> <span>/question-bank/my</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">200</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">118 ms<span class="dur"><i style="--w:1.18"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">6</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=efaf0dd109b4469d682fb01d51340289" title="efaf0dd109b4469d682fb01d51340289">efaf0dd1…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="efaf0dd109b4469d682fb01d51340289" aria-label="คัดลอก trace id efaf0dd1"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:19:41.552</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-3">video-transcoder-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=6447212558de6ce04a35d8f440544444"><span class="method">GET</span> <span>/videos/:id/status</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">200</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">31 ms<span class="dur"><i style="--w:0.31"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">3</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="video-transcoder-api"><i style="--c:var(--svc-3)"></i><span class="sr-only">video-transcoder-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=6447212558de6ce04a35d8f440544444" title="6447212558de6ce04a35d8f440544444">64472125…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="6447212558de6ce04a35d8f440544444" aria-label="คัดลอก trace id 64472125"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:19:20.907</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/persister</span></span></td>
+                  <td class="nowrap tr-c-what"><span class="tag">Kafka</span> <a class="tr-name" href="trace-detail.html?traceId=cd1ab8bac49cafabf0d9bf2188c170e4">school.events.score</a></td>
+                  <td class="nowrap tr-c-st"><span class="t-muted">สำเร็จ</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">24 ms<span class="dur"><i style="--w:0.24"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">3</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=cd1ab8bac49cafabf0d9bf2188c170e4" title="cd1ab8bac49cafabf0d9bf2188c170e4">cd1ab8ba…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="cd1ab8bac49cafabf0d9bf2188c170e4" aria-label="คัดลอก trace id cd1ab8ba"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:18:52.316</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=4ef21622259ba36cbb173900cdaa7936"><span class="method">GET</span> <span>/classes/:id/students</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">200</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">912 ms<span class="dur"><i style="--w:9.08"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">9</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=4ef21622259ba36cbb173900cdaa7936" title="4ef21622259ba36cbb173900cdaa7936">4ef21622…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4ef21622259ba36cbb173900cdaa7936" aria-label="คัดลอก trace id 4ef21622"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable is-bad is-expanded">
+                  <td class="col-tight tr-c-tog"><button class="row-toggle" type="button" data-expand aria-expanded="true" aria-controls="tr-detail-a" aria-label="ขยาย error ของ POST /question-bank/import 14:18:07"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                  <td class="ts tr-c-time">14:18:07.412</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html"><span class="method">POST</span> <span>/question-bank/import</span></a> <span class="tr-mark" title="Trace A ในกราฟ">A</span></td>
+                  <td class="nowrap tr-c-st"><span class="http http--5xx">500</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell"><span class="t-danger">1,842 ms</span><span class="dur dur--bad"><i style="--w:18.35"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">13</td>
+                  <td class="num t-danger tr-c-err" data-label="error">1</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api, school-etl-api"><i style="--c:var(--svc-1)"></i><i style="--c:var(--svc-2)"></i><span class="svc-dots__n">2</span><span class="sr-only">school-core-api, school-etl-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html" title="4bf92f3577b34da6a3ce929d0e0e4736">4bf92f35…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4bf92f3577b34da6a3ce929d0e0e4736" aria-label="คัดลอก trace id 4bf92f35"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="row-detail tr-detail-row" id="tr-detail-a">
+                  <td colspan="10"><div class="row-detail__body"><article class="err-row" aria-label="error ของ trace A">
+                      <div class="err-row__head">
+                        <span class="lvl lvl--err">ERR</span>
+                        <h3 class="err-row__title"><a href="error-detail.html">Value too long for column</a></h3>
+                        <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+                        <span class="err-row__count"><span class="ts">14:18:09.226</span></span>
+                      </div>
+                      <ul class="kv-list" aria-label="บริบท">
+                        <li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li>
+                        <li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/import</span></li>
+                        <li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li>
+                        <li class="kv"><span class="kv__k">source</span><span class="kv__v">ImportQuestionBankHandler.execute</span></li>
+                        <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/question-bank/import-question-bank.handler.ts</span></li>
+                        <li class="kv"><span class="kv__k">target</span><span class="kv__v">QuestionBankEntity.title</span></li>
+                        <li class="kv"><span class="kv__k">duration</span><span class="kv__v">1,842 ms</span></li>
+                      </ul>
+                      <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.</p>
+                      <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>QueryFailedError [ORA-12899] ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)</p>
+                      <div class="err-row__meta">
+                        <span>พังที่ span <span class="mono t-ink2">oracle INSERT QUESTION_BANK</span> (1,390 → 1,812 ms)</span>
+                        <span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_1029">u_1029</a></span>
+                        <span>teacher · s_118 (ไม่ใส่ในข้อความให้ AI)</span>
+                      </div>
+                      <div class="row tr-detail__actions">
+                        <a class="btn btn--sm" href="trace-detail.html">เปิด waterfall<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+                        <a class="btn btn--sm btn--quiet" href="logs.html?traceId=4bf92f3577b34da6a3ce929d0e0e4736">ดู log ของ trace นี้ (4)</a>
+                        <button class="btn btn--sm btn--primary btn-copy" type="button" data-copy-target="#ai-trace-a"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+                      </div>
+<pre class="code code--wrap" id="ai-trace-a" hidden>### Value too long for column (ORA-12899, category: data)
+- level: error
+- service: school-core-api/api 31.4.0
+- env: prod
+- when: 2026-10-17 14:18:09.226 ICT
+- request: POST /question-bank/import → 500 in 1,842 ms
+- this_case: QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.
+- what: A text value exceeds the column size. Common in Excel imports; validate length before saving.
+- where: POST /question-bank/import · usecase ImportQuestionBankCommand
+- origin: ImportQuestionBankHandler.execute · src/domain/question-bank/import-question-bank.handler.ts
+- target: QuestionBankEntity.title
+- failed_step: oracle INSERT QUESTION_BANK (span #11, 1,390 → 1,812 ms)
+- error: QueryFailedError [ORA-12899] ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)
+- trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+- spans: 13 (1 error) · services: school-core-api/api → school-etl-api/api
+- fields: see docs/DATA-DICTIONARY.md</pre>
+                    </article></div></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:17:33.870</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=68732c4165d17958823db1fdb53d5814"><span class="method">GET</span> <span>/me</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">200</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">14 ms<span class="dur"><i style="--w:0.14"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">3</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=68732c4165d17958823db1fdb53d5814" title="68732c4165d17958823db1fdb53d5814">68732c41…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="68732c4165d17958823db1fdb53d5814" aria-label="คัดลอก trace id 68732c41"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable is-bad">
+                  <td class="col-tight tr-c-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="tr-detail-null" aria-label="ขยาย error ของ GET /classes/:id/report 14:16:48"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                  <td class="ts tr-c-time">14:16:48.733</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=3712aa9b46b99c5cbdc4ea38fe5367b0"><span class="method">GET</span> <span>/classes/:id/report</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--5xx">500</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell"><span class="t-danger">212 ms</span><span class="dur dur--bad"><i style="--w:2.11"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">7</td>
+                  <td class="num t-danger tr-c-err" data-label="error">1</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=3712aa9b46b99c5cbdc4ea38fe5367b0" title="3712aa9b46b99c5cbdc4ea38fe5367b0">3712aa9b…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="3712aa9b46b99c5cbdc4ea38fe5367b0" aria-label="คัดลอก trace id 3712aa9b"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="row-detail tr-detail-row" id="tr-detail-null" hidden>
+                  <td colspan="10"><div class="row-detail__body"><article class="err-row" aria-label="error ของ trace GET /classes/:id/report 14:16:48">
+                      <div class="err-row__head">
+                        <span class="lvl lvl--err">ERR</span>
+                        <h3 class="err-row__title"><a href="error-detail-null-read.html">Read from undefined value</a></h3>
+                        <span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span>
+                        <span class="badge-new">NEW</span><span class="badge-new__since">ตั้งแต่ 31.4.0</span>
+                        <span class="err-row__count"><span class="ts">14:16:48.921</span></span>
+                      </div>
+                      <ul class="kv-list" aria-label="บริบท">
+                        <li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li>
+                        <li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/report</span></li>
+                        <li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li>
+                        <li class="kv"><span class="kv__k">source</span><span class="kv__v">GetClassReportHandler.execute</span></li>
+                        <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/class-report/get-class-report.handler.ts</span></li>
+                        <li class="kv"><span class="kv__k">target</span><span class="kv__v">school</span></li>
+                        <li class="kv"><span class="kv__k">duration</span><span class="kv__v">212 ms</span></li>
+                      </ul>
+                      <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>"school" is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.</p>
+                      <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>TypeError [NULL_READ] Cannot read properties of undefined (reading 'school')</p>
+                      <div class="err-row__meta">
+                        <span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_3318">u_3318</a></span>
+                        <span>teacher · s_042 (ไม่ใส่ในข้อความให้ AI)</span>
+                      </div>
+                      <div class="row tr-detail__actions">
+                        <a class="btn btn--sm" href="trace-detail.html?traceId=3712aa9b46b99c5cbdc4ea38fe5367b0">เปิด waterfall<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+                        <a class="btn btn--sm btn--quiet" href="logs.html?traceId=3712aa9b46b99c5cbdc4ea38fe5367b0">ดู log ของ trace นี้</a>
+                        <button class="btn btn--sm btn--primary btn-copy" type="button" data-copy-target="#ai-trace-null"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+                      </div>
+<pre class="code code--wrap" id="ai-trace-null" hidden>### Read from undefined value (NULL_READ, category: bug) · NEW since 31.4.0
+- level: error
+- service: school-core-api/api 31.4.0
+- env: prod
+- when: 2026-10-17 14:16:48.921 ICT
+- request: GET /classes/:id/report → 500 in 212 ms
+- this_case: "school" is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.
+- what: A property was read from a value that is undefined. Usually a relation that was not loaded or a lookup that found nothing; load the relation or guard the value.
+- where: GET /classes/:id/report · usecase GetClassReportQuery
+- origin: GetClassReportHandler.execute · src/domain/class-report/get-class-report.handler.ts
+- target: school
+- error: TypeError [NULL_READ] Cannot read properties of undefined (reading 'school')
+- trace_id: 3712aa9b46b99c5cbdc4ea38fe5367b0
+- spans: 7 (1 error) · services: school-core-api/api
+- fields: see docs/DATA-DICTIONARY.md</pre>
+                    </article></div></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:16:20.418</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=1d47ac84b4ff3dc7361e53b8fed3847b"><span class="method">POST</span> <span>/exams/:id/submit</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--4xx">400</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">63 ms<span class="dur"><i style="--w:0.63"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">4</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=1d47ac84b4ff3dc7361e53b8fed3847b" title="1d47ac84b4ff3dc7361e53b8fed3847b">1d47ac84…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="1d47ac84b4ff3dc7361e53b8fed3847b" aria-label="คัดลอก trace id 1d47ac84"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:15:00.004</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td>
+                  <td class="nowrap tr-c-what"><span class="tag">cron</span> <a class="tr-name" href="trace-detail.html?traceId=7c5edde0428bf2af0e62f8b8d1706557">AttendanceSyncService.sync</a></td>
+                  <td class="nowrap tr-c-st"><span class="t-muted">สำเร็จ</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">1,460 ms<span class="dur"><i style="--w:14.54"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">8</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=7c5edde0428bf2af0e62f8b8d1706557" title="7c5edde0428bf2af0e62f8b8d1706557">7c5edde0…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="7c5edde0428bf2af0e62f8b8d1706557" aria-label="คัดลอก trace id 7c5edde0"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:13:47.260</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-3">video-transcoder-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=950a697c77ebdf478e68598c31bf6c7f"><span class="method">POST</span> <span>/videos/:id/transcode</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">202</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">88 ms<span class="dur"><i style="--w:0.88"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">5</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="video-transcoder-api"><i style="--c:var(--svc-3)"></i><span class="sr-only">video-transcoder-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=950a697c77ebdf478e68598c31bf6c7f" title="950a697c77ebdf478e68598c31bf6c7f">950a697c…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="950a697c77ebdf478e68598c31bf6c7f" aria-label="คัดลอก trace id 950a697c"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:13:05.991</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=8caf27c9c11e4a183a94532d7103456f"><span class="method">GET</span> <span>/exams/:id</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--4xx">404</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">41 ms<span class="dur"><i style="--w:0.41"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">4</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=8caf27c9c11e4a183a94532d7103456f" title="8caf27c9c11e4a183a94532d7103456f">8caf27c9…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="8caf27c9c11e4a183a94532d7103456f" aria-label="คัดลอก trace id 8caf27c9"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:12:31.604</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=e6717f42ec430c12765e53280a607dfe"><span class="method">POST</span> <span>/question-bank/import</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">200</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">1,512 ms<span class="dur"><i style="--w:15.06"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">12</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api, school-etl-api"><i style="--c:var(--svc-1)"></i><i style="--c:var(--svc-2)"></i><span class="svc-dots__n">2</span><span class="sr-only">school-core-api, school-etl-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=e6717f42ec430c12765e53280a607dfe" title="e6717f42ec430c12765e53280a607dfe">e6717f42…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="e6717f42ec430c12765e53280a607dfe" aria-label="คัดลอก trace id e6717f42"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable is-bad">
+                  <td class="col-tight tr-c-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="tr-detail-rate" aria-label="ขยาย error ของ report:generate 14:12:31"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                  <td class="ts tr-c-time">14:12:31.468</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td>
+                  <td class="nowrap tr-c-what"><span class="tag">BullMQ</span> <a class="tr-name" href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6">report:generate</a> <span class="t-muted mono small" title="job.id จาก attribute ของ entry span (ข้อเสนอ rows[].job ใน /api/traces)">#88412</span> <span class="tr-mark" title="Trace C ในกราฟ">C</span></td>
+                  <td class="nowrap tr-c-st"><span class="t-danger">ล้มเหลว</span> <span class="t-muted small" title="attempt ครั้งที่ 2 จาก 3">2/3</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell"><span class="t-danger">10,040 ms</span><span class="dur dur--bad"><i style="--w:100"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">9</td>
+                  <td class="num t-danger tr-c-err" data-label="error">1</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6" title="e7c3d2a1f09e885ca13e9b0a8d4f21b6">e7c3d2a1…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="e7c3d2a1f09e885ca13e9b0a8d4f21b6" aria-label="คัดลอก trace id e7c3d2a1"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="row-detail tr-detail-row" id="tr-detail-rate" hidden>
+                  <td colspan="10"><div class="row-detail__body"><article class="err-row" aria-label="error ของ trace C">
+                      <div class="err-row__head">
+                        <span class="lvl lvl--wrn">WRN</span>
+                        <h3 class="err-row__title"><a href="errors.html#g3">Google API rate limited</a></h3>
+                        <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+                        <span class="err-row__count"><span class="ts">14:12:41.508</span></span>
+                      </div>
+                      <ul class="kv-list" aria-label="บริบท">
+                        <li class="kv"><span class="kv__k">job</span><span class="kv__v">report:generate</span></li>
+                        <li class="kv"><span class="kv__k">id</span><span class="kv__v">88412</span></li>
+                        <li class="kv kv--warn"><span class="kv__k">attempt</span><span class="kv__v">2/3</span></li>
+                        <li class="kv"><span class="kv__k">source</span><span class="kv__v">GoogleSheetsService.exportReport</span></li>
+                        <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/report/google-sheets.service.ts</span></li>
+                        <li class="kv"><span class="kv__k">target</span><span class="kv__v">sheets.googleapis.com</span></li>
+                        <li class="kv kv--warn"><span class="kv__k">duration</span><span class="kv__v">10,040 ms</span></li>
+                      </ul>
+                      <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes.</p>
+                      <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>GaxiosError [rateLimitExceeded] Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute per user' of service 'sheets.googleapis.com'</p>
+                      <div class="err-row__meta">
+                        <span><span class="tag">BullMQ</span> queue <span class="mono t-ink2">report</span> · job <span class="mono t-ink2">#88412</span> · attempt 2/3 ล้มเหลว · attempt 3/3 เริ่ม 14:13:11 และสำเร็จ 14:13:15</span>
+                        <span>error code <span class="mono t-ink2">rateLimitExceeded</span></span>
+                      </div>
+                      <div class="row tr-detail__actions">
+                        <a class="btn btn--sm" href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6">เปิด waterfall<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+                        <a class="btn btn--sm btn--quiet" href="jobs.html#failures">ดูงานเบื้องหลัง</a>
+                        <button class="btn btn--sm btn--primary btn-copy" type="button" data-copy-target="#ai-trace-c"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+                      </div>
+<pre class="code code--wrap" id="ai-trace-c" hidden>### Google API rate limited (rateLimitExceeded, category: dependency)
+- level: warn (job.retry; the group is error because 3 jobs failed after 3/3)
+- service: school-core-api/worker 31.4.0
+- env: prod
+- when: 2026-10-17 14:12:41.508 ICT
+- job: BullMQ queue report · report:generate #88412 · attempt 2/3 → retry in 10,040 ms (attempt 3/3 finished OK at 14:13:15)
+- this_case: sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes.
+- what: Too many requests to the Google API. The rate-limit service retries with backoff; reduce concurrency if frequent.
+- where: job report:generate (BullMQ queue report)
+- origin: GoogleSheetsService.exportReport · src/domain/report/google-sheets.service.ts
+- target: sheets.googleapis.com
+- error: GaxiosError [rateLimitExceeded] Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute per user' of service 'sheets.googleapis.com'
+- trace_id: e7c3d2a1f09e885ca13e9b0a8d4f21b6
+- spans: 9 (1 error) · services: school-core-api/worker
+- fields: see docs/DATA-DICTIONARY.md</pre>
+                    </article></div></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:11:52.090</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a"><span class="method">GET</span> <span>/classes/:id/students</span></a> <span class="tr-mark" title="Trace B ในกราฟ">B</span></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">200</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell"><span class="t-warn">2,712 ms · ช้า</span><span class="dur dur--warn"><i style="--w:27.01"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">9</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a" title="9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a">9a1c4e0b…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a" aria-label="คัดลอก trace id 9a1c4e0b"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:11:15.377</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td>
+                  <td class="nowrap tr-c-what"><span class="tag">BullMQ</span> <a class="tr-name" href="trace-detail.html?traceId=4333c5310a681bb9461f01c7a5a89f91">notification:send</a></td>
+                  <td class="nowrap tr-c-st"><span class="t-muted">สำเร็จ</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">214 ms<span class="dur"><i style="--w:2.13"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">4</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=4333c5310a681bb9461f01c7a5a89f91" title="4333c5310a681bb9461f01c7a5a89f91">4333c531…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4333c5310a681bb9461f01c7a5a89f91" aria-label="คัดลอก trace id 4333c531"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:10:42.802</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=69187ad5cdc62d5fa9dda8fd683f0c19"><span class="method">GET</span> <span>/question-bank/my</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">200</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">96 ms<span class="dur"><i style="--w:0.96"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">6</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=69187ad5cdc62d5fa9dda8fd683f0c19" title="69187ad5cdc62d5fa9dda8fd683f0c19">69187ad5…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="69187ad5cdc62d5fa9dda8fd683f0c19" aria-label="คัดลอก trace id 69187ad5"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:10:09.166</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/persister</span></span></td>
+                  <td class="nowrap tr-c-what"><span class="tag">Kafka</span> <a class="tr-name" href="trace-detail.html?traceId=2915e975211997626472806aa619ad15">school.events.score</a></td>
+                  <td class="nowrap tr-c-st"><span class="t-muted">สำเร็จ</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">31 ms<span class="dur"><i style="--w:0.31"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">3</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=2915e975211997626472806aa619ad15" title="2915e975211997626472806aa619ad15">2915e975…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="2915e975211997626472806aa619ad15" aria-label="คัดลอก trace id 2915e975"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+                <tr class="is-clickable">
+                  <td class="col-tight tr-c-tog"></td>
+                  <td class="ts tr-c-time">14:09:37.540</td>
+                  <td class="nowrap tr-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                  <td class="nowrap tr-c-what"><a class="tr-name" href="trace-detail.html?traceId=54267dadfeb6e1936c08445ffaf354a2"><span class="method">POST</span> <span>/reports/:id/generate</span></a></td>
+                  <td class="nowrap tr-c-st"><span class="http http--2xx">202</span></td>
+                  <td class="num tr-c-dur"><span class="dur-cell">58 ms<span class="dur"><i style="--w:0.58"></i></span></span></td>
+                  <td class="num tr-c-spans" data-label="span">5</td>
+                  <td class="num t-muted tr-c-err" data-label="error">0</td>
+                  <td class="rf-hide"><span class="svc-dots" title="school-core-api"><i style="--c:var(--svc-1)"></i><span class="sr-only">school-core-api</span></span></td>
+                  <td class="nowrap tr-c-id"><span class="idchip"><a href="trace-detail.html?traceId=54267dadfeb6e1936c08445ffaf354a2" title="54267dadfeb6e1936c08445ffaf354a2">54267dad…</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="54267dadfeb6e1936c08445ffaf354a2" aria-label="คัดลอก trace id 54267dad"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+                </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="list-foot tr-foot">
+          <span class="hint">แสดง 18 จาก 100 trace · แถบเวลาที่ใช้เทียบกับแถวที่นานที่สุด (10,040 ms) แบบเส้นตรง</span>
+          <button class="btn btn--sm" type="button">แสดงอีก 50 แถว</button>
+        </div>
+      </section>
+      <!-- screen content ends here -->
+
+      <details class="design-notes tr-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <p>หา request หรือ job ที่ช้าหรือ error ในช่วงเวลาที่เลือก แล้วเปิด waterfall ของ trace นั้น (requirement 3: trace ราย request) กราฟบอกว่าเกิดตอนไหนและกระจุกที่ความยาวเท่าไร ตารางบอกว่า trace ไหน ของ service/role อะไร ผ่านกี่ service</p>
+          </section>
+          <section>
+            <h3>Entry span คืออะไร</h3>
+            <ul>
+              <li>span แรกของ service หนึ่งใน trace: ไม่มี parent หรือ parent มาจากอีก process (<code>is_entry = 1</code> ใน <code>skilllane_monitoring.spans</code>) เช่น HTTP SERVER span, BullMQ/RabbitMQ/Kafka CONSUMER span, cron</li>
+              <li>หน้านี้แสดง 1 แถวต่อ trace คือ entry span ที่ไม่มี parent เลย (root) entry span ของ service ปลายทาง เช่น <code>POST /etl/parse-excel</code> ของ school-etl-api ใน Trace A ไม่ขึ้นเป็นแถวแยก แต่ไปอยู่ในคอลัมน์ "ผ่าน service"</li>
+              <li>job ที่เริ่ม trace ใหม่ (link กลับไปที่ producer) จึงเป็นแถวของตัวเอง เช่น Trace C (attempt 2/3 ของ #88412)</li>
+            </ul>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>กราฟและตาราง: <code>GET /api/traces</code> ด้วย <code>env=prod</code>, <code>from=now-1h</code>, <code>service</code>, <code>role</code>, <code>kind</code>, <code>route</code> (<code>METHOD /path</code> หรือ job type), <code>status</code>, <code>minMs</code>, <code>limit=100</code> ใช้ <code>rows[]</code> ชุดเดียวกัน (x = <code>timestamp</code>, y = <code>durationMs</code>, สี = <code>isError</code> / ช้า, รูปร่าง = <code>kind</code>)</li>
+              <li>ตัวอย่าง 100 จุดจาก 1 ชั่วโมงต้องใช้ param ที่เสนอเพิ่ม <code>sample=errors,slow,spread</code> (error ก่อน แล้วช้าสุด แล้ว N ต่อนาที) และ <code>total</code> ใน response; หัวคอลัมน์ "เวลาที่ใช้" ใช้ <code>sort=durationMs</code> (รายการรวมใน DESIGN.md §9) · ถ้าไม่มี <code>limit</code> แถวล่าสุดที่ ~1,900 request/นาที ครอบคลุมแค่ไม่กี่วินาที</li>
+              <li>Span, Error, ผ่าน service: <code>spanCount</code>, <code>errorCount</code>, <code>services[]</code> (จาก <code>skilllane_monitoring.trace_index</code>) · สถานะ: <code>status</code> = HTTP status (0 สำหรับ job), <code>statusCode</code>, <code>isError</code></li>
+              <li>job id และ attempt ในแถว job (<code>#88412 ล้มเหลว 2/3</code>): เสนอเพิ่ม <code>rows[].job: {queue, type, id, attempt, maxAttempts} | null</code> จาก attribute ของ entry span; ถ้าไม่เพิ่ม แถวจะแสดงแค่ job type และ id ย้ายไปอยู่ในแถวที่ขยาย (โหลดจาก <code>/api/traces/:id</code> <code>logs[]</code>)</li>
+              <li>ตัวเลือก service/role: <code>GET /api/meta</code>; ตัวเลือก route และ job: <code>overview.routes[]</code> (<code>kind</code> + <code>route</code>)</li>
+              <li>แถบ Redis down: <code>GET /api/dependencies</code> (<code>events</code> dependency.down/up)</li>
+              <li>แถวที่ขยาย (error ตามกติกา readable error): โหลดเมื่อกดจาก <code>GET /api/traces/:traceId</code> → <code>logs[]</code> ที่มี <code>error</code> · ช่อง trace id: เปิด <code>/api/traces/:traceId</code> ตรง ๆ (trace-detail.html)</li>
+              <li>จุดใน 1 ชั่วโมงเป็นตัวอย่างที่วาดให้สมจริงรอบ p95 ของแต่ละ route ใน BRIEF โดยไม่ขัดกับ dataset: 5xx มีเฉพาะ GET /classes/:id/report และ POST /question-bank/import, trace ช้าสุดของ /classes/:id/students คือ Trace B, ECONNREFUSED ช่วง Redis down เป็น span error ใน request ที่ยังตอบ 200, job #88391 ล้มเหลวครบ 3/3 13:58 และ #88412 ตาม BRIEF</li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li>ตัวกรองทุกตัวเปลี่ยนทั้งกราฟและตารางพร้อมกัน และอยู่ใน URL; "ล้างตัวกรอง" ใช้ได้เมื่อมีตัวกรอง</li>
+              <li>ชี้หรือ focus จุดบนกราฟเพื่อดูเวลา, route/job, status, service; จุด error และจุดช้า focus ด้วย Tab ได้; คลิกจุดเปิด trace · จอแคบกราฟเลื่อนไปช่วงล่าสุดก่อน (A, B, C อยู่ในจอ)</li>
+              <li>คลิกแถวหรือชื่อ route เปิด trace-detail.html (ม็อกอัปมีหน้า detail ของ Trace A เท่านั้น); ปุ่มลูกศรของแถว error ขยายดู error, ต้องแก้อะไร และ "คัดลอกให้ AI"; ชื่อ error เปิดหน้า error group ของมัน</li>
+              <li>หัวคอลัมน์ "เวลาที่ใช้" เรียงช้าสุดก่อนได้ (ในม็อกอัปยังไม่ทำงาน); ปุ่มคัดลอกข้าง trace id</li>
+              <li>จอแคบกว่า 600 px: แต่ละแถวเป็น 4 บรรทัด (เวลา · สถานะ · เวลาที่ใช้ / route หรือ job / service / span · error · trace id)</li>
+              <li>แกนตั้งแบบ log (5 ms ถึง 20 s) เพื่อให้ GET /me 14 ms และ job 10 s อ่านได้ในกราฟเดียว แถบในตารางเป็นเส้นตรงเทียบแถวที่นานที่สุด</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li><code>/api/traces</code> ยังไม่มี param <code>traceId</code>: ช่อง trace id ค้นด้วยต้น id (prefix) ได้ไหม หรือเปิดได้เฉพาะ id เต็ม 32 ตัว</li>
+              <li>เกณฑ์ "ช้า" ของ request ใช้ 2 s คงที่ หรือเทียบ p95 ของ route; job ใช้ p95 ของ queue จาก <code>JobStat.p95Ms</code> แทนดีไหม (ตอนนี้ job ไม่ถูกทำสีช้า)</li>
+              <li>4xx (เช่น 404, 400) นับเป็น ok ตาม span status ของ OpenTelemetry ถูกต้องไหม หรือควรมีตัวเลือกสถานะ 4xx · request ที่ตอบ 200 แต่มี span error (ECONNREFUSED ของ cache) นับเป็น error ตาม <code>errorCount &gt; 0</code> แบบนี้ไหม</li>
+              <li>กรอง service = school-etl-api ควรหา trace ที่ service นั้นอยู่ปลายทางด้วยไหม (ตอนนี้ดูเฉพาะ root entry span)</li>
+              <li>route ของ video-transcoder-api (<code>GET /videos/:id/status</code>, <code>POST /videos/:id/transcode</code>) เป็นชื่อสมมติเพราะ BRIEF ไม่ได้ระบุ</li>
+              <li>ใส่การลากเลือกช่วงบนกราฟ (brush) เพื่อกรองเวลาและความยาวพร้อมกันใน phase ถัดไปหรือไม่</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+    </main>
+  </div>
+</div>
+<script>
+  // traces.html only: a click anywhere on a trace row opens that trace (links, buttons and copy keep their own action).
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest && e.target.closest('tr.is-clickable');
+    if (!row || e.target.closest('a, button, input, select, summary')) return;
+    var a = row.querySelector('a.tr-name');
+    if (a) window.location.href = a.getAttribute('href');
+  });
+</script>
+</body>
+</html>

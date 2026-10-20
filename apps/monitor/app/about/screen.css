@@ -1,0 +1,42 @@
+/* /about only (from design/monitoring-ui/index.html <style>). The mockup's unprefixed page classes (.about, .req,
+   .screens, .screen-card, .principles, .legend-table) carry the ix- prefix here: screen CSS has no global selectors. */
+.ix-about p + p { margin-top: var(--sp-3); }
+.ix-req-body { padding-top: var(--sp-1); padding-bottom: var(--sp-2); }
+.ix-req { margin: 0; padding: 0; list-style: none; display: grid; }
+.ix-req li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); font-size: var(--fs-13); line-height: 1.5; }
+.ix-req li:last-child { border-bottom: 0; }
+.ix-req__n { font: 500 var(--fs-12)/20px var(--font-mono); color: var(--muted); }
+.ix-req__where { display: block; font-size: var(--fs-12); color: var(--muted); }
+
+/* 3D data path (the scene's own skeleton holds its height while three.js loads) */
+.ix-pipe { border-radius: inherit; overflow: hidden; }
+
+/* Screen cards: the whole card is the link (the name's ::after covers it); a second link sits above it */
+.ix-screens { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-3); }
+.ix-card { position: relative; display: grid; grid-template-rows: auto auto 1fr auto; gap: var(--sp-1h); padding: var(--sp-3) var(--sp-4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-3); color: var(--ink); text-decoration: none; min-width: 0; }
+.ix-card:hover, .ix-card:focus-within { border-color: var(--accent-line); box-shadow: inset 3px 0 0 var(--accent); }
+.ix-card__link { color: var(--ink); text-decoration: none; }
+.ix-card__link::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-3); }
+.ix-card__link:focus-visible { outline: none; }
+.ix-card__link:focus-visible::after { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ix-card__alt { position: relative; z-index: 1; }
+.ix-card__top { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.ix-card__top .i { color: var(--accent); }
+.ix-card__name { font-size: 15px; font-weight: 600; }
+.ix-card__file { margin-left: auto; font: 400 11.5px/1 var(--font-mono); color: var(--muted); }
+.ix-card__q { font-size: var(--fs-13); line-height: 1.55; }
+.ix-card__data { font-size: var(--fs-12); color: var(--ink-2); line-height: 1.5; overflow-wrap: anywhere; }
+.ix-card__api { padding-top: var(--sp-1h); border-top: 1px solid var(--line-soft); font: 400 11.5px/1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+
+.ix-principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 var(--sp-6); margin: 0; padding: 0; list-style: none; counter-reset: ix-p; }
+.ix-principles li { counter-increment: ix-p; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px var(--sp-2); padding: var(--sp-3) 0; border-top: 1px solid var(--line); }
+.ix-principles li::before { content: counter(ix-p, decimal-leading-zero); grid-row: 1 / span 2; font: 500 var(--fs-12)/22px var(--font-mono); color: var(--accent); }
+.ix-principles b { font-size: var(--fs-14); font-weight: 600; line-height: 1.5; }
+.ix-principles p { font-size: var(--fs-13); color: var(--ink-2); line-height: 1.6; }
+.ix-legend-table td:first-child { width: 1%; white-space: nowrap; }
+.ix-legend-table caption { caption-side: top; padding: var(--sp-2) 10px; font-weight: 600; color: var(--ink-2); border-bottom: 1px solid var(--line); text-align: left; }
+
+@media (max-width: 599px) {
+  .ix-screens { grid-template-columns: minmax(0, 1fr); }
+  .ix-principles { grid-template-columns: minmax(0, 1fr); }
+}

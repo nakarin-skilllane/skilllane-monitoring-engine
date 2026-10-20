@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skilllane monitor · หน้ารวม mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<link rel="stylesheet" href="assets/system-map.css">
+<script src="assets/app.js"></script>
+<!-- three@0.170.0 for the 3D data path (assets/system-map.js imports 'three' and 'three/addons/…' by bare specifier) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  /* index.html only */
+  .flow { margin-top: var(--sp-4); }
+  /* 3D data path; until three.js loads (or if it cannot) the placeholder shows the same path as a flat list */
+  .ix-pipe { --smap-h: 400px; --smap-h-narrow: 600px; }
+  .ix-pipe__ph { place-items: center stretch; align-content: center; gap: var(--sp-3); text-align: left; }
+  .ix-pipe__ph .flow { margin-top: 0; }
+  .ix-pipe__msg { text-align: center; }
+  .flow__node--queue { box-shadow: inset 0 -2px 0 var(--highlight); }
+  .flow__node--here { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .about p + p { margin-top: var(--sp-3); }
+  .req { margin: 0; padding: 0; list-style: none; display: grid; }
+  .req li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); font-size: var(--fs-13); line-height: 1.5; }
+  .req li:last-child { border-bottom: 0; }
+  .req__n { font: 500 var(--fs-12)/20px var(--font-mono); color: var(--muted); }
+  .req__where { display: block; font-size: var(--fs-12); color: var(--muted); }
+  .screens { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-3); }
+  .screen-card { position: relative; display: grid; grid-template-rows: auto auto 1fr auto; gap: var(--sp-1h); padding: var(--sp-3) var(--sp-4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-3); color: var(--ink); text-decoration: none; min-width: 0; }
+  .screen-card:hover, .screen-card:focus-within { border-color: var(--accent-line); box-shadow: inset 3px 0 0 var(--accent); }
+  .screen-card__link { color: var(--ink); text-decoration: none; }
+  .screen-card__link::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-3); }
+  .screen-card__link:focus-visible { outline: none; }
+  .screen-card__link:focus-visible::after { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .screen-card__alt { position: relative; z-index: 1; }
+  .screen-card__top { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+  .screen-card__top .i { color: var(--accent); }
+  .screen-card__name { font-size: 15px; font-weight: 600; }
+  .screen-card__file { margin-left: auto; font: 400 11.5px/1 var(--font-mono); color: var(--muted); }
+  .screen-card__q { font-size: var(--fs-13); line-height: 1.55; }
+  .screen-card__data { font-size: var(--fs-12); color: var(--ink-2); line-height: 1.5; }
+  .screen-card__api { padding-top: var(--sp-1h); border-top: 1px solid var(--line-soft); font: 400 11.5px/1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+  .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 var(--sp-6); margin: 0; padding: 0; list-style: none; counter-reset: p; }
+  .principles li { counter-increment: p; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px var(--sp-2); padding: var(--sp-3) 0; border-top: 1px solid var(--line); }
+  .principles li::before { content: counter(p, decimal-leading-zero); grid-row: 1 / span 2; font: 500 var(--fs-12)/22px var(--font-mono); color: var(--accent); }
+  .principles b { font-size: var(--fs-14); font-weight: 600; line-height: 1.5; }
+  .principles p { font-size: var(--fs-13); color: var(--ink-2); line-height: 1.6; }
+  .legend-table td:first-child { width: 1%; white-space: nowrap; }
+  .legend-table caption { caption-side: top; padding: var(--sp-2) 10px; font-weight: 600; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h" selected>1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h">24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">17 ต.ค. 13:20–14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <h1 class="page-title">skilllane monitor</h1>
+          <p class="page-sub">ดู log, trace และ error ของทุก app ที่ติดตั้ง <span class="mono">skilllane-monitoring</span> ในที่เดียว · mockup สำหรับขออนุมัติ design, ข้อมูลตัวอย่าง 17 ต.ค. 2026 14:20 ICT</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn btn--quiet" href="_shell.html">App shell</a>
+          <a class="btn" href="components.html">Component และ token</a>
+        </div>
+      </header>
+
+      <section class="section" aria-labelledby="h-about">
+        <div class="grid grid--main-side">
+          <div class="panel">
+            <div class="panel__head"><h2 class="panel__title" id="h-about">skilllane monitor คืออะไร</h2></div>
+            <div class="panel__body about">
+              <p class="lead">App ที่ติดตั้ง <span class="mono">skilllane-monitoring</span> เขียน log และสร้าง trace ตามปกติ SDK ส่งข้อมูลเข้า queue ที่ลูกค้าใช้อยู่แล้ว เลือกได้ระหว่าง Kafka, RabbitMQ หรือ BullMQ skilllane-monitoring engine subscribe จาก queue นั้น เขียนลง ClickHouse แล้วเปิด query API ให้หน้าจอนี้อ่าน เราทำหน้าที่ publish และ subscribe เท่านั้น ไม่ได้ดูแล queue ของลูกค้า</p>
+              <p class="lead">ทุกหน้าจออ่านจาก engine API (<span class="mono">/api/*</span>) เท่านั้น และทุกหน้าใช้ข้อมูลตัวอย่างชุดเดียวกัน: env prod, หลัง deploy <span class="mono">school-core-api 31.4.0</span> เมื่อ 08:00 (ก่อนหน้า 31.3.2)</p>
+              <p class="lead">ภาพ <a href="#h-pipe">ข้อมูลเดินทางอย่างไร</a> ด้านล่างเล่นเส้นทางนี้ทีละขั้น: log และ span ออกจากแอปเป็นชุด พักใน queue ไปที่ engine ลง ClickHouse แล้วหน้าจอนี้และ AI อ่านต่อ</p>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel__head"><h2 class="panel__title">สิ่งที่หน้าจอต้องทำให้เห็นชัด</h2></div>
+            <div class="panel__body" style="padding-top:var(--sp-1);padding-bottom:var(--sp-2)">
+              <ol class="req">
+                <li><span class="req__n">1</span><span>ใช้ได้กับทุก app ที่ติดตั้ง package<span class="req__where">service / role / env อยู่ในทุกแถวและทุกหัวข้อ</span></span></li>
+                <li><span class="req__n">2</span><span>Log กิจกรรมพร้อมเวลา<span class="req__where">Log: ค้นหา กรอง histogram ตาม level</span></span></li>
+                <li><span class="req__n">3</span><span>Trace ราย request<span class="req__where">Trace และ trace detail: waterfall ข้าม service</span></span></li>
+                <li><span class="req__n">4</span><span>เป็นมิตรกับ AI<span class="req__where">คัดลอกให้ AI, ชื่อ field คงที่, ลิงก์พจนานุกรมข้อมูล</span></span></li>
+                <li><span class="req__n">5</span><span>Error อ่านง่ายและบอกที่แก้<span class="req__where">Error และ error detail: hint, fix, function, ไฟล์, target, หมวด</span></span></li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="h-pipe">
+        <div class="section__head"><h2 class="section__title" id="h-pipe">ข้อมูลเดินทางอย่างไร</h2><span class="section__meta">ภาพ 3 มิติ · เลือก queue ที่มุมซ้ายบนของภาพ · ชี้หรือกดแต่ละจุดเพื่อดูว่าทำอะไร</span></div>
+        <div class="panel" data-mo>
+          <div class="ix-pipe" id="ix-pipe">
+            <div class="smap-placeholder ix-pipe__ph">
+              <ol class="flow" aria-label="เส้นทางของข้อมูล">
+                <li class="flow__node"><b>App ของลูกค้า</b><span class="mono">skilllane-monitoring</span></li>
+                <li class="flow__node flow__node--queue"><b>Queue ของลูกค้า</b>Kafka · RabbitMQ · BullMQ</li>
+                <li class="flow__node"><b>skilllane-monitoring engine</b>ingest + query API</li>
+                <li class="flow__node"><b>ClickHouse</b>SQL อ่านอย่างเดียวให้ AI</li>
+                <li class="flow__node flow__node--here"><b>skilllane monitor</b>หน้าจอชุดนี้</li>
+              </ol>
+              <p class="ix-pipe__msg">กำลังโหลดภาพ 3 มิติ…</p>
+            </div>
+          </div>
+        </div>
+        <p class="hint mt-2">log และ span จากแอปของลูกค้า ผ่าน queue ที่ลูกค้าใช้อยู่ ไปที่ skilllane-monitoring engine และ ClickHouse แล้วหน้าจอชุดนี้กับ AI อ่านต่อ · สีของซองดูได้ที่ "อ่านภาพนี้อย่างไร"</p>
+      </section>
+
+      <section class="section" aria-labelledby="h-screens">
+        <div class="section__head"><h2 class="section__title" id="h-screens">หน้าจอ</h2><span class="section__meta">แต่ละหน้าตอบคำถามหนึ่งข้อ · ตัวเลขใต้คำถามคือสิ่งที่ข้อมูลตัวอย่างจะแสดง</span></div>
+        <div class="screens">
+          <article class="screen-card">
+            <span class="screen-card__top"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg><a class="screen-card__link screen-card__name" href="overview.html">ภาพรวม</a><span class="screen-card__file">overview.html</span></span>
+            <span class="screen-card__q">ตอนนี้ prod มีอะไรผิดปกติ service ไหน route ไหนต้องดูก่อน</span>
+            <span class="screen-card__data">5 service/role · error rate school-core-api/api 0.16 % · GET /classes/:id/students p95 2.4 s · Δ เทียบก่อน deploy</span>
+            <span class="screen-card__api">GET /api/overview</span>
+          </article>
+          <article class="screen-card">
+            <span class="screen-card__top"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg><a class="screen-card__link screen-card__name" href="logs.html">Log</a><span class="screen-card__file">logs.html</span></span>
+            <span class="screen-card__q">เกิดอะไรขึ้นบ้าง ตอนไหน กรองตาม level, service, route, user หรือ trace</span>
+            <span class="screen-card__data">histogram ตาม level ต่อนาที · error อ่านได้ในแถว · เปิดแถวเพื่อดูทุก field · <a class="screen-card__alt" href="logs.html?drawer=ora">ตัวอย่าง drawer</a></span>
+            <span class="screen-card__api">GET /api/logs</span>
+          </article>
+          <article class="screen-card">
+            <span class="screen-card__top"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg><a class="screen-card__link screen-card__name" href="traces.html">Trace</a><span class="screen-card__file">traces.html</span></span>
+            <span class="screen-card__q">Request หรือ job ไหนช้า หรือ error ในช่วงเวลานี้</span>
+            <span class="screen-card__data">scatter เวลา × duration โดย error เด่นกว่า · ตาราง entry span</span>
+            <span class="screen-card__api">GET /api/traces</span>
+          </article>
+          <article class="screen-card">
+            <span class="screen-card__top"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg><a class="screen-card__link screen-card__name" href="trace-detail.html">Trace detail</a><span class="screen-card__file">trace-detail.html</span></span>
+            <span class="screen-card__q">Request นี้ผ่าน service ไหน และพังหรือช้าที่ span ไหน</span>
+            <span class="screen-card__data">trace 4bf92f35… · 13 span · 1,842 ms · พังที่ oracle INSERT QUESTION_BANK</span>
+            <span class="screen-card__api">GET /api/traces/:traceId</span>
+          </article>
+          <article class="screen-card">
+            <span class="screen-card__top"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg><a class="screen-card__link screen-card__name" href="errors.html">Error</a><span class="screen-card__file">errors.html</span></span>
+            <span class="screen-card__q">Error แบบไหนเกิดบ่อย ใหม่หลัง deploy หรือเปล่า กระทบ user กี่คน</span>
+            <span class="screen-card__data">8 group ใน 24 ชั่วโมง · 1 group ใหม่หลัง 31.4.0</span>
+            <span class="screen-card__api">GET /api/errors</span>
+          </article>
+          <article class="screen-card">
+            <span class="screen-card__top"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg><a class="screen-card__link screen-card__name" href="error-detail.html">Error detail</a><span class="screen-card__file">error-detail.html</span></span>
+            <span class="screen-card__q">ต้องแก้ที่ไฟล์ไหน function ไหน และส่งให้ AI ช่วยดูอย่างไร</span>
+            <span class="screen-card__data">Value too long for column · 214 ครั้ง · 37 users</span>
+            <span class="screen-card__api">GET /api/errors/:fingerprint</span>
+          </article>
+          <article class="screen-card">
+            <span class="screen-card__top"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg><a class="screen-card__link screen-card__name" href="error-detail-null-read.html">Error detail (NEW)</a><span class="screen-card__file">error-detail-null-read.html</span></span>
+            <span class="screen-card__q">Error ที่เพิ่งเกิดหลัง deploy: ใหม่จริงไหม แก้ที่ไหน กระทบ route ไหน</span>
+            <span class="screen-card__data">Read from undefined value · NEW ตั้งแต่ 31.4.0 · 66 ครั้ง · 21 users</span>
+            <span class="screen-card__api">GET /api/errors/:fingerprint</span>
+          </article>
+          <article class="screen-card">
+            <span class="screen-card__top"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg><a class="screen-card__link screen-card__name" href="jobs.html">งานเบื้องหลัง</a><span class="screen-card__file">jobs.html</span></span>
+            <span class="screen-card__q">Queue, cron และ consumer ทำงานครบไหม ระบบที่เรียกใช้ล่มช่วงไหน</span>
+            <span class="screen-card__data">report:generate ล้มเหลว 3 · Redis "cache" down 45.2 s</span>
+            <span class="screen-card__api">GET /api/jobs · GET /api/dependencies</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="h-legend">
+        <div class="section__head"><h2 class="section__title" id="h-legend">สัญลักษณ์</h2><span class="section__meta">สีบอกความรุนแรงหรือตัวตนของ service และมีตัวอักษรกำกับเสมอ</span></div>
+        <div class="grid grid--3">
+          <div class="table-wrap">
+            <table class="table table--dense legend-table">
+              <caption>ระดับ log (<span class="mono">level</span>)</caption>
+              <thead><tr><th scope="col">ป้าย</th><th scope="col">ความหมาย</th></tr></thead>
+              <tbody>
+                <tr><td><span class="lvl lvl--dbg">DBG</span></td><td>รายละเอียดสำหรับ debug</td></tr>
+                <tr><td><span class="lvl lvl--inf">INF</span></td><td>เหตุการณ์ปกติ</td></tr>
+                <tr><td><span class="lvl lvl--wrn">WRN</span></td><td>ผิดปกติแต่ยังทำงานต่อได้ เช่น 4xx, retry</td></tr>
+                <tr><td><span class="lvl lvl--err">ERR</span></td><td>Request หรือ job ล้มเหลว</td></tr>
+                <tr><td><span class="lvl lvl--ftl">FTL</span></td><td>Process ล่มหรือหยุดทำงาน</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table class="table table--dense legend-table">
+              <caption>หมวดของ error (<span class="mono">error_category</span>)</caption>
+              <thead><tr><th scope="col">ป้าย</th><th scope="col">ใครต้องทำอะไร</th></tr></thead>
+              <tbody>
+                <tr><td><span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span></td><td>bug: แก้โค้ดแล้ว deploy</td></tr>
+                <tr><td><span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span></td><td>input: client ส่งค่าไม่ผ่านหรือหาไม่เจอ</td></tr>
+                <tr><td><span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span></td><td>data: ข้อมูลใน DB ไม่ตรงกับ schema หรือกันเอง</td></tr>
+                <tr><td><span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span></td><td>dependency: DB, Redis, API ภายนอก</td></tr>
+                <tr><td><span class="cat cat--config"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h6.5M11.5 4.5H14M2 11.5h2M7 11.5h7"/><circle cx="10" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/></svg>ตั้งค่าผิด</span></td><td>config: env หรือ credential ผิด</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table class="table table--dense legend-table">
+              <caption>ป้ายอื่น</caption>
+              <thead><tr><th scope="col">ป้าย</th><th scope="col">ความหมาย</th></tr></thead>
+              <tbody>
+                <tr><td><span class="http http--4xx">404</span> <span class="http http--5xx">500</span></td><td>HTTP status; 2xx ไม่มีสี</td></tr>
+                <tr><td><span class="badge-new">NEW</span></td><td>Error group ที่เริ่มเกิดหลัง version ล่าสุด</td></tr>
+                <tr><td><span class="state state--ok">up</span> <span class="state state--down">down</span></td><td>สถานะระบบที่เรียกใช้</td></tr>
+                <tr><td><span class="svc svc-1">core</span> <span class="svc svc-2">etl</span> <span class="svc svc-3">video</span></td><td>สีประจำ service คงที่ทุกหน้า</td></tr>
+                <tr><td><span class="env env--prod">prod</span></td><td>กำลังดู production; top bar มีเส้นสีนี้</td></tr>
+                <tr><td><a href="#h-legend">ลิงก์</a></td><td>เขียวเข้ม SkillLane = คลิกได้หรือเลือกอยู่ ไม่ใช่สถานะ</td></tr>
+                <tr><td><span class="btn btn--sm btn--cta">คัดลอกให้ AI</span></td><td>ส้ม = ปุ่มที่สำคัญที่สุดของหน้า มีได้ปุ่มเดียว ไม่ใช่สถานะ</td></tr>
+                <tr><td><span class="live">สด</span></td><td>ข้อมูลเข้ามาเองเมื่อช่วงเวลาเป็นแบบล่าสุด</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="h-principles">
+        <div class="section__head"><h2 class="section__title" id="h-principles">หลักการออกแบบ</h2></div>
+        <ol class="principles">
+          <li><b>ข้อมูลมาก่อน</b><p>ตัวเลข เวลา และ id อยู่ตำแหน่งแรกที่สายตาไปถึง ไม่มี hero ไม่มีภาพประกอบ ทุก block บอกช่วงเวลาและ env ที่มันแสดง</p></li>
+          <li><b>สีหนึ่งสีมีความหมายเดียว</b><p>แดง อำพัน เขียว ฟ้า ใช้กับสถานะเท่านั้น เขียวเข้มของ SkillLane คือสิ่งที่คลิกได้ ส้มคือปุ่มที่สำคัญที่สุดของหน้า สี service บอกตัวตน และทุกสีมีตัวอักษรหรือไอคอนกำกับ (สถานะเขียวมีจุดหรือไอคอนเสมอ)</p></li>
+          <li><b>Error ต้องบอกที่แก้</b><p>หัวข้อคือ hint ตามด้วยประโยค fix, function, ไฟล์ และ target ส่วนข้อความ error ดิบอยู่บรรทัดถัดไป ไม่ใช่หัวข้อ</p></li>
+          <li><b>ทุกแถวมีบริบท</b><p>service / role / env และเวลา ICT อยู่ในทุกแถว เพื่อให้ใช้ได้กับทุก app ที่ติดตั้ง package และไม่ต้องเดาว่าดูของใครอยู่</p></li>
+          <li><b>คัดลอกได้ทุกอย่าง</b><p>trace id, user id, stack และสรุป Markdown สำหรับ AI คัดลอกได้ในคลิกเดียว ชื่อ field ตรงกับ ClickHouse และพจนานุกรมข้อมูล</p></li>
+          <li><b>ใช้ตอนตีสองได้</b><p>dark theme ออกแบบเท่ากับ light ไม่มีพื้นที่สว่างจ้า ตัวหนังสือไม่เล็กกว่า 11 px · animation บอกแค่ว่าอะไรเพิ่งเข้ามา เปลี่ยน หรือเกิดก่อนหลัง จบใน 0.7 วินาที และปิดเองเมื่อเครื่องตั้ง reduced motion</p></li>
+        </ol>
+      </section>
+
+      <details class="design-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <p>หน้าแรกของชุด mockup อธิบายว่า skilllane monitor คืออะไร แต่ละหน้าตอบคำถามอะไร และอ่านป้ายสีอย่างไร ไม่มี nav item ที่เลือกอยู่</p>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>หน้านี้ไม่เรียก API; ตัวเลขในการ์ดมาจาก demo dataset ใน BRIEF.md (ฉบับแก้ 18 ต.ค.: 5xx 0.16 %, worker 4 job/นาที, 4xx ของ submit 1.1 %)</li>
+              <li>ข้อมูลเดินทางอย่างไร: <code>mountPipeline()</code> ใน <code>assets/system-map.js</code> (DESIGN.md §7c) ค่าคงที่ตาม SPEC §4: topic / exchange / queue <code>skilllane-monitoring.logs</code>, <code>skilllane-monitoring.spans</code>, ตาราง <code>logs</code>, <code>spans</code> ใน db <code>skilllane_monitoring</code> ไม่ใช่ข้อมูลสด</li>
+              <li>ในของจริง การ์ดอาจแสดงตัวเลขสดจาก <code>/api/overview</code></li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li>การ์ดทั้งใบเป็นลิงก์ไปหน้าจอนั้น (ลิงก์ที่ชื่อหน้าขยายเต็มการ์ด) · การ์ด Log มีลิงก์ที่สอง "ตัวอย่าง drawer" เปิด <code>logs.html?drawer=ora</code></li>
+              <li>ลิงก์ "พจนานุกรมข้อมูล" ใน sidebar เปิด <code>docs/DATA-DICTIONARY.md</code></li>
+              <li>ภาพ 3 มิติ: ปุ่ม Kafka / RabbitMQ / BullMQ เปลี่ยนรูปของ queue (2 topic × 3 partition, exchange + 2 queue, Redis + job) · ลากเพื่อหมุน, ปุ่ม + − ซูม, รีเซ็ต, หยุด · ชี้ที่จุดใดจุดหนึ่ง: บอกว่าจุดนั้นทำอะไร · กด skilllane monitor: เปิดภาพรวม, กด ClickHouse หรือ AI: เปิดพจนานุกรมข้อมูล · ภาพเริ่มเล่นเมื่อเลื่อนมาเห็น และเป็นภาพนิ่งเมื่อปิด motion</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li>ใน Next.js หน้านี้ยังจำเป็นไหม หรือให้ "/" ไปที่ภาพรวมเลย</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+
+    </main>
+  </div>
+</div>
+<script type="module">
+  // 3D data path: imported on demand so three.js never holds up the page, mounted the first time the panel is seen
+  // (mo:in) or at once when motion is off. The flat list inside the box stays if the module cannot load.
+  const box = document.getElementById('ix-pipe');
+  const panel = box.closest('[data-mo]');
+  const root = document.documentElement;
+  import('./assets/system-map.js').then(({ mountPipeline }) => {
+    let pipe = null;
+    function mount() {
+      if (pipe) return;
+      pipe = mountPipeline(box, {
+        transport: 'kafka',
+        motion: root.dataset.motion !== 'off',
+        links: { monitor: 'overview.html', clickhouse: '../../docs/DATA-DICTIONARY.md', ai: '../../docs/DATA-DICTIONARY.md' },
+      });
+    }
+    if (root.dataset.motion !== 'on' || panel.classList.contains('is-in')) mount();
+    else panel.addEventListener('mo:in', mount, { once: true });
+  }).catch(() => {
+    const p = box.querySelector('.ix-pipe__msg');
+    if (p) p.textContent = location.protocol === 'file:'
+      ? 'ภาพ 3 มิติต้องเปิดผ่าน http server (Chrome ไม่โหลด module จากไฟล์ในเครื่อง)'
+      : 'โหลดภาพ 3 มิติไม่สำเร็จ · เส้นทางเดียวกันอยู่ในรายการด้านบน';
+  });
+</script>
+</body>
+</html>

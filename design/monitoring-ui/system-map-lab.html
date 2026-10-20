@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D lab · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<link rel="stylesheet" href="assets/system-map.css">
+<script src="assets/app.js"></script>
+<!-- three@0.170.0 for the 3D views (assets/system-map.js imports 'three' and 'three/addons/…' by bare specifier) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  .lab { max-width: 1280px; margin: 0 auto; padding: var(--gutter); display: grid; gap: var(--sp-8); }
+  .lab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); }
+  .lab-bar__label { font-size: var(--fs-12); color: var(--muted); }
+  .lab-stats { font: 400 12px/1.5 var(--font-mono); color: var(--muted); }
+  .lab-errors { margin: 0; color: var(--danger); font: 400 12px/1.5 var(--font-mono); white-space: pre-wrap; }
+  .lab-errors:empty { display: none; }
+  .lab-spacer { height: 2600px; display: grid; place-items: center; border: 1px dashed var(--line-strong); border-radius: var(--r-3); color: var(--muted); }
+  .lab-map { --smap-h: 540px; }
+  .lab-pipe { --smap-h: 400px; }
+  @media (max-width: 899px) { .lab { padding: var(--sp-4); } }
+</style>
+</head>
+<body>
+<main class="lab" id="main">
+  <header class="page-head">
+    <div class="page-head__text">
+      <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><span>3D lab</span></nav>
+      <h1 class="page-title">3D lab: แผนผังระบบ และเส้นทางข้อมูล</h1>
+      <p class="page-sub">หน้าทดสอบ <code>assets/system-map.js</code> แยกจากหน้าจอจริง · ชุดข้อมูลจาก BRIEF.md · <span class="env env--prod">prod</span> · 1 ชั่วโมงล่าสุด (13:20–14:20 ICT)</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn-icon btn-icon--bordered theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+        <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+        <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="lab-bar">
+    <span class="lab-bar__label" id="lab-scn-label">ช่วงเวลาของข้อมูล</span>
+    <div class="seg" role="group" aria-labelledby="lab-scn-label" data-choice id="lab-scenario">
+      <button class="seg__btn" type="button" aria-pressed="true" data-scenario="now">ตอนนี้ 14:20</button>
+      <button class="seg__btn" type="button" aria-pressed="false" data-scenario="cache-down">13:42:50 redis cache down</button>
+      <button class="seg__btn" type="button" aria-pressed="false" data-scenario="live">สด: engine :5100</button>
+    </div>
+    <a class="btn btn--sm" href="?motion=off">ภาพนิ่ง (?motion=off)</a>
+    <a class="btn btn--sm" href="?webgl=off">ไม่มี WebGL (?webgl=off)</a>
+    <a class="btn btn--sm" href="?offscreen=1">วัด CPU เมื่ออยู่นอกจอ (?offscreen=1)</a>
+    <a class="btn btn--sm btn--quiet" href="system-map-lab.html">ค่าเริ่มต้น</a>
+    <span class="lab-stats" id="lab-stats" aria-live="off">กำลังโหลด three.js…</span>
+  </div>
+  <pre class="lab-errors" id="lab-errors"></pre>
+
+  <div class="lab-spacer" id="lab-spacer" hidden>พื้นที่ว่างสำหรับทดสอบ: ภาพ 3 มิติอยู่ด้านล่าง นอกจอ ต้องไม่วาดเฟรม</div>
+
+  <section class="section" aria-labelledby="lab-map-title">
+    <div class="section__head">
+      <h2 class="section__title" id="lab-map-title">ระบบทั้งหมดในภาพเดียว</h2>
+      <span class="section__meta">ความสูงของอาคาร = req/min (log) · จุดวิ่ง = การเรียก · สีแดง = ล้มเหลว</span>
+    </div>
+    <div class="panel">
+      <div class="lab-map" id="lab-map"><p class="smap-placeholder">กำลังโหลดภาพ 3 มิติ…</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="lab-pipe-title">
+    <div class="section__head">
+      <h2 class="section__title" id="lab-pipe-title">ข้อมูลเดินทางอย่างไร</h2>
+      <span class="section__meta">log และ span จากแอป ผ่าน queue ของลูกค้า ไปถึงหน้าจอและ AI</span>
+    </div>
+    <div class="panel">
+      <div class="lab-pipe" id="lab-pipe"><p class="smap-placeholder">กำลังโหลดภาพ 3 มิติ…</p></div>
+    </div>
+  </section>
+
+  <details class="design-notes">
+    <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+    <div class="design-notes__body">
+      <section>
+        <h3>วัตถุประสงค์</h3>
+        <p>หน้าทดสอบของ <code>mountSystemMap</code> และ <code>mountPipeline</code> ให้ดูได้ทั้งสองธีม ทั้งภาพเคลื่อนไหวและภาพนิ่ง และแบบไม่มี WebGL ก่อนนำไปวางในหน้าจอจริง</p>
+      </section>
+      <section>
+        <h3>ข้อมูลมาจาก</h3>
+        <ul>
+          <li>แผนผังระบบ: <code>demoSystemMapData()</code> = ชุดข้อมูลใน BRIEF.md; ในแอปจริงประกอบจาก <code>GET /api/overview</code> (<code>services[]</code>: <code>rpm</code>, <code>errorRate</code>, <code>p95Ms</code>) และ <code>GET /api/dependencies</code> (<code>state</code>) ส่วนจำนวนการเรียกระหว่างระบบมาจาก span CLIENT ของ trace (ยังไม่มี endpoint)</li>
+          <li>เส้นทางข้อมูล: ค่าคงที่ตาม SPEC §4 (topic / exchange / queue <code>skilllane-monitoring.logs</code>, <code>skilllane-monitoring.spans</code>)</li>
+        </ul>
+      </section>
+      <section>
+        <h3>การโต้ตอบ</h3>
+        <ul>
+          <li>ลากเพื่อหมุน (บนมือถือ ลากแนวนอน; ปัดแนวตั้งยังเลื่อนหน้าได้), ปุ่ม + − ซูม (ล้อเมาส์ไม่ซูม), ปุ่มรีเซ็ตมุมมอง, ปุ่มหยุดการเคลื่อนไหว</li>
+          <li>ชี้ที่อาคารหรือป้ายชื่อ: tooltip (req/min, error %, p95, การเรียกออก); คลิก: เปิดหน้าที่เกี่ยวข้อง; ปุ่มลูกศรบนภาพหมุน, <kbd class="kbd">+</kbd> <kbd class="kbd">−</kbd> ซูม, <kbd class="kbd">0</kbd> รีเซ็ต</li>
+          <li><code>prefers-reduced-motion</code> หรือ <code>?motion=off</code>: ภาพนิ่ง เส้นประแทนจุดวิ่ง; ภาพอยู่นอกจอหรือแท็บถูกซ่อน: หยุดวาด</li>
+        </ul>
+      </section>
+      <section>
+        <h3>คำถามที่ยังเปิดอยู่</h3>
+        <ul>
+          <li>ต้องมี endpoint สรุปการเรียกระหว่างระบบ (from, to, rpm, errorRate) จาก span CLIENT หรือไม่ หรือให้ engine คำนวณใน <code>/api/overview</code></li>
+        </ul>
+      </section>
+    </div>
+  </details>
+</main>
+
+<script>
+  // Before the module runs: show load problems instead of an empty box (file:// without a server, CDN offline)
+  (function () {
+    var errors = document.getElementById('lab-errors');
+    function log(msg) { errors.textContent += msg + '\n'; }
+    window.addEventListener('error', function (e) { log('error: ' + (e.message || (e.target && (e.target.src || e.target.href)) || 'unknown')); }, true);
+    window.addEventListener('unhandledrejection', function (e) { log('rejection: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason))); });
+    var params = new URLSearchParams(location.search);
+    if (params.get('offscreen') === '1') document.getElementById('lab-spacer').hidden = false;
+    setTimeout(function () {
+      if (document.documentElement.dataset.smap === 'ready') return;
+      var msg = location.protocol === 'file:'
+        ? 'โหลด ES module จากไฟล์ในเครื่อง (file://) ไม่ได้: เปิดผ่าน http server เช่น python3 -m http.server ในโฟลเดอร์ design/monitoring-ui'
+        : 'โหลด three.js หรือ assets/system-map.js ไม่สำเร็จ ดูข้อความ error ด้านบน';
+      document.querySelectorAll('.smap-placeholder').forEach(function (p) { p.textContent = msg; });
+    }, 8000);
+  })();
+</script>
+<script type="module">
+  import { mountSystemMap, mountPipeline, demoSystemMapData, systemMapFromApi } from './assets/system-map.js';
+
+  const mapEl = document.getElementById('lab-map');
+  const pipeEl = document.getElementById('lab-pipe');
+  const map = mountSystemMap(mapEl, demoSystemMapData('now'), {
+    serviceOrder: ['school-core-api', 'school-etl-api', 'video-transcoder-api'],
+  });
+  const pipe = mountPipeline(pipeEl, { transport: 'kafka', links: { monitor: 'overview.html', clickhouse: '../../docs/DATA-DICTIONARY.md' } });
+  document.documentElement.dataset.smap = 'ready';
+  window.smapLab = { map, pipe };   // for checks from the console / headless runs
+
+  // "สด" reads the running engine (scripts/live.sh, env prod) every 15 s through systemMapFromApi
+  let liveTimer = 0;
+  async function loadLive() {
+    try {
+      const res = await fetch('http://localhost:5100/api/overview?env=prod&from=now-1h');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      map.update(systemMapFromApi(await res.json(), { clients: true, href: (kind) => (kind === 'queue' ? 'jobs.html' : kind === 'dependency' ? 'jobs.html#dependencies' : 'overview.html') }));
+    } catch (err) {
+      document.getElementById('lab-errors').textContent += 'live: อ่าน engine ที่ localhost:5100 ไม่ได้ (' + err.message + ')\n';
+    }
+  }
+  document.getElementById('lab-scenario').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-scenario]');
+    if (!b) return;
+    clearInterval(liveTimer);
+    if (b.dataset.scenario === 'live') { loadLive(); liveTimer = setInterval(loadLive, 15000); }
+    else map.update(demoSystemMapData(b.dataset.scenario));
+  });
+
+  // Frames drawn so far: an idle page (offscreen, hidden tab) must stop counting
+  const stats = document.getElementById('lab-stats');
+  function show() {
+    const a = map.stats(), b = pipe.stats();
+    stats.textContent = 'map: ' + a.frames + ' เฟรม' + (a.running ? ' · กำลังวาด' : ' · หยุด') + ' · particles ' + a.particles
+      + ' | pipeline: ' + b.frames + ' เฟรม' + (b.running ? ' · กำลังวาด' : ' · หยุด') + (a.webgl ? '' : ' · ไม่มี WebGL');
+    stats.dataset.mapFrames = a.frames;
+    stats.dataset.pipeFrames = b.frames;
+  }
+  show();
+  setInterval(show, 1000);
+</script>
+</body>
+</html>

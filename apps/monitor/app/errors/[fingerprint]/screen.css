@@ -1,0 +1,26 @@
+/* /errors/[fingerprint] only (from design/monitoring-ui/error-detail.html <style>, the same block as error-detail-null-read.html).
+   Tokens and shared components live in design-system.css; page classes are prefixed ed- (DESIGN.md §5b). */
+.ed-what-cat { margin-top: var(--sp-3); display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1h) var(--sp-2); font-size: var(--fs-13); color: var(--ink-2); line-height: var(--lh-ui); }
+
+/* เกิดอะไรขึ้น + กรณีนี้: two sections side by side, the fix gets the weight */
+.ed-explain { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: var(--sp-4) var(--sp-6); margin-top: var(--sp-8); align-items: start; }
+.ed-explain > .section { margin-top: 0; }
+.ed-what { padding: var(--sp-1) 0 var(--sp-1) var(--sp-3); border-left: 2px solid var(--line-strong); font-size: var(--fs-14); line-height: var(--lh-text); color: var(--ink-2); max-width: 62ch; }
+.ed-fix { padding: var(--sp-3) var(--sp-5) var(--sp-4); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--ink); border-radius: var(--r-3); }
+.ed-fix__text { font-size: var(--fs-16); font-weight: 500; line-height: var(--lh-text); color: var(--ink); max-width: 72ch; }
+.ed-fix__foot { margin-top: var(--sp-2); }
+
+/* แก้ที่ไหน: hairline grid of six cells */
+.ed-where { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-3); overflow: hidden; }
+.ed-where__cell { display: grid; gap: var(--sp-1); align-content: start; min-width: 0; padding: var(--sp-3) var(--sp-4); background: var(--surface); }
+.ed-where dt { font-size: var(--fs-12); color: var(--ink-2); line-height: var(--lh-ui); }
+.ed-where dd { margin: 0; display: grid; gap: var(--sp-1); min-width: 0; }
+.ed-where__v { display: flex; align-items: flex-start; gap: var(--sp-1h); min-width: 0; font: 400 13px/1.5 var(--font-mono); color: var(--ink); overflow-wrap: anywhere; }
+.ed-where__v > .btn-copy { margin-top: -1px; }
+.ed-where__v > .lvl { margin-top: 1px; }
+.ed-where__cell--target .ed-where__v { color: var(--danger); font-weight: 600; }
+.ed-where__more { font-size: var(--fs-12); color: var(--muted); line-height: var(--lh-ui); }
+
+@media (max-width: 1099px) { .ed-where { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 899px) { .ed-explain { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 599px) { .ed-where { grid-template-columns: minmax(0, 1fr); } .ed-fix { padding: var(--sp-3) var(--sp-4); } }

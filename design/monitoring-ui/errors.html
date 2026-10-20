@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Error group · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/app.js"></script>
+<style>
+  /* errors.html only. Page prefix .eg-; tokens from assets/styles.css, no literal colours. */
+  .eg-kpis { margin-top: var(--sp-2); }
+  .eg-tabs { margin-top: calc(-1 * var(--sp-1)); }
+  .eg-tab__icon { color: var(--muted); }
+  .tab[aria-selected="true"] .eg-tab__icon { color: var(--ink-2); }
+
+  /* Group list: one grid shared by the column head and each row */
+  .eg-cols, .eg-row {
+    display: grid; column-gap: var(--sp-4);
+    grid-template-columns: minmax(0, 1fr) 144px 76px 64px 184px;
+    grid-template-areas: "main trend count users seen";
+  }
+  .eg-cols {
+    align-items: end; padding: 6px var(--sp-4) 5px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+    border-radius: var(--r-3) var(--r-3) 0 0; font-size: var(--fs-12); font-weight: 600; color: var(--ink-2); line-height: var(--lh-ui);
+  }
+  .eg-cols__trend { grid-area: trend; display: grid; gap: 2px; }
+  .eg-cols__main { grid-area: main; }
+  .eg-cols__num { text-align: right; }
+  .eg-cols__count { grid-area: count; }
+  .eg-cols__users { grid-area: users; }
+  .eg-cols__seen { grid-area: seen; }
+  .eg-axis { display: block; width: 144px; height: 14px; overflow: visible; }
+  .eg-axis text { font-family: var(--font-mono); font-weight: 400; }
+  .eg-group + .eg-group { border-top: 1px solid var(--line); }
+  .eg-band { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-2); padding: 5px var(--sp-4); border-bottom: 1px solid var(--line-soft); font-size: var(--fs-12); color: var(--ink-2); line-height: var(--lh-ui); }
+  .eg-band__n { font-weight: 600; color: var(--ink); }
+  .eg-band__note { color: var(--muted); }
+
+  .eg-row { align-items: center; row-gap: var(--sp-1); padding: var(--sp-3) var(--sp-4); }
+  .eg-row:target { background: var(--sel-bg); box-shadow: inset 3px 0 0 var(--accent); scroll-margin-top: 72px; }
+  .eg-main { grid-area: main; display: grid; gap: 3px; min-width: 0; }
+  .eg-main .err-row__head { gap: var(--sp-1) var(--sp-2); }
+  .eg-fix { font-size: var(--fs-13); color: var(--ink); line-height: var(--lh-ui); min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .eg-fix__k { font-size: var(--fs-11); color: var(--muted); margin-right: var(--sp-2); }
+  .eg-where { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-3); font-size: var(--fs-12); color: var(--ink-2); line-height: var(--lh-ui); min-width: 0; }
+  .eg-where__item { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 0; max-width: 100%; }
+  .eg-where code { font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
+  .eg-where .http { line-height: 16px; }
+  .eg-k { font-size: var(--fs-11); color: var(--muted); }
+
+  .eg-trend { grid-area: trend; }
+  .eg-spark { --c: var(--spark); }
+  .eg-count, .eg-users { text-align: right; line-height: 1.3; white-space: nowrap; }
+  .eg-count { grid-area: count; }
+  .eg-users { grid-area: users; }
+  .eg-n { font-size: 15px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .eg-n--none { color: var(--muted); font-weight: 400; }
+  .eg-sub { display: grid; margin-top: 2px; font-size: var(--fs-11); color: var(--ink-2); line-height: 1.35; }
+  .eg-seen { grid-area: seen; display: grid; gap: 2px; font-size: var(--fs-12); color: var(--muted); line-height: 1.35; white-space: nowrap; }
+  .eg-seen .ts { font-size: var(--fs-12); }
+  .eg-row--new .eg-seen > span:nth-child(2) .ts { color: var(--ink); font-weight: 600; }
+
+  /* Warn (4xx) rows: same layout, less weight */
+  .eg-row--quiet .err-row__title { font-size: var(--fs-14); font-weight: 500; }
+  .eg-row--quiet .err-row__title a { color: var(--ink-2); }
+  .eg-row--quiet .eg-fix { color: var(--ink-2); }
+  .eg-row--quiet .eg-spark { --c: var(--bar-neutral); }
+  .eg-row--quiet .eg-n { font-weight: 500; color: var(--ink-2); }
+
+  .eg-hours tbody th[scope="row"] { white-space: nowrap; }
+  .eg-hours tbody tr:last-child > * { border-top: 1px solid var(--line); font-weight: 600; }
+
+  @media (max-width: 1279px) {
+    .eg-cols, .eg-row { grid-template-columns: minmax(0, 1fr) 144px 72px 60px; grid-template-areas: "main trend count users" "seen trend count users"; }
+    .eg-cols__seen { display: none; }
+    .eg-seen { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-4); }
+    .eg-cols, .eg-row { column-gap: var(--sp-5); }
+  }
+  @media (max-width: 699px) {
+    .eg-cols { display: none; }
+    .eg-list { border-radius: var(--r-3); }
+    .eg-row { grid-template-columns: 144px auto minmax(0, 1fr); grid-template-areas: "main main main" "trend count users" "seen seen seen"; row-gap: var(--sp-2); column-gap: var(--sp-4); align-items: start; }
+    .eg-count, .eg-users { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html" aria-current="page"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h">1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h" selected>24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">16 ต.ค. 14:20 – 17 ต.ค. 14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><span>Error</span></nav>
+          <h1 class="page-title">Error group</h1>
+          <p class="page-sub">error อะไรเกิดบ่อย ใครโดน ต้องแก้ที่ไหน และอันไหนเพิ่งเกิดหลัง deploy · <span class="env env--prod">prod</span> · 24 ชั่วโมงล่าสุด (16 ต.ค. 14:20 – 17 ต.ค. 14:20 ICT)</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn--quiet btn-copy" type="button" data-copy="skilllane-monitor/errors?env=prod&amp;from=now-24h"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกลิงก์</span></button>
+          <a class="btn" href="logs.html?level=warn,error">เปิดใน Log</a>
+          <button class="btn btn--cta btn-copy" type="button" data-copy-target="#eg-ai-md"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+        </div>
+      </header>
+
+      <!-- screen content starts here -->
+      <div class="filterbar" role="group" aria-label="ตัวกรอง">
+        <label class="select">
+          <span class="sr-only">Service</span>
+          <select class="select__control" name="service">
+            <option value="" selected>ทุก service</option>
+            <option value="school-core-api">school-core-api</option>
+            <option value="school-etl-api">school-etl-api</option>
+            <option value="video-transcoder-api">video-transcoder-api</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <div class="chips" role="group" aria-labelledby="eg-level-label">
+          <span class="filter-label" id="eg-level-label">ระดับ</span>
+          <button class="fchip" type="button" data-toggle aria-pressed="true" data-eg-level="err" title="6 group">error <span class="fchip__n">6</span></button>
+          <button class="fchip" type="button" data-toggle aria-pressed="true" data-eg-level="wrn" title="2 group">warn <span class="fchip__n">2</span></button>
+        </div>
+        <span class="hint filterbar__end">ตัวเลขในตัวกรองและ tab คือจำนวน group</span>
+      </div>
+
+      <div class="kpis kpis--3 eg-kpis" aria-label="สรุป 24 ชั่วโมง">
+        <div class="kpi">
+          <span class="kpi__label">ครั้งที่เกิด error (ERR) ใน 24 ชั่วโมง</span>
+          <span class="kpi__value">302<span class="kpi__unit">ครั้ง</span></span>
+          <div class="kpi__foot"><span class="kpi__delta" title="หน้า Log นับบรรทัด: ทุก request ที่ตอบ 5xx มีบรรทัด http.request อีก 1 บรรทัด ซึ่งไม่นับเป็น error group">ชั่วโมงล่าสุด 116 ครั้ง (ใน Log = 228 บรรทัด ERR) · WRN อีก 3,464</span><svg class="kpi__spark spark--bad" viewBox="0 0 96 28" aria-hidden="true"><path class="spark__area" d="M0 20.9L4.2 21.1L8.3 22.1L12.5 23.1L16.7 23.5L20.9 23L25 23L29.2 23.3L33.4 23.8L37.6 24L41.7 24L45.9 24L50.1 24L54.3 24L58.4 24L62.6 24L66.8 23.7L71 22.8L75.1 21.2L79.3 20L83.5 19.5L87.7 19.9L91.8 21.1L96 4L96 28L0 28Z"/><path class="spark__line" d="M0 20.9L4.2 21.1L8.3 22.1L12.5 23.1L16.7 23.5L20.9 23L25 23L29.2 23.3L33.4 23.8L37.6 24L41.7 24L45.9 24L50.1 24L54.3 24L58.4 24L62.6 24L66.8 23.7L71 22.8L75.1 21.2L79.3 20L83.5 19.5L87.7 19.9L91.8 21.1L96 4"/><circle class="spark__dot" cx="96" cy="4" r="3"/></svg></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">Error group</span>
+          <span class="kpi__value">8</span>
+          <div class="kpi__foot"><span class="kpi__delta">ERR 6 · WRN 2 · รวม 3,766 ครั้ง</span></div>
+        </div>
+        <div class="kpi kpi--alert">
+          <span class="kpi__label"><svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l3.75 3.75v5l-3.75 3.75h-5L1.75 10.5v-5z"/><path d="M8 5v3.5M8 10.9v.1"/></svg>Group ใหม่ตั้งแต่ deploy 31.4.0</span>
+          <span class="kpi__value">1</span>
+          <div class="kpi__foot"><span class="kpi__delta kpi__delta--bad">Read from undefined value · ครั้งแรก 08:03, deploy 08:00</span></div>
+          <a class="kpi__link sr-only" href="#g2">ไปที่ group ใหม่ Read from undefined value</a>
+        </div>
+      </div>
+
+      <section class="section eg-section" aria-labelledby="h-groups">
+        <div class="section__head">
+          <h2 class="section__title" id="h-groups">Error group</h2>
+          <span class="section__meta">8 group · 3,766 ครั้ง · ERR ขึ้นก่อน WRN · เส้นตั้งในแท่ง = deploy 31.4.0 (08:00)</span>
+          <div class="section__actions">
+            <span class="filter-label" id="eg-sort-label">เรียงตาม</span>
+            <div class="seg" role="group" aria-labelledby="eg-sort-label" data-choice>
+              <button class="seg__btn" type="button" aria-pressed="true" data-eg-sort="count" title="จำนวนครั้งมากก่อน">จำนวน</button>
+              <button class="seg__btn" type="button" aria-pressed="false" data-eg-sort="last" title="เกิดล่าสุดก่อน">ล่าสุด</button>
+              <button class="seg__btn" type="button" aria-pressed="false" data-eg-sort="first" title="เห็นครั้งแรกล่าสุดก่อน (group ใหม่ขึ้นบน)">ใหม่</button>
+            </div>
+          </div>
+        </div>
+        <div class="tabs eg-tabs" role="tablist" aria-label="หมวดของ error">
+            <button class="tab" role="tab" type="button" id="t-all" aria-selected="true" aria-controls="p-all" title="8 group · 3,766 ครั้ง">ทั้งหมด <span class="tab__count">8</span></button>
+            <button class="tab" role="tab" type="button" id="t-bug" aria-selected="false" aria-controls="p-bug" tabindex="-1" title="1 group · 66 ครั้ง"><svg class="i i--sm eg-tab__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด <span class="tab__count">1</span></button>
+            <button class="tab" role="tab" type="button" id="t-input" aria-selected="false" aria-controls="p-input" tabindex="-1" title="2 group · 3,426 ครั้ง"><svg class="i i--sm eg-tab__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด <span class="tab__count">2</span></button>
+            <button class="tab" role="tab" type="button" id="t-data" aria-selected="false" aria-controls="p-data" tabindex="-1" title="2 group · 218 ครั้ง"><svg class="i i--sm eg-tab__icon" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน <span class="tab__count">2</span></button>
+            <button class="tab" role="tab" type="button" id="t-dependency" aria-selected="false" aria-controls="p-dependency" tabindex="-1" title="3 group · 56 ครั้ง"><svg class="i i--sm eg-tab__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา <span class="tab__count">3</span></button>
+            <button class="tab" role="tab" type="button" id="t-config" aria-selected="false" aria-controls="p-config" tabindex="-1" title="0 group · 0 ครั้ง"><svg class="i i--sm eg-tab__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h6.5M11.5 4.5H14M2 11.5h2M7 11.5h7"/><circle cx="10" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/></svg>ตั้งค่าผิด <span class="tab__count">0</span></button>
+        </div>
+        <div class="tab-panel" id="p-all" role="tabpanel" aria-labelledby="t-all"><div class="err-list eg-list">
+          <div class="eg-cols" aria-hidden="true">
+            <span class="eg-cols__main">Error group · ต้องแก้อะไร · ที่ไหน</span>
+            <span class="eg-cols__trend">ครั้งต่อชั่วโมง
+              <svg class="eg-axis" viewBox="0 0 144 14"><text class="c-tick" x="0" y="11">−24 ชม.</text><line class="c-event" x1="106" x2="106" y1="2" y2="14"/><text class="c-tick c-tick--end" x="103" y="11">08:00</text><text class="c-tick c-tick--end" x="144" y="11">ตอนนี้</text></svg>
+            </span>
+            <span class="eg-cols__num eg-cols__count">ครั้ง</span>
+            <span class="eg-cols__num eg-cols__users">users</span>
+            <span class="eg-cols__seen">Service · ครั้งแรก · ล่าสุด</span>
+          </div>
+          <div class="eg-group" data-level="err">
+            <p class="eg-band"><span class="lvl lvl--err">ERR</span><span class="eg-band__n">6 group</span><span class="eg-band__note">ดูก่อน: request หรือ job ล้มเหลวจริง</span></p>
+            <div class="eg-rows">
+            <article class="err-row eg-row" id="g1" aria-labelledby="g1-t" data-count="214" data-first="2026-10-16T09:12:00+07:00" data-last="2026-10-17T14:18:09+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g1-t"><a href="error-detail.html">Value too long for column</a></h3>
+                  <span class="tag">ORA-12899</span>
+                  <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+                  
+                </div>
+                <p class="eg-fix" title="QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving."><span class="eg-fix__k">ต้องแก้อะไร</span>QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">source</span> <code>ImportQuestionBankHandler.execute</code></span><span class="eg-where__item"><span class="eg-k">file</span> <code>src/domain/question-bank/import-question-bank.handler.ts</code></span><span class="eg-where__item"><span class="method">POST</span> <code>/question-bank/import</code> <span class="http http--5xx">500</span></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="214 ครั้งใน 24 ชั่วโมง สูงสุด 47 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 13:20–14:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="19.6" width="4" height="7.4"/><rect class="c-bar" x="7" y="18.5" width="4" height="8.5"/><rect class="c-bar" x="13" y="21.1" width="4" height="5.9"/><rect class="c-bar" x="19" y="24.3" width="4" height="2.7"/><rect class="c-bar" x="25" y="25.4" width="4" height="1.6"/><rect class="c-bar" x="31" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="37" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="43" y="24.9" width="4" height="2.1"/><rect class="c-bar" x="49" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="97" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="103" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="109" y="20.1" width="4" height="6.9"/><rect class="c-bar" x="115" y="16.4" width="4" height="10.6"/><rect class="c-bar" x="121" y="14.2" width="4" height="12.8"/><rect class="c-bar" x="127" y="15.8" width="4" height="11.2"/><rect class="c-bar" x="133" y="19.0" width="4" height="8.0"/><rect class="c-bar" x="139" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|14::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|16::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|11::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|5::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|3::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|6::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|6::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|4::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|1::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|2::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|6::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|13::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|20::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|24::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|21::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|15::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|47::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 47/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">214</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">37</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">16 ต.ค. 09:12</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:18</span></span></p>
+            </article>
+            <article class="err-row eg-row eg-row--new" id="g2" aria-labelledby="g2-t" data-count="66" data-first="2026-10-17T08:03:00+07:00" data-last="2026-10-17T14:16:00+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g2-t"><a href="error-detail-null-read.html">Read from undefined value</a></h3>
+                  <span class="tag">NULL_READ</span>
+                  <span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span>
+                  <span class="badge-new">NEW</span><span class="badge-new__since">ตั้งแต่ 31.4.0</span>
+                </div>
+                <p class="eg-fix" title="&quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect."><span class="eg-fix__k">ต้องแก้อะไร</span>&quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">source</span> <code>GetClassReportHandler.execute</code></span><span class="eg-where__item"><span class="eg-k">file</span> <code>src/domain/class-report/get-class-report.handler.ts</code></span><span class="eg-where__item"><span class="method">GET</span> <code>/classes/:id/report</code> <span class="http http--5xx">500</span></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="66 ครั้งใน 24 ชั่วโมง สูงสุด 65 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 13:20–14:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="103" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="139" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|0::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|0::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|1::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|0::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|0::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|0::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|0::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|0::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|65::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 65/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">66</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">21</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">17 ต.ค. 08:03</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:16</span></span></p>
+            </article>
+            <article class="err-row eg-row" id="g3" aria-labelledby="g3-t" data-count="41" data-first="2026-10-14T10:05:00+07:00" data-last="2026-10-17T14:12:41+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g3-t"><a href="errors.html#g3">Google API rate limited</a></h3>
+                  <span class="tag">rateLimitExceeded</span>
+                  <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+                  
+                </div>
+                <p class="eg-fix" title="sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes."><span class="eg-fix__k">ต้องแก้อะไร</span>sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">source</span> <code>GoogleSheetsService.exportReport</code></span><span class="eg-where__item"><span class="eg-k">file</span> <code>src/domain/report/google-sheets.service.ts</code></span><span class="eg-where__item"><span class="eg-k">job</span> <code>report:generate</code> <span class="tag">BullMQ</span></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="41 ครั้งใน 24 ชั่วโมง สูงสุด 5 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 13:20–14:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="7.0" width="4" height="20.0"/><rect class="c-bar" x="7" y="7.0" width="4" height="20.0"/><rect class="c-bar" x="13" y="17.0" width="4" height="10.0"/><rect class="c-bar" x="19" y="22.0" width="4" height="5.0"/><rect class="c-bar" x="25" y="22.0" width="4" height="5.0"/><rect class="c-bar" x="31" y="12.0" width="4" height="15.0"/><rect class="c-bar" x="37" y="22.0" width="4" height="5.0"/><rect class="c-bar" x="97" y="22.0" width="4" height="5.0"/><rect class="c-bar" x="103" y="17.0" width="4" height="10.0"/><rect class="c-bar" x="109" y="7.0" width="4" height="20.0"/><rect class="c-bar" x="115" y="17.0" width="4" height="10.0"/><rect class="c-bar" x="121" y="12.0" width="4" height="15.0"/><rect class="c-bar" x="127" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="133" y="12.0" width="4" height="15.0"/><rect class="c-bar" x="139" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|4::ครั้ง|0::ล้มเหลวจริง (ERR)|4::retry (WRN)"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|4::ครั้ง|0::ล้มเหลวจริง (ERR)|4::retry (WRN)"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|2::ครั้ง|0::ล้มเหลวจริง (ERR)|2::retry (WRN)"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|1::ครั้ง|0::ล้มเหลวจริง (ERR)|1::retry (WRN)"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|1::ครั้ง|0::ล้มเหลวจริง (ERR)|1::retry (WRN)"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|3::ครั้ง|0::ล้มเหลวจริง (ERR)|3::retry (WRN)"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|1::ครั้ง|0::ล้มเหลวจริง (ERR)|1::retry (WRN)"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|1::ครั้ง|0::ล้มเหลวจริง (ERR)|1::retry (WRN)"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|2::ครั้ง|0::ล้มเหลวจริง (ERR)|2::retry (WRN)"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|4::ครั้ง|1::ล้มเหลวจริง (ERR)|3::retry (WRN)"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|2::ครั้ง|0::ล้มเหลวจริง (ERR)|2::retry (WRN)"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|3::ครั้ง|0::ล้มเหลวจริง (ERR)|3::retry (WRN)"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|5::ครั้ง|1::ล้มเหลวจริง (ERR)|4::retry (WRN)"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|3::ครั้ง|0::ล้มเหลวจริง (ERR)|3::retry (WRN)"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|5::ครั้ง|1::ล้มเหลวจริง (ERR)|4::retry (WRN)"/></svg><span class="spark-inline__max">สูงสุด 5/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">41</span><span class="unit">ครั้ง</span><span class="eg-sub"><span>38 retry</span><span>3 ล้มเหลวจริง</span></span></p>
+              <p class="eg-users"><span class="eg-n">14</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">14 ต.ค. 10:05</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:12</span></span></p>
+            </article>
+            <article class="err-row eg-row" id="g7" aria-labelledby="g7-t" data-count="12" data-first="2026-10-15T10:44:00+07:00" data-last="2026-10-17T12:47:00+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g7-t"><a href="errors.html#g7">Query cancelled</a></h3>
+                  <span class="tag">ORA-01013</span>
+                  <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+                  
+                </div>
+                <p class="eg-fix" title="The query was cancelled before it finished, usually by a statement timeout. Find the slow query in the trace, then add an index or raise the timeout."><span class="eg-fix__k">ต้องแก้อะไร</span>The query was cancelled before it finished, usually by a statement timeout. Find the slow query in the trace, then add an index or raise the timeout.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="method">GET</span> <code>/classes/:id/students</code> <span class="http http--5xx">500</span></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="12 ครั้งใน 24 ชั่วโมง สูงสุด 3 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 09:20–10:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="10.3" width="4" height="16.7"/><rect class="c-bar" x="7" y="18.7" width="4" height="8.3"/><rect class="c-bar" x="109" y="10.3" width="4" height="16.7"/><rect class="c-bar" x="115" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="121" y="10.3" width="4" height="16.7"/><rect class="c-bar" x="133" y="10.3" width="4" height="16.7"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|2::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|1::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|0::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|2::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|3::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|2::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|0::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|2::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|0::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 3/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">12</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">9</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">15 ต.ค. 10:44</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">12:47</span></span></p>
+            </article>
+            <article class="err-row eg-row" id="g8" aria-labelledby="g8-t" data-count="4" data-first="2026-10-13T09:30:00+07:00" data-last="2026-10-17T11:41:00+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g8-t"><a href="errors.html#g8">DB deadlock</a></h3>
+                  <span class="tag">ORA-00060</span>
+                  <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+                  
+                </div>
+                <p class="eg-fix" title="Two transactions waited on each other's rows. Retry the command, or update rows in the same order in every transaction."><span class="eg-fix__k">ต้องแก้อะไร</span>Two transactions waited on each other's rows. Retry the command, or update rows in the same order in every transaction.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">usecase</span> <code>SubmitExamCommand</code></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="4 ครั้งใน 24 ชั่วโมง สูงสุด 2 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 11:20–12:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="127" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|2::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|0::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|0::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|0::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|0::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|0::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|2::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|0::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|0::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 2/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">4</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">4</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">13 ต.ค. 09:30</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">11:41</span></span></p>
+            </article>
+            <article class="err-row eg-row" id="g4" aria-labelledby="g4-t" data-count="3" data-first="2026-10-09T03:12:00+07:00" data-last="2026-10-17T13:43:20+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g4-t"><a href="jobs.html#dep-cache">Redis &quot;cache&quot; refused connection</a></h3>
+                  <span class="tag">ECONNREFUSED</span>
+                  <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+                  
+                </div>
+                <p class="eg-fix" title="Nothing accepted connections at 10.0.3.21:6379. Check that the redis &quot;cache&quot; server is running and reachable from this service."><span class="eg-fix__k">ต้องแก้อะไร</span>Nothing accepted connections at 10.0.3.21:6379. Check that the redis &quot;cache&quot; server is running and reachable from this service.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">dependency</span> <code>redis cache</code></span><span class="eg-where__item"><span class="eg-k">target</span> <code>10.0.3.21:6379</code></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="3 ครั้งใน 24 ชั่วโมง สูงสุด 3 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 13:20–14:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="139" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|0::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|0::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|0::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|0::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|0::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|0::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|0::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|0::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|3::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 3/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">3</span><span class="unit">ครั้ง</span><span class="eg-sub">down 45.2 s</span></p>
+              <p class="eg-users"><span class="eg-n eg-n--none" title="log ของ group นี้ไม่มี user_id (connection error นอก request)" aria-hidden="true">–</span><span class="unit" aria-hidden="true">users</span><span class="sr-only">ไม่มีข้อมูล users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">9 ต.ค. 03:12</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">13:43</span></span></p>
+            </article>
+            </div>
+          </div>
+          <div class="eg-group" data-level="wrn">
+            <p class="eg-band"><span class="lvl lvl--wrn">WRN</span><span class="eg-band__n">2 group</span><span class="eg-band__note">4xx: client ส่งข้อมูลมาผิด ระบบตอบถูกแล้ว ดูเมื่อจำนวนผิดปกติ</span></p>
+            <div class="eg-rows">
+            <article class="err-row eg-row eg-row--quiet" id="g5" aria-labelledby="g5-t" data-count="2771" data-first="2026-10-03T15:02:00+07:00" data-last="2026-10-17T14:19:59+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--wrn">WRN</span>
+                  <h3 class="err-row__title" id="g5-t"><a href="errors.html#g5">Not found</a></h3>
+                  <span class="tag">HTTP_404 · EntityNotFoundError</span>
+                  <span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span>
+                  
+                </div>
+                <p class="eg-fix" title="No ExamEntity found by (id). Check the id the client sent, or whether the row was deleted."><span class="eg-fix__k">ต้องแก้อะไร</span>No ExamEntity found by (id). Check the id the client sent, or whether the row was deleted.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">source</span> <code>GetExamHandler.execute</code></span><span class="eg-where__item"><span class="eg-k">file</span> <code>src/domain/exam/get-exam.handler.ts</code></span><span class="eg-where__item"><span class="method">GET</span> <code>/exams/:id</code> <span class="http http--4xx">404</span></span><span class="eg-where__item"><span class="eg-k">target</span> <code>ExamEntity</code></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="2,771 ครั้งใน 24 ชั่วโมง สูงสุด 290 ครั้งต่อชั่วโมง ช่วง 16 ต.ค. 15:20–16:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="4.2" width="4" height="22.8"/><rect class="c-bar" x="7" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="13" y="11.6" width="4" height="15.4"/><rect class="c-bar" x="19" y="16.5" width="4" height="10.5"/><rect class="c-bar" x="25" y="20.6" width="4" height="6.4"/><rect class="c-bar" x="31" y="19.0" width="4" height="8.0"/><rect class="c-bar" x="37" y="18.8" width="4" height="8.2"/><rect class="c-bar" x="43" y="22.7" width="4" height="4.3"/><rect class="c-bar" x="49" y="24.7" width="4" height="2.3"/><rect class="c-bar" x="55" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="61" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="67" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="73" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="79" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="85" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="91" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="97" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="103" y="16.0" width="4" height="11.0"/><rect class="c-bar" x="109" y="8.6" width="4" height="18.4"/><rect class="c-bar" x="115" y="7.9" width="4" height="19.1"/><rect class="c-bar" x="121" y="5.6" width="4" height="21.4"/><rect class="c-bar" x="127" y="5.0" width="4" height="22.0"/><rect class="c-bar" x="133" y="13.1" width="4" height="13.9"/><rect class="c-bar" x="139" y="3.1" width="4" height="23.9"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|264::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|290::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|179::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|122::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|74::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|93::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|95::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|50::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|27::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|11::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|6::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|3::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|2::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|2::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|3::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|8::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|37::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|128::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|214::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|222::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|248::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|255::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|161::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|277::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 290/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">2,771</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">402</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">3 ต.ค. 15:02</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:19</span></span></p>
+            </article>
+            <article class="err-row eg-row eg-row--quiet" id="g6" aria-labelledby="g6-t" data-count="655" data-first="2026-10-04T09:40:00+07:00" data-last="2026-10-17T14:19:58+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--wrn">WRN</span>
+                  <h3 class="err-row__title" id="g6-t"><a href="errors.html#g6">Invalid request</a></h3>
+                  <span class="tag">HTTP_400</span>
+                  <span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span>
+                  
+                </div>
+                <p class="eg-fix" title="Rejected fields: answers.*.choice. The response message lists the rule each one broke."><span class="eg-fix__k">ต้องแก้อะไร</span>Rejected fields: answers.*.choice. The response message lists the rule each one broke.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="method">POST</span> <code>/exams/:id/submit</code> <span class="http http--4xx">400</span></span><span class="eg-where__item"><span class="eg-k">target</span> <code>answers.*.choice</code></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="655 ครั้งใน 24 ชั่วโมง สูงสุด 77 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 09:20–10:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="10.1" width="4" height="16.9"/><rect class="c-bar" x="7" y="13.0" width="4" height="14.0"/><rect class="c-bar" x="13" y="16.3" width="4" height="10.7"/><rect class="c-bar" x="19" y="17.9" width="4" height="9.1"/><rect class="c-bar" x="25" y="19.5" width="4" height="7.5"/><rect class="c-bar" x="31" y="17.3" width="4" height="9.7"/><rect class="c-bar" x="37" y="21.5" width="4" height="5.5"/><rect class="c-bar" x="43" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="49" y="24.7" width="4" height="2.3"/><rect class="c-bar" x="55" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="61" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="73" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="79" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="85" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="91" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="97" y="23.1" width="4" height="3.9"/><rect class="c-bar" x="103" y="15.3" width="4" height="11.7"/><rect class="c-bar" x="109" y="5.9" width="4" height="21.1"/><rect class="c-bar" x="115" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="121" y="9.8" width="4" height="17.2"/><rect class="c-bar" x="127" y="13.4" width="4" height="13.6"/><rect class="c-bar" x="133" y="9.8" width="4" height="17.2"/><rect class="c-bar" x="139" y="5.9" width="4" height="21.1"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|52::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|43::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|33::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|28::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|23::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|30::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|17::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|10::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|7::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|3::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|1::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|1::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|1::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|1::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|2::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|12::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|36::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|65::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|77::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|53::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|42::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|53::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|65::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 77/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">655</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">287</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">4 ต.ค. 09:40</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:19</span></span></p>
+            </article>
+            </div>
+          </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="p-bug" role="tabpanel" aria-labelledby="t-bug" hidden><div class="err-list eg-list">
+          <div class="eg-cols" aria-hidden="true">
+            <span class="eg-cols__main">Error group · ต้องแก้อะไร · ที่ไหน</span>
+            <span class="eg-cols__trend">ครั้งต่อชั่วโมง
+              <svg class="eg-axis" viewBox="0 0 144 14"><text class="c-tick" x="0" y="11">−24 ชม.</text><line class="c-event" x1="106" x2="106" y1="2" y2="14"/><text class="c-tick c-tick--end" x="103" y="11">08:00</text><text class="c-tick c-tick--end" x="144" y="11">ตอนนี้</text></svg>
+            </span>
+            <span class="eg-cols__num eg-cols__count">ครั้ง</span>
+            <span class="eg-cols__num eg-cols__users">users</span>
+            <span class="eg-cols__seen">Service · ครั้งแรก · ล่าสุด</span>
+          </div>
+          <div class="eg-group" data-level="err">
+            <p class="eg-band"><span class="lvl lvl--err">ERR</span><span class="eg-band__n">1 group</span><span class="eg-band__note">ดูก่อน: request หรือ job ล้มเหลวจริง</span></p>
+            <div class="eg-rows">
+            <article class="err-row eg-row eg-row--new" id="g2-bug" aria-labelledby="g2-bug-t" data-count="66" data-first="2026-10-17T08:03:00+07:00" data-last="2026-10-17T14:16:00+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g2-bug-t"><a href="error-detail-null-read.html">Read from undefined value</a></h3>
+                  <span class="tag">NULL_READ</span>
+                  <span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span>
+                  <span class="badge-new">NEW</span><span class="badge-new__since">ตั้งแต่ 31.4.0</span>
+                </div>
+                <p class="eg-fix" title="&quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect."><span class="eg-fix__k">ต้องแก้อะไร</span>&quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">source</span> <code>GetClassReportHandler.execute</code></span><span class="eg-where__item"><span class="eg-k">file</span> <code>src/domain/class-report/get-class-report.handler.ts</code></span><span class="eg-where__item"><span class="method">GET</span> <code>/classes/:id/report</code> <span class="http http--5xx">500</span></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="66 ครั้งใน 24 ชั่วโมง สูงสุด 65 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 13:20–14:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="103" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="139" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|0::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|0::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|1::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|0::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|0::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|0::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|0::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|0::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|65::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 65/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">66</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">21</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">17 ต.ค. 08:03</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:16</span></span></p>
+            </article>
+            </div>
+          </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="p-input" role="tabpanel" aria-labelledby="t-input" hidden><div class="err-list eg-list">
+          <div class="eg-cols" aria-hidden="true">
+            <span class="eg-cols__main">Error group · ต้องแก้อะไร · ที่ไหน</span>
+            <span class="eg-cols__trend">ครั้งต่อชั่วโมง
+              <svg class="eg-axis" viewBox="0 0 144 14"><text class="c-tick" x="0" y="11">−24 ชม.</text><line class="c-event" x1="106" x2="106" y1="2" y2="14"/><text class="c-tick c-tick--end" x="103" y="11">08:00</text><text class="c-tick c-tick--end" x="144" y="11">ตอนนี้</text></svg>
+            </span>
+            <span class="eg-cols__num eg-cols__count">ครั้ง</span>
+            <span class="eg-cols__num eg-cols__users">users</span>
+            <span class="eg-cols__seen">Service · ครั้งแรก · ล่าสุด</span>
+          </div>
+          <div class="eg-group" data-level="wrn">
+            <p class="eg-band"><span class="lvl lvl--wrn">WRN</span><span class="eg-band__n">2 group</span><span class="eg-band__note">4xx: client ส่งข้อมูลมาผิด ระบบตอบถูกแล้ว ดูเมื่อจำนวนผิดปกติ</span></p>
+            <div class="eg-rows">
+            <article class="err-row eg-row eg-row--quiet" id="g5-input" aria-labelledby="g5-input-t" data-count="2771" data-first="2026-10-03T15:02:00+07:00" data-last="2026-10-17T14:19:59+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--wrn">WRN</span>
+                  <h3 class="err-row__title" id="g5-input-t"><a href="errors.html#g5">Not found</a></h3>
+                  <span class="tag">HTTP_404 · EntityNotFoundError</span>
+                  <span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span>
+                  
+                </div>
+                <p class="eg-fix" title="No ExamEntity found by (id). Check the id the client sent, or whether the row was deleted."><span class="eg-fix__k">ต้องแก้อะไร</span>No ExamEntity found by (id). Check the id the client sent, or whether the row was deleted.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">source</span> <code>GetExamHandler.execute</code></span><span class="eg-where__item"><span class="eg-k">file</span> <code>src/domain/exam/get-exam.handler.ts</code></span><span class="eg-where__item"><span class="method">GET</span> <code>/exams/:id</code> <span class="http http--4xx">404</span></span><span class="eg-where__item"><span class="eg-k">target</span> <code>ExamEntity</code></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="2,771 ครั้งใน 24 ชั่วโมง สูงสุด 290 ครั้งต่อชั่วโมง ช่วง 16 ต.ค. 15:20–16:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="4.2" width="4" height="22.8"/><rect class="c-bar" x="7" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="13" y="11.6" width="4" height="15.4"/><rect class="c-bar" x="19" y="16.5" width="4" height="10.5"/><rect class="c-bar" x="25" y="20.6" width="4" height="6.4"/><rect class="c-bar" x="31" y="19.0" width="4" height="8.0"/><rect class="c-bar" x="37" y="18.8" width="4" height="8.2"/><rect class="c-bar" x="43" y="22.7" width="4" height="4.3"/><rect class="c-bar" x="49" y="24.7" width="4" height="2.3"/><rect class="c-bar" x="55" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="61" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="67" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="73" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="79" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="85" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="91" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="97" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="103" y="16.0" width="4" height="11.0"/><rect class="c-bar" x="109" y="8.6" width="4" height="18.4"/><rect class="c-bar" x="115" y="7.9" width="4" height="19.1"/><rect class="c-bar" x="121" y="5.6" width="4" height="21.4"/><rect class="c-bar" x="127" y="5.0" width="4" height="22.0"/><rect class="c-bar" x="133" y="13.1" width="4" height="13.9"/><rect class="c-bar" x="139" y="3.1" width="4" height="23.9"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|264::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|290::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|179::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|122::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|74::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|93::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|95::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|50::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|27::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|11::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|6::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|3::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|2::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|2::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|3::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|8::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|37::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|128::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|214::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|222::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|248::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|255::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|161::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|277::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 290/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">2,771</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">402</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">3 ต.ค. 15:02</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:19</span></span></p>
+            </article>
+            <article class="err-row eg-row eg-row--quiet" id="g6-input" aria-labelledby="g6-input-t" data-count="655" data-first="2026-10-04T09:40:00+07:00" data-last="2026-10-17T14:19:58+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--wrn">WRN</span>
+                  <h3 class="err-row__title" id="g6-input-t"><a href="errors.html#g6">Invalid request</a></h3>
+                  <span class="tag">HTTP_400</span>
+                  <span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span>
+                  
+                </div>
+                <p class="eg-fix" title="Rejected fields: answers.*.choice. The response message lists the rule each one broke."><span class="eg-fix__k">ต้องแก้อะไร</span>Rejected fields: answers.*.choice. The response message lists the rule each one broke.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="method">POST</span> <code>/exams/:id/submit</code> <span class="http http--4xx">400</span></span><span class="eg-where__item"><span class="eg-k">target</span> <code>answers.*.choice</code></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="655 ครั้งใน 24 ชั่วโมง สูงสุด 77 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 09:20–10:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="10.1" width="4" height="16.9"/><rect class="c-bar" x="7" y="13.0" width="4" height="14.0"/><rect class="c-bar" x="13" y="16.3" width="4" height="10.7"/><rect class="c-bar" x="19" y="17.9" width="4" height="9.1"/><rect class="c-bar" x="25" y="19.5" width="4" height="7.5"/><rect class="c-bar" x="31" y="17.3" width="4" height="9.7"/><rect class="c-bar" x="37" y="21.5" width="4" height="5.5"/><rect class="c-bar" x="43" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="49" y="24.7" width="4" height="2.3"/><rect class="c-bar" x="55" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="61" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="73" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="79" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="85" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="91" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="97" y="23.1" width="4" height="3.9"/><rect class="c-bar" x="103" y="15.3" width="4" height="11.7"/><rect class="c-bar" x="109" y="5.9" width="4" height="21.1"/><rect class="c-bar" x="115" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="121" y="9.8" width="4" height="17.2"/><rect class="c-bar" x="127" y="13.4" width="4" height="13.6"/><rect class="c-bar" x="133" y="9.8" width="4" height="17.2"/><rect class="c-bar" x="139" y="5.9" width="4" height="21.1"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|52::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|43::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|33::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|28::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|23::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|30::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|17::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|10::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|7::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|3::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|1::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|1::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|1::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|1::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|2::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|12::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|36::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|65::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|77::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|53::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|42::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|53::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|65::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 77/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">655</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">287</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">4 ต.ค. 09:40</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:19</span></span></p>
+            </article>
+            </div>
+          </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="p-data" role="tabpanel" aria-labelledby="t-data" hidden><div class="err-list eg-list">
+          <div class="eg-cols" aria-hidden="true">
+            <span class="eg-cols__main">Error group · ต้องแก้อะไร · ที่ไหน</span>
+            <span class="eg-cols__trend">ครั้งต่อชั่วโมง
+              <svg class="eg-axis" viewBox="0 0 144 14"><text class="c-tick" x="0" y="11">−24 ชม.</text><line class="c-event" x1="106" x2="106" y1="2" y2="14"/><text class="c-tick c-tick--end" x="103" y="11">08:00</text><text class="c-tick c-tick--end" x="144" y="11">ตอนนี้</text></svg>
+            </span>
+            <span class="eg-cols__num eg-cols__count">ครั้ง</span>
+            <span class="eg-cols__num eg-cols__users">users</span>
+            <span class="eg-cols__seen">Service · ครั้งแรก · ล่าสุด</span>
+          </div>
+          <div class="eg-group" data-level="err">
+            <p class="eg-band"><span class="lvl lvl--err">ERR</span><span class="eg-band__n">2 group</span><span class="eg-band__note">ดูก่อน: request หรือ job ล้มเหลวจริง</span></p>
+            <div class="eg-rows">
+            <article class="err-row eg-row" id="g1-data" aria-labelledby="g1-data-t" data-count="214" data-first="2026-10-16T09:12:00+07:00" data-last="2026-10-17T14:18:09+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g1-data-t"><a href="error-detail.html">Value too long for column</a></h3>
+                  <span class="tag">ORA-12899</span>
+                  <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+                  
+                </div>
+                <p class="eg-fix" title="QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving."><span class="eg-fix__k">ต้องแก้อะไร</span>QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">source</span> <code>ImportQuestionBankHandler.execute</code></span><span class="eg-where__item"><span class="eg-k">file</span> <code>src/domain/question-bank/import-question-bank.handler.ts</code></span><span class="eg-where__item"><span class="method">POST</span> <code>/question-bank/import</code> <span class="http http--5xx">500</span></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="214 ครั้งใน 24 ชั่วโมง สูงสุด 47 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 13:20–14:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="19.6" width="4" height="7.4"/><rect class="c-bar" x="7" y="18.5" width="4" height="8.5"/><rect class="c-bar" x="13" y="21.1" width="4" height="5.9"/><rect class="c-bar" x="19" y="24.3" width="4" height="2.7"/><rect class="c-bar" x="25" y="25.4" width="4" height="1.6"/><rect class="c-bar" x="31" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="37" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="43" y="24.9" width="4" height="2.1"/><rect class="c-bar" x="49" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="97" y="25.5" width="4" height="1.5"/><rect class="c-bar" x="103" y="23.8" width="4" height="3.2"/><rect class="c-bar" x="109" y="20.1" width="4" height="6.9"/><rect class="c-bar" x="115" y="16.4" width="4" height="10.6"/><rect class="c-bar" x="121" y="14.2" width="4" height="12.8"/><rect class="c-bar" x="127" y="15.8" width="4" height="11.2"/><rect class="c-bar" x="133" y="19.0" width="4" height="8.0"/><rect class="c-bar" x="139" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|14::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|16::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|11::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|5::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|3::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|6::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|6::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|4::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|1::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|2::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|6::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|13::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|20::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|24::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|21::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|15::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|47::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 47/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">214</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">37</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">16 ต.ค. 09:12</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:18</span></span></p>
+            </article>
+            <article class="err-row eg-row" id="g8-data" aria-labelledby="g8-data-t" data-count="4" data-first="2026-10-13T09:30:00+07:00" data-last="2026-10-17T11:41:00+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g8-data-t"><a href="errors.html#g8">DB deadlock</a></h3>
+                  <span class="tag">ORA-00060</span>
+                  <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+                  
+                </div>
+                <p class="eg-fix" title="Two transactions waited on each other's rows. Retry the command, or update rows in the same order in every transaction."><span class="eg-fix__k">ต้องแก้อะไร</span>Two transactions waited on each other's rows. Retry the command, or update rows in the same order in every transaction.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">usecase</span> <code>SubmitExamCommand</code></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="4 ครั้งใน 24 ชั่วโมง สูงสุด 2 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 11:20–12:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="127" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|2::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|0::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|0::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|0::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|0::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|0::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|2::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|0::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|0::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 2/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">4</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">4</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">13 ต.ค. 09:30</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">11:41</span></span></p>
+            </article>
+            </div>
+          </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="p-dependency" role="tabpanel" aria-labelledby="t-dependency" hidden><div class="err-list eg-list">
+          <div class="eg-cols" aria-hidden="true">
+            <span class="eg-cols__main">Error group · ต้องแก้อะไร · ที่ไหน</span>
+            <span class="eg-cols__trend">ครั้งต่อชั่วโมง
+              <svg class="eg-axis" viewBox="0 0 144 14"><text class="c-tick" x="0" y="11">−24 ชม.</text><line class="c-event" x1="106" x2="106" y1="2" y2="14"/><text class="c-tick c-tick--end" x="103" y="11">08:00</text><text class="c-tick c-tick--end" x="144" y="11">ตอนนี้</text></svg>
+            </span>
+            <span class="eg-cols__num eg-cols__count">ครั้ง</span>
+            <span class="eg-cols__num eg-cols__users">users</span>
+            <span class="eg-cols__seen">Service · ครั้งแรก · ล่าสุด</span>
+          </div>
+          <div class="eg-group" data-level="err">
+            <p class="eg-band"><span class="lvl lvl--err">ERR</span><span class="eg-band__n">3 group</span><span class="eg-band__note">ดูก่อน: request หรือ job ล้มเหลวจริง</span></p>
+            <div class="eg-rows">
+            <article class="err-row eg-row" id="g3-dependency" aria-labelledby="g3-dependency-t" data-count="41" data-first="2026-10-14T10:05:00+07:00" data-last="2026-10-17T14:12:41+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g3-dependency-t"><a href="errors.html#g3">Google API rate limited</a></h3>
+                  <span class="tag">rateLimitExceeded</span>
+                  <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+                  
+                </div>
+                <p class="eg-fix" title="sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes."><span class="eg-fix__k">ต้องแก้อะไร</span>sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">source</span> <code>GoogleSheetsService.exportReport</code></span><span class="eg-where__item"><span class="eg-k">file</span> <code>src/domain/report/google-sheets.service.ts</code></span><span class="eg-where__item"><span class="eg-k">job</span> <code>report:generate</code> <span class="tag">BullMQ</span></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="41 ครั้งใน 24 ชั่วโมง สูงสุด 5 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 13:20–14:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="7.0" width="4" height="20.0"/><rect class="c-bar" x="7" y="7.0" width="4" height="20.0"/><rect class="c-bar" x="13" y="17.0" width="4" height="10.0"/><rect class="c-bar" x="19" y="22.0" width="4" height="5.0"/><rect class="c-bar" x="25" y="22.0" width="4" height="5.0"/><rect class="c-bar" x="31" y="12.0" width="4" height="15.0"/><rect class="c-bar" x="37" y="22.0" width="4" height="5.0"/><rect class="c-bar" x="97" y="22.0" width="4" height="5.0"/><rect class="c-bar" x="103" y="17.0" width="4" height="10.0"/><rect class="c-bar" x="109" y="7.0" width="4" height="20.0"/><rect class="c-bar" x="115" y="17.0" width="4" height="10.0"/><rect class="c-bar" x="121" y="12.0" width="4" height="15.0"/><rect class="c-bar" x="127" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="133" y="12.0" width="4" height="15.0"/><rect class="c-bar" x="139" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|4::ครั้ง|0::ล้มเหลวจริง (ERR)|4::retry (WRN)"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|4::ครั้ง|0::ล้มเหลวจริง (ERR)|4::retry (WRN)"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|2::ครั้ง|0::ล้มเหลวจริง (ERR)|2::retry (WRN)"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|1::ครั้ง|0::ล้มเหลวจริง (ERR)|1::retry (WRN)"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|1::ครั้ง|0::ล้มเหลวจริง (ERR)|1::retry (WRN)"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|3::ครั้ง|0::ล้มเหลวจริง (ERR)|3::retry (WRN)"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|1::ครั้ง|0::ล้มเหลวจริง (ERR)|1::retry (WRN)"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง|0::ล้มเหลวจริง (ERR)|0::retry (WRN)"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|1::ครั้ง|0::ล้มเหลวจริง (ERR)|1::retry (WRN)"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|2::ครั้ง|0::ล้มเหลวจริง (ERR)|2::retry (WRN)"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|4::ครั้ง|1::ล้มเหลวจริง (ERR)|3::retry (WRN)"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|2::ครั้ง|0::ล้มเหลวจริง (ERR)|2::retry (WRN)"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|3::ครั้ง|0::ล้มเหลวจริง (ERR)|3::retry (WRN)"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|5::ครั้ง|1::ล้มเหลวจริง (ERR)|4::retry (WRN)"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|3::ครั้ง|0::ล้มเหลวจริง (ERR)|3::retry (WRN)"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|5::ครั้ง|1::ล้มเหลวจริง (ERR)|4::retry (WRN)"/></svg><span class="spark-inline__max">สูงสุด 5/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">41</span><span class="unit">ครั้ง</span><span class="eg-sub"><span>38 retry</span><span>3 ล้มเหลวจริง</span></span></p>
+              <p class="eg-users"><span class="eg-n">14</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">14 ต.ค. 10:05</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">14:12</span></span></p>
+            </article>
+            <article class="err-row eg-row" id="g7-dependency" aria-labelledby="g7-dependency-t" data-count="12" data-first="2026-10-15T10:44:00+07:00" data-last="2026-10-17T12:47:00+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g7-dependency-t"><a href="errors.html#g7">Query cancelled</a></h3>
+                  <span class="tag">ORA-01013</span>
+                  <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+                  
+                </div>
+                <p class="eg-fix" title="The query was cancelled before it finished, usually by a statement timeout. Find the slow query in the trace, then add an index or raise the timeout."><span class="eg-fix__k">ต้องแก้อะไร</span>The query was cancelled before it finished, usually by a statement timeout. Find the slow query in the trace, then add an index or raise the timeout.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="method">GET</span> <code>/classes/:id/students</code> <span class="http http--5xx">500</span></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="12 ครั้งใน 24 ชั่วโมง สูงสุด 3 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 09:20–10:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="10.3" width="4" height="16.7"/><rect class="c-bar" x="7" y="18.7" width="4" height="8.3"/><rect class="c-bar" x="109" y="10.3" width="4" height="16.7"/><rect class="c-bar" x="115" y="2.0" width="4" height="25.0"/><rect class="c-bar" x="121" y="10.3" width="4" height="16.7"/><rect class="c-bar" x="133" y="10.3" width="4" height="16.7"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|2::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|1::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|0::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|2::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|3::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|2::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|0::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|2::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|0::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 3/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">12</span><span class="unit">ครั้ง</span></p>
+              <p class="eg-users"><span class="eg-n">9</span><span class="unit">users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">15 ต.ค. 10:44</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">12:47</span></span></p>
+            </article>
+            <article class="err-row eg-row" id="g4-dependency" aria-labelledby="g4-dependency-t" data-count="3" data-first="2026-10-09T03:12:00+07:00" data-last="2026-10-17T13:43:20+07:00">
+              <div class="eg-main">
+                <div class="err-row__head">
+                  <span class="lvl lvl--err">ERR</span>
+                  <h3 class="err-row__title" id="g4-dependency-t"><a href="jobs.html#dep-cache">Redis &quot;cache&quot; refused connection</a></h3>
+                  <span class="tag">ECONNREFUSED</span>
+                  <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+                  
+                </div>
+                <p class="eg-fix" title="Nothing accepted connections at 10.0.3.21:6379. Check that the redis &quot;cache&quot; server is running and reachable from this service."><span class="eg-fix__k">ต้องแก้อะไร</span>Nothing accepted connections at 10.0.3.21:6379. Check that the redis &quot;cache&quot; server is running and reachable from this service.</p>
+                <p class="eg-where"><span class="eg-where__item"><span class="eg-k">dependency</span> <code>redis cache</code></span><span class="eg-where__item"><span class="eg-k">target</span> <code>10.0.3.21:6379</code></span></p>
+              </div>
+              <div class="eg-trend spark-inline"><svg class="eg-spark" width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="3 ครั้งใน 24 ชั่วโมง สูงสุด 3 ครั้งต่อชั่วโมง ช่วง 17 ต.ค. 13:20–14:20"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="139" y="2.0" width="4" height="25.0"/><line class="c-event" x1="106" x2="106" y1="0" y2="28"/><rect class="c-hit" x="0" y="0" width="6" height="28" data-tip="16 ต.ค. 14:20–15:20|0::ครั้ง"/><rect class="c-hit" x="6" y="0" width="6" height="28" data-tip="16 ต.ค. 15:20–16:20|0::ครั้ง"/><rect class="c-hit" x="12" y="0" width="6" height="28" data-tip="16 ต.ค. 16:20–17:20|0::ครั้ง"/><rect class="c-hit" x="18" y="0" width="6" height="28" data-tip="16 ต.ค. 17:20–18:20|0::ครั้ง"/><rect class="c-hit" x="24" y="0" width="6" height="28" data-tip="16 ต.ค. 18:20–19:20|0::ครั้ง"/><rect class="c-hit" x="30" y="0" width="6" height="28" data-tip="16 ต.ค. 19:20–20:20|0::ครั้ง"/><rect class="c-hit" x="36" y="0" width="6" height="28" data-tip="16 ต.ค. 20:20–21:20|0::ครั้ง"/><rect class="c-hit" x="42" y="0" width="6" height="28" data-tip="16 ต.ค. 21:20–22:20|0::ครั้ง"/><rect class="c-hit" x="48" y="0" width="6" height="28" data-tip="16 ต.ค. 22:20–23:20|0::ครั้ง"/><rect class="c-hit" x="54" y="0" width="6" height="28" data-tip="16 ต.ค. 23:20–00:20|0::ครั้ง"/><rect class="c-hit" x="60" y="0" width="6" height="28" data-tip="17 ต.ค. 00:20–01:20|0::ครั้ง"/><rect class="c-hit" x="66" y="0" width="6" height="28" data-tip="17 ต.ค. 01:20–02:20|0::ครั้ง"/><rect class="c-hit" x="72" y="0" width="6" height="28" data-tip="17 ต.ค. 02:20–03:20|0::ครั้ง"/><rect class="c-hit" x="78" y="0" width="6" height="28" data-tip="17 ต.ค. 03:20–04:20|0::ครั้ง"/><rect class="c-hit" x="84" y="0" width="6" height="28" data-tip="17 ต.ค. 04:20–05:20|0::ครั้ง"/><rect class="c-hit" x="90" y="0" width="6" height="28" data-tip="17 ต.ค. 05:20–06:20|0::ครั้ง"/><rect class="c-hit" x="96" y="0" width="6" height="28" data-tip="17 ต.ค. 06:20–07:20|0::ครั้ง"/><rect class="c-hit" x="102" y="0" width="6" height="28" data-tip="17 ต.ค. 07:20–08:20|0::ครั้ง"/><rect class="c-hit" x="108" y="0" width="6" height="28" data-tip="17 ต.ค. 08:20–09:20|0::ครั้ง"/><rect class="c-hit" x="114" y="0" width="6" height="28" data-tip="17 ต.ค. 09:20–10:20|0::ครั้ง"/><rect class="c-hit" x="120" y="0" width="6" height="28" data-tip="17 ต.ค. 10:20–11:20|0::ครั้ง"/><rect class="c-hit" x="126" y="0" width="6" height="28" data-tip="17 ต.ค. 11:20–12:20|0::ครั้ง"/><rect class="c-hit" x="132" y="0" width="6" height="28" data-tip="17 ต.ค. 12:20–13:20|0::ครั้ง"/><rect class="c-hit" x="138" y="0" width="6" height="28" data-tip="17 ต.ค. 13:20–14:20|3::ครั้ง"/></svg><span class="spark-inline__max">สูงสุด 3/ชม.</span></div>
+              <p class="eg-count"><span class="eg-n">3</span><span class="unit">ครั้ง</span><span class="eg-sub">down 45.2 s</span></p>
+              <p class="eg-users"><span class="eg-n eg-n--none" title="log ของ group นี้ไม่มี user_id (connection error นอก request)" aria-hidden="true">–</span><span class="unit" aria-hidden="true">users</span><span class="sr-only">ไม่มีข้อมูล users</span></p>
+              <p class="eg-seen"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span><span class="eg-seen__k">ครั้งแรก</span> <span class="ts">9 ต.ค. 03:12</span></span><span><span class="eg-seen__k">ล่าสุด</span> <span class="ts">13:43</span></span></p>
+            </article>
+            </div>
+          </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="p-config" role="tabpanel" aria-labelledby="t-config" hidden>
+          <div class="panel">
+            <div class="empty">
+              <svg class="i empty__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h6.5M11.5 4.5H14M2 11.5h2M7 11.5h7"/><circle cx="10" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/></svg>
+              <p class="empty__title">ไม่มี error หมวดตั้งค่าผิดใน 24 ชั่วโมงล่าสุด</p>
+              <p class="empty__text">หมวดนี้คือ error ที่เกิดจาก env หรือ config ผิด เช่น ตัวแปร env หาย หรือ URL ของระบบที่เรียกใช้ผิด ใน prod ตั้งแต่ 16 ต.ค. 14:20 ยังไม่พบเลย</p>
+              <div class="empty__actions"><button class="btn btn--sm" type="button">ขยายเป็น 7 วัน</button><button class="btn btn--sm btn--quiet" type="button">ดูทุก env</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="stack mt-3">
+          <details class="chart__table">
+            <summary class="summary-line">ดูจำนวนรายชั่วโมงเป็นตาราง (ข้อมูลเดียวกับกราฟแท่ง)</summary>
+            <div class="table-wrap">
+              <table class="table table--dense eg-hours">
+                <caption>ช่วงละ 1 ชั่วโมง เริ่ม 16 ต.ค. 14:20 ถึง 17 ต.ค. 14:20 ICT · หัวคอลัมน์ = เวลาเริ่มของช่วง · deploy 31.4.0 อยู่ในช่วง 07:20</caption>
+                <thead><tr><th scope="col">Error group</th><th scope="col" class="num" title="16 ต.ค. 14:20–15:20">14:20</th><th scope="col" class="num" title="16 ต.ค. 15:20–16:20">15:20</th><th scope="col" class="num" title="16 ต.ค. 16:20–17:20">16:20</th><th scope="col" class="num" title="16 ต.ค. 17:20–18:20">17:20</th><th scope="col" class="num" title="16 ต.ค. 18:20–19:20">18:20</th><th scope="col" class="num" title="16 ต.ค. 19:20–20:20">19:20</th><th scope="col" class="num" title="16 ต.ค. 20:20–21:20">20:20</th><th scope="col" class="num" title="16 ต.ค. 21:20–22:20">21:20</th><th scope="col" class="num" title="16 ต.ค. 22:20–23:20">22:20</th><th scope="col" class="num" title="16 ต.ค. 23:20–00:20">23:20</th><th scope="col" class="num" title="17 ต.ค. 00:20–01:20">00:20</th><th scope="col" class="num" title="17 ต.ค. 01:20–02:20">01:20</th><th scope="col" class="num" title="17 ต.ค. 02:20–03:20">02:20</th><th scope="col" class="num" title="17 ต.ค. 03:20–04:20">03:20</th><th scope="col" class="num" title="17 ต.ค. 04:20–05:20">04:20</th><th scope="col" class="num" title="17 ต.ค. 05:20–06:20">05:20</th><th scope="col" class="num" title="17 ต.ค. 06:20–07:20">06:20</th><th scope="col" class="num" title="17 ต.ค. 07:20–08:20">07:20</th><th scope="col" class="num" title="17 ต.ค. 08:20–09:20">08:20</th><th scope="col" class="num" title="17 ต.ค. 09:20–10:20">09:20</th><th scope="col" class="num" title="17 ต.ค. 10:20–11:20">10:20</th><th scope="col" class="num" title="17 ต.ค. 11:20–12:20">11:20</th><th scope="col" class="num" title="17 ต.ค. 12:20–13:20">12:20</th><th scope="col" class="num" title="17 ต.ค. 13:20–14:20">13:20</th><th scope="col" class="num">รวม</th></tr></thead>
+                <tbody>
+                <tr><th scope="row" class="nowrap"><span class="lvl lvl--err">ERR</span> Value too long for column</th><td class="num">14</td><td class="num">16</td><td class="num">11</td><td class="num">5</td><td class="num">3</td><td class="num">6</td><td class="num">6</td><td class="num">4</td><td class="num">1</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num">2</td><td class="num">6</td><td class="num">13</td><td class="num">20</td><td class="num">24</td><td class="num">21</td><td class="num">15</td><td class="num">47</td><td class="num"><b>214</b></td></tr>
+                <tr><th scope="row" class="nowrap"><span class="lvl lvl--err">ERR</span> Read from undefined value</th><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num">1</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num">65</td><td class="num"><b>66</b></td></tr>
+                <tr><th scope="row" class="nowrap"><span class="lvl lvl--err">ERR</span> Google API rate limited</th><td class="num">4</td><td class="num">4</td><td class="num">2</td><td class="num">1</td><td class="num">1</td><td class="num">3</td><td class="num">1</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num">1</td><td class="num">2</td><td class="num">4</td><td class="num">2</td><td class="num">3</td><td class="num">5</td><td class="num">3</td><td class="num">5</td><td class="num"><b>41</b></td></tr>
+                <tr><th scope="row" class="nowrap"><span class="lvl lvl--err">ERR</span> Query cancelled</th><td class="num">2</td><td class="num">1</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num">2</td><td class="num">3</td><td class="num">2</td><td class="num t-muted">0</td><td class="num">2</td><td class="num t-muted">0</td><td class="num"><b>12</b></td></tr>
+                <tr><th scope="row" class="nowrap"><span class="lvl lvl--err">ERR</span> DB deadlock</th><td class="num">2</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num">2</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num"><b>4</b></td></tr>
+                <tr><th scope="row" class="nowrap"><span class="lvl lvl--err">ERR</span> Redis &quot;cache&quot; refused connection</th><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num t-muted">0</td><td class="num">3</td><td class="num"><b>3</b></td></tr>
+                <tr><th scope="row" class="nowrap"><span class="lvl lvl--wrn">WRN</span> Not found</th><td class="num">264</td><td class="num">290</td><td class="num">179</td><td class="num">122</td><td class="num">74</td><td class="num">93</td><td class="num">95</td><td class="num">50</td><td class="num">27</td><td class="num">11</td><td class="num">6</td><td class="num">3</td><td class="num">2</td><td class="num">2</td><td class="num">3</td><td class="num">8</td><td class="num">37</td><td class="num">128</td><td class="num">214</td><td class="num">222</td><td class="num">248</td><td class="num">255</td><td class="num">161</td><td class="num">277</td><td class="num"><b>2,771</b></td></tr>
+                <tr><th scope="row" class="nowrap"><span class="lvl lvl--wrn">WRN</span> Invalid request</th><td class="num">52</td><td class="num">43</td><td class="num">33</td><td class="num">28</td><td class="num">23</td><td class="num">30</td><td class="num">17</td><td class="num">10</td><td class="num">7</td><td class="num">3</td><td class="num">1</td><td class="num t-muted">0</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">2</td><td class="num">12</td><td class="num">36</td><td class="num">65</td><td class="num">77</td><td class="num">53</td><td class="num">42</td><td class="num">53</td><td class="num">65</td><td class="num"><b>655</b></td></tr>
+                <tr><th scope="row" class="nowrap">ครั้งที่เกิด error (ERR) รวม</th><td class="num">18</td><td class="num">17</td><td class="num">11</td><td class="num">5</td><td class="num">3</td><td class="num">6</td><td class="num">6</td><td class="num">4</td><td class="num">1</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">2</td><td class="num">7</td><td class="num">16</td><td class="num">23</td><td class="num">26</td><td class="num">24</td><td class="num">17</td><td class="num">116</td><td class="num"><b>302</b></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+          <details class="disclosure">
+            <summary>สรุปสำหรับ AI<span class="disclosure__meta">Markdown ที่ปุ่ม "คัดลอกให้ AI" คัดลอก</span></summary>
+            <div class="disclosure__body">
+              <div class="code-block">
+                <div class="code-block__head"><span class="code-block__title">Markdown · 8 group · ชื่อ field ตรงกับพจนานุกรมข้อมูล</span><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy-target="#eg-ai-md"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอก</span></button></div>
+<pre class="code code--wrap code--tall" id="eg-ai-md"><span class="c-key">## Error groups · env prod · 2026-10-16 14:20 – 2026-10-17 14:20 ICT</span>
+- counts: 302 error occurrences (+3,464 warn) · 8 groups (error 6, warn 2) · new since school-core-api 31.4.0 (deploy 2026-10-17 08:00, previous 31.3.2): 1
+
+<span class="c-key">### Value too long for column</span> (ORA-12899, category: data)
+- level: error
+- service: school-core-api/api
+- env: prod
+- this_case: QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.
+- where: POST /question-bank/import · usecase ImportQuestionBankCommand
+- origin: ImportQuestionBankHandler.execute · src/domain/question-bank/import-question-bank.handler.ts
+- target: QuestionBankEntity.title
+- failed_step: oracle INSERT QUESTION_BANK
+- counts: 214 times · 37 users · first 2026-10-16 09:12 · last 2026-10-17 14:18
+
+<span class="c-key">### Read from undefined value</span> (NULL_READ, category: bug) · NEW since 31.4.0
+- level: error
+- service: school-core-api/api
+- env: prod
+- this_case: &quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.
+- where: GET /classes/:id/report · usecase GetClassReportQuery
+- origin: GetClassReportHandler.execute · src/domain/class-report/get-class-report.handler.ts
+- target: school
+- counts: 66 times · 21 users · first 2026-10-17 08:03 · last 2026-10-17 14:16
+
+<span class="c-key">### Google API rate limited</span> (rateLimitExceeded, category: dependency)
+- level: error (38 job.retry warn + 3 job.failed error)
+- service: school-core-api/worker
+- env: prod
+- this_case: sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes.
+- where: job report:generate (BullMQ queue report)
+- origin: GoogleSheetsService.exportReport · src/domain/report/google-sheets.service.ts
+- target: sheets.googleapis.com
+- counts: 41 times · 14 users · first 2026-10-14 10:05 · last 2026-10-17 14:12
+
+<span class="c-key">### Query cancelled</span> (ORA-01013, category: dependency)
+- level: error
+- service: school-core-api/api
+- env: prod
+- this_case: The query was cancelled before it finished, usually by a statement timeout. Find the slow query in the trace, then add an index or raise the timeout.
+- where: GET /classes/:id/students
+- counts: 12 times · 9 users · first 2026-10-15 10:44 · last 2026-10-17 12:47
+
+<span class="c-key">### DB deadlock</span> (ORA-00060, category: data)
+- level: error
+- service: school-core-api/api
+- env: prod
+- this_case: Two transactions waited on each other's rows. Retry the command, or update rows in the same order in every transaction.
+- where: usecase SubmitExamCommand
+- counts: 4 times · 4 users · first 2026-10-13 09:30 · last 2026-10-17 11:41
+
+<span class="c-key">### Redis &quot;cache&quot; refused connection</span> (ECONNREFUSED, category: dependency)
+- level: error
+- service: school-core-api/api
+- env: prod
+- this_case: Nothing accepted connections at 10.0.3.21:6379. Check that the redis &quot;cache&quot; server is running and reachable from this service.
+- where: dependency redis &quot;cache&quot; (affects cache)
+- target: 10.0.3.21:6379
+- counts: 3 times · first 2026-10-09 03:12 · last 2026-10-17 13:43 · down 45.2 s, 13:42:35–13:43:20
+
+<span class="c-key">### Not found</span> (HTTP_404, category: input)
+- level: warn
+- service: school-core-api/api
+- env: prod
+- this_case: No ExamEntity found by (id). Check the id the client sent, or whether the row was deleted.
+- where: GET /exams/:id
+- origin: GetExamHandler.execute · src/domain/exam/get-exam.handler.ts
+- target: ExamEntity
+- counts: 2,771 times · 402 users · first 2026-10-03 15:02 · last 2026-10-17 14:19
+
+<span class="c-key">### Invalid request</span> (HTTP_400, category: input)
+- level: warn
+- service: school-core-api/api
+- env: prod
+- this_case: Rejected fields: answers.*.choice. The response message lists the rule each one broke.
+- where: POST /exams/:id/submit
+- target: answers.*.choice
+- counts: 655 times · 287 users · first 2026-10-04 09:40 · last 2026-10-17 14:19
+
+- fields: see docs/DATA-DICTIONARY.md</pre>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+      <!-- screen content ends here -->
+
+      <details class="design-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <ul>
+              <li>ตอบ developer on call และ tech lead หลัง deploy: error อะไรเกิดบ่อย ใครโดน ต้องแก้ที่ function และไฟล์ไหน และ group ไหนเพิ่งเกิดหลัง 31.4.0</li>
+              <li>ทุกแถวใช้กติกา readable error: หัวข้อ = <code>error_hint</code> + <code>error_code</code>, ต้องแก้อะไร = <code>error_fix</code> ของครั้งล่าสุด (ไม่มีใช้ <code>error_hint_detail</code>) แสดง 2 บรรทัดเต็ม ๆ, ที่ไหน = <code>source</code> · <code>file</code> · route หรือ job · <code>target</code>, หมวดเป็นภาษาคน, service/role ทุกแถว</li>
+              <li>ERR อยู่บน WRN เสมอ (เรียงภายในกลุ่ม) และแถว WRN (4xx) เบากว่า: ตัวหนังสือ ink-2 น้ำหนัก 500 แท่งสีจางกว่า เพื่อให้ 2,771 ครั้งของ 404 ไม่กลบ ERR 214 ครั้ง · group 3 เป็น ERR พร้อมบรรทัดย่อย "38 retry · 3 ล้มเหลวจริง" แบบเดียวกันทุกหน้า</li>
+            </ul>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>แถว group: <code>GET /api/errors?env=prod&amp;from=now-24h</code> → <code>groups[]</code>: <code>hint</code>, <code>errorCode</code>, <code>errorType</code>, <code>category</code>, <code>fix</code> (ของครั้งล่าสุด) / <code>hintDetail</code>, <code>originFunction</code>, <code>originFile</code>, <code>routes[0]</code>, <code>usecases[0]</code>, <code>target</code>, <code>failedStep</code>, <code>jobQueue</code>, <code>jobType</code>, <code>dependencyName</code>, <code>service</code>, <code>role</code>, <code>level</code>, <code>count</code>, <code>users</code>, <code>firstSeen</code> (ทั้งข้อมูลที่เก็บไว้), <code>lastSeen</code></li>
+              <li>ตัวเลขใน tab: นับ <code>groups[]</code> ฝั่ง client จากการดึงครั้งเดียวแบบไม่ส่ง <code>category</code>; tooltip ของ tab บอกจำนวนครั้งด้วย</li>
+              <li>KPI: ERR 302 ครั้ง = ผลรวม <code>count</code> ของ group ระดับ error (group 3 นับเฉพาะ 3 ครั้งที่ล้มเหลวจริง) · ชั่วโมงล่าสุด 116 ครั้ง = 47 + 65 + 3 + 1 ซึ่งหน้า Log เห็นเป็น 228 บรรทัด ERR เพราะทุก request ที่ตอบ 5xx (112) มีบรรทัด <code>http.request</code> อีกบรรทัดที่ไม่นับเป็น group · WRN 3,464 · group ใหม่ = <code>isNew</code> (<code>firstSeenVersion</code> = 31.4.0)</li>
+              <li>แท่ง 24 ชั่วโมง: ยังไม่มีใน API ต้องเพิ่ม <code>spark: number[]</code> (24 ช่อง × 1 ชั่วโมง เริ่มที่ <code>from</code>) ใน <code>ErrorGroup</code> แทนการยิง <code>/api/errors/:fingerprint</code> ทีละ group · ช่องรายชั่วโมงเริ่มที่ 14:20 ตรงกับกราฟใน error-detail ทั้งสองหน้า (ข้อมูลชุดเดียวกัน)</li>
+              <li>ค่ารายชั่วโมงเป็นตัวอย่างแต่ผลรวมตรง BRIEF และชั่วโมงล่าสุดตรงกับ route ในหน้า Overview (47 = 11.4 % × 412, 65 ≈ 1.9 % × 3,480, 277 = 3.1 % × 8,940, 65 ≈ 1.1 % × 6,120; group 7, 8 เป็น 0 เพราะ route ของมันไม่มี 5xx ในชั่วโมงนี้) · ค่าที่ BRIEF ไม่ให้และใส่เป็นตัวอย่าง (fix ของ group 3, 4, 7, 8; users ของ group 3, 6, 7, 8; ครั้งแรก/ล่าสุดของ group 3–8) หน้าอื่นใช้ค่าเดียวกัน</li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li>หัวข้อ group: group 1 → <code>error-detail.html</code>, group 2 → <code>error-detail-null-read.html</code> (mockup มีหน้า detail สองหน้า; ของจริงเป็น <code>/errors/:fingerprint</code>) · group อื่นเป็น anchor <code>#g3</code>–<code>#g8</code> ของแถวในหน้านี้ ซึ่งหน้าอื่นลิงก์มาและแถวจะถูกไฮไลต์</li>
+              <li>Tab หมวด: คลิกหรือลูกศรซ้ายขวา; หมวดตั้งค่าผิดแสดง empty state ที่บอกเหตุผลและทางเลือก</li>
+              <li>ตัวกรอง error / warn ซ่อนกลุ่ม ERR / WRN; เรียงตาม จำนวน / ล่าสุด / ใหม่ เรียงใหม่ภายในแต่ละกลุ่ม (สคริปต์เล็กท้ายหน้า); service เป็นตัวอย่าง (ทั้ง 8 group อยู่ใน school-core-api)</li>
+              <li>ชี้แท่งเพื่อดูจำนวนต่อชั่วโมง (group 3 แยก retry กับล้มเหลวจริง); ค่าเดียวกันอยู่ในตาราง "ดูจำนวนรายชั่วโมง" สำหรับคีย์บอร์ดและ screen reader · ประโยค "ต้องแก้อะไร" ที่ยาวกว่า 2 บรรทัดมีข้อความเต็มใน <code>title</code> และในหน้า detail</li>
+              <li>KPI group ใหม่ → เลื่อนไปแถว Read from undefined value; "คัดลอกให้ AI" คัดลอกสรุป Markdown ของทั้ง 8 group ด้วย key ชุดเดียวกับทุกหน้า (DESIGN.md §6b)</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li><code>/api/errors</code> รับ <code>category</code> และ <code>limit</code>: ขอเพิ่ม <code>level</code> (กรองบรรทัดก่อนรวม group), <code>sort</code> (count | lastSeen | firstSeen) และ <code>spark</code> หรือทำฝั่ง client</li>
+              <li>video-transcoder-api มี error rate 0.1 % ใน Overview แต่ dataset ไม่มี group ของมัน ควรเพิ่มหรือไม่</li>
+              <li>ควรซ่อน WRN (4xx) โดยค่าเริ่มต้นไหม หรือคงไว้แบบเบาอย่างนี้</li>
+              <li>หน้านี้ตัวเลขใน tab และ chip นับเป็น group (tooltip บอกจำนวนครั้ง) ส่วน chip ใน components.html นับเป็นครั้ง: ยอมรับการแยกแบบนี้ไหม</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+    </main>
+  </div>
+</div>
+<script>
+  /* errors.html only: sort rows inside each level band, hide a band when its level chip is off. */
+  (function () {
+    function ready(fn) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
+    ready(function () {
+      var key = {
+        count: function (r) { return +r.getAttribute('data-count'); },
+        last: function (r) { return Date.parse(r.getAttribute('data-last')); },
+        first: function (r) { return Date.parse(r.getAttribute('data-first')); }
+      };
+      function sortRows(k) {
+        Array.prototype.forEach.call(document.querySelectorAll('.eg-rows'), function (box) {
+          var rows = Array.prototype.slice.call(box.children);
+          rows.sort(function (a, b) { return key[k](b) - key[k](a); });
+          rows.forEach(function (r) { box.appendChild(r); });
+        });
+      }
+      function applyLevels() {
+        Array.prototype.forEach.call(document.querySelectorAll('[data-eg-level]'), function (chip) {
+          var on = chip.getAttribute('aria-pressed') === 'true';
+          Array.prototype.forEach.call(document.querySelectorAll('.eg-group[data-level="' + chip.getAttribute('data-eg-level') + '"]'), function (g) { g.hidden = !on; });
+        });
+      }
+      document.addEventListener('click', function (e) {
+        var s = e.target.closest('[data-eg-sort]');
+        if (s) sortRows(s.getAttribute('data-eg-sort'));
+        if (e.target.closest('[data-eg-level]')) setTimeout(applyLevels, 0);
+      });
+    });
+  })();
+</script>
+</body>
+</html>

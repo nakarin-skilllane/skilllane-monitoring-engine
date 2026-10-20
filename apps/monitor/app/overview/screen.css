@@ -1,0 +1,99 @@
+/* /overview only (from design/monitoring-ui/overview.html <style>). Tokens and shared components live in design-system.css;
+   page classes are prefixed ov- (DESIGN.md §5b: promote a class used by two screens instead of copying it). */
+.ov-deploy { display: inline-flex; align-items: center; gap: var(--sp-1h); flex-wrap: wrap; }
+.ov-attn .callout__title .badge-new, .ov-attn .callout__title .cat { margin-left: var(--sp-1); vertical-align: 1px; }
+.ov-attn .callout__title .cat { height: 20px; }
+.ov-attn .callout__text .svc, .ov-attn .callout__text .state { vertical-align: -1px; }
+.ov-note { font-size: var(--fs-12); color: var(--ink-2); min-width: 220px; }
+
+/* top band: "ต้องดูตอนนี้" and the 3D system map side by side from 1280 px; narrower, the map follows the health table */
+.ov-top { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "attn" "health" "map"; gap: var(--sp-8) var(--sp-6); }
+.ov-top > .section { margin-top: 0; }
+.ov-attn { grid-area: attn; }
+.ov-health-sec { grid-area: health; min-width: 0; }
+.ov-map { grid-area: map; min-width: 0; }
+.ov-map__panel { position: relative; overflow: hidden; }
+/* <SystemMap3D height="var(--ov-map-h)" narrowHeight="var(--ov-map-h-narrow)">: the box sets the height */
+/* phones: taller than wide, so the module lays the tiers out top → bottom (DESIGN.md §7c); under 600 px the legend
+   summary and the toolbar take a row under the canvas (lib/3d system-map.css), so the box is that row taller */
+.ov-map__box { --ov-map-h: 340px; --ov-map-h-narrow: 466px; }
+.ov-map__box--state { display: grid; place-items: center; min-height: 300px; overflow: auto; }
+.ov-map__cap { margin-top: var(--sp-2); }
+.ov-map__phone { display: none; }
+@media (max-width: 600px) { .ov-map__phone { display: inline; } }
+.ov-map .section__actions { margin-block: -6px; }   /* the button must not make this head taller than "ต้องดูตอนนี้" */
+.ov-top.is-map-wide .ov-map__box { --ov-map-h: 540px; --ov-map-h-narrow: 606px; }
+@media (min-width: 1280px) {
+  .ov-top { grid-template-columns: minmax(0, 1fr) minmax(440px, 0.84fr); grid-template-areas: "attn map" "health health"; }
+  .ov-map { display: flex; flex-direction: column; }
+  .ov-map__panel { flex: 1 1 auto; min-height: 300px; }
+  .ov-map__box { position: absolute; inset: 0; --ov-map-h: 100%; }   /* as tall as the three callouts */
+  .ov-map__box--state { position: absolute; }
+  /* next to the map the callouts are narrower: the button sits on the title line so the text keeps the full width */
+  .ov-attn .callout__text { grid-column: 2 / -1; }
+  .ov-attn .callout__actions { grid-row: 1; align-self: start; }
+  /* ขยาย: the map takes the full width under the callouts */
+  .ov-top.is-map-wide { grid-template-columns: minmax(0, 1fr); grid-template-areas: "attn" "map" "health"; }
+  .ov-top.is-map-wide .ov-map__panel { flex: none; height: 540px; }
+  .ov-top.is-map-wide .ov-map__box { --ov-map-h: 100%; }
+}
+
+/* "การเรียกระหว่างระบบ": the map's numbers as a table (opens with ขยาย or its own summary) */
+.ov-calls { margin-top: var(--sp-2); }
+.ov-calls .table-wrap { margin-top: var(--sp-2); max-height: 420px; overflow: auto; }
+.ov-top.is-map-wide .ov-calls .table-wrap { max-height: none; }
+.ov-calls__table td { vertical-align: top; }
+.ov-calls__table .ov-c-from, .ov-calls__table .ov-c-to { overflow-wrap: anywhere; }
+.ov-calls__h { margin: var(--sp-3) 0 0; font-size: var(--fs-13); font-weight: 600; color: var(--ink); }
+.ov-nodes__table td { vertical-align: top; }
+.ov-nodes__table .ov-n-name { overflow-wrap: anywhere; }
+
+/* phones: "จุดที่มีปัญหา" above the map (the nodes that are not ok, worst first); hidden where every label is readable */
+.ov-map .ov-issues { display: none; margin-bottom: var(--sp-2); }
+.ov-issues__t { margin: 0; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line-soft); font-size: var(--fs-12); font-weight: 600; color: var(--ink-2); }
+.ov-issues__list { list-style: none; margin: 0; padding: 0; }
+.ov-issue { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-2); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line-soft); line-height: 1.4; }
+.ov-issue:last-child { border-bottom: 0; }
+.ov-issue__name { font-weight: 600; overflow-wrap: anywhere; }
+.ov-issue__num { width: 100%; font-family: var(--font-mono); font-size: var(--fs-12); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ov-issues > .ov-issues__list > li.is-linked { background: var(--hover-bg); }
+
+/* a row whose node is hovered in the map (and the other way round) */
+.ov-health > tbody > tr.is-linked > td, .ov-calls__table > tbody > tr.is-linked > td, .dep-list > li.is-linked { background: var(--hover-bg); }
+
+.ov-body { margin-top: var(--sp-8); align-items: start; }
+.ov-body > .section, .ov-main > .section:first-child { margin-top: 0; }
+.ov-charts .chart + .chart { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line-soft); }
+.ov-charts .chart__head { margin-bottom: var(--sp-1); }
+.ov-charts .panel__foot.chart__foot { padding-top: var(--sp-2); }
+.ov-charts .c-hit { cursor: pointer; }
+.ov-routes th, .ov-routes td { padding-left: 8px; padding-right: 8px; }
+@media (min-width: 1100px) { .ov-body { grid-template-columns: minmax(0, 2.2fr) minmax(300px, 1fr); } }
+.ov-routes .ov-r-route { padding-right: var(--sp-1); }
+.ov-routes .row-detail .row { gap: var(--sp-2) var(--sp-3); }
+.ov-rd { font-size: var(--fs-13); }
+.ov-side__stack { gap: var(--sp-4); }
+.panel .ov-jobs td { vertical-align: top; }
+
+@media (max-width: 600px) {
+  .ov-map .ov-issues { display: block; }
+  /* one page scroll on phones, no table scrolling inside the page */
+  .ov-calls .table-wrap { max-height: none; }
+}
+@media (max-width: 599px) {
+  .ov-deploy { width: 100%; }
+  /* health: state + service, then error rate · p95 · volume, then the note */
+  .ov-health > tbody > tr { grid-template-columns: auto auto minmax(0, 1fr); grid-template-areas: "state svc svc" "err p95 vol" "note note note"; }
+  .ov-h-state { grid-area: state; } .ov-h-svc { grid-area: svc; } .ov-h-err { grid-area: err; } .ov-h-p95 { grid-area: p95; } .ov-h-vol { grid-area: vol; text-align: right !important; } .ov-h-note { grid-area: note; min-width: 0; }
+  /* routes: toggle + route, then request · error · Δ 5xx, then p95 · Δ p95 */
+  .ov-routes > tbody > tr:not(.row-detail) { grid-template-columns: 24px auto auto minmax(0, 1fr); grid-template-areas: "tog route route route" ". req err d5" ". p95 p95 d95"; column-gap: var(--sp-3); }
+  .ov-r-tog { grid-area: tog; } .ov-r-route { grid-area: route; white-space: normal !important; } .ov-r-req { grid-area: req; } .ov-r-err { grid-area: err; } .ov-r-d5 { grid-area: d5; text-align: right !important; } .ov-r-p95 { grid-area: p95; } .ov-r-d95 { grid-area: d95; text-align: right !important; }
+  /* calls: from → to on one line each, then calls/min · error */
+  .ov-calls__table > tbody > tr { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "from from" "to to" "rate err"; }
+  .ov-c-from { grid-area: from; } .ov-c-to { grid-area: to; } .ov-c-rate { grid-area: rate; text-align: left !important; } .ov-c-err { grid-area: err; text-align: right !important; }
+  .ov-c-to::before { content: "→ "; color: var(--muted); }
+  /* nodes: name + state, then calls/min · error · p95 */
+  .ov-nodes__table > tbody > tr { grid-template-columns: auto auto minmax(0, 1fr); grid-template-areas: "name name state" "rate err p95"; column-gap: var(--sp-3); }
+  .ov-n-name { grid-area: name; } .ov-n-state { grid-area: state; justify-self: end; } .ov-n-rate { grid-area: rate; } .ov-n-err { grid-area: err; } .ov-n-p95 { grid-area: p95; text-align: right !important; }
+}
+.ov-map__skel { display: block; border-radius: 0; }

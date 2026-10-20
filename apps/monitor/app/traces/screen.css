@@ -1,0 +1,56 @@
+/* /traces only (from design/monitoring-ui/traces.html <style>). Tokens and shared components live in design-system.css;
+   page classes are prefixed tr- (DESIGN.md §5b: promote a class used by two screens instead of copying it). */
+
+/* Filter row */
+.tr-filters { margin-bottom: var(--sp-4); }
+.tr-search { max-width: 340px; flex-basis: 240px; }
+
+/* Scatter: status colour per dot, ring + letter for the traces other screens refer to */
+.tr-ok { --c: var(--bar-neutral); }
+.tr-slow { --c: var(--warn-solid); }
+.tr-bad { --c: var(--danger-solid); }
+.tr-ring { fill: none; stroke: var(--ink); stroke-width: 1.25; }
+.tr-label-v { font-weight: 400; fill: var(--ink-2); }
+.tr-thresh { stroke: var(--warn-solid); stroke-width: 1; opacity: 0.6; shape-rendering: crispEdges; }
+/* Motion: points pop in left to right (styles.css section 5); rings and A/B/C labels come last */
+:root[data-motion="on"] .chart:not(.is-in) .tr-ring { opacity: 0; }
+:root[data-motion="on"] .chart.is-in .tr-ring { transform-box: fill-box; transform-origin: center; animation: mo-pop var(--dur-2) var(--ease-out) var(--dur-4) backwards; }
+:root[data-motion="on"] .chart.is-in .c-label { animation-delay: var(--dur-4); }
+.tr-hits a, .tr-hits g[tabindex] { cursor: pointer; outline: none; }
+.tr-hits a:focus-visible .c-hit, .tr-hits g[tabindex]:focus-visible .c-hit { fill: var(--hover-bg); stroke: var(--focus); stroke-width: 1.5; }
+.tr-legend-sep { display: block; width: 1px; height: 14px; background: var(--line); }
+.chart__sub code { font-size: 11.5px; }
+
+/* Marked traces A, B, C: the letter used on the chart and in the table */
+.tr-mark {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 18px; height: 18px; border-radius: 50%; border: 1.25px solid var(--ink);
+  font: 600 var(--fs-11)/1 var(--font-mono); color: var(--ink); vertical-align: 1px;
+}
+.tr-marks { display: grid; gap: var(--sp-1); margin: var(--sp-2) 0 0; padding: var(--sp-2) 0 0; list-style: none; border-top: 1px solid var(--line-soft); font-size: var(--fs-13); }
+.tr-marks li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; line-height: var(--lh-ui); }
+.tr-marks .tr-marks__what { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); }
+.tr-marks .tr-marks__note { color: var(--ink-2); font-size: var(--fs-12); }
+.tr-marks a { overflow-wrap: anywhere; }
+
+/* Trace table */
+.tr-name { color: var(--ink); text-decoration: none; font-family: var(--font-mono); font-size: 12.5px; }
+.tr-name:hover { color: var(--accent); text-decoration: underline; text-decoration-color: currentColor; }
+@media (min-width: 900px) { .table tr.tr-detail-row > td { padding-left: 52px; } }
+.row-detail__body .err-row { padding: 0; border: 0; }
+.row-detail__body .err-row:hover { background: transparent; }
+.tr-detail__actions { margin-top: var(--sp-1); }
+.tr-detail-skel { display: grid; gap: var(--sp-2); max-width: 720px; padding: var(--sp-1) 0; }
+.tr-table .col-tight { padding-right: 0; }
+.tr-table .dur-cell { grid-template-columns: auto 60px; }
+.tr-foot { margin-top: var(--sp-2); }
+.tr-lead { margin-bottom: var(--sp-3); }
+@media (max-width: 599px) {
+  /* each trace: time · status · duration, then route or job, then service · spans · errors · trace id */
+  .tr-table > tbody > tr { grid-template-columns: 24px auto auto minmax(0, 1fr); grid-template-areas: "tog time st dur" ". what what what" ". svc svc svc" ". spans err id"; }
+  .tr-c-tog { grid-area: tog; } .tr-c-time { grid-area: time; } .tr-c-st { grid-area: st; } .tr-c-what { grid-area: what; white-space: normal !important; }
+  .tr-c-svc { grid-area: svc; } .tr-c-spans { grid-area: spans; } .tr-c-err { grid-area: err; } .tr-c-id { grid-area: id; justify-self: end; }
+  .tr-table.table--reflow > tbody > tr > td.tr-c-dur { grid-area: dur; justify-self: end; }
+  .tr-table .tr-c-dur .dur-cell { grid-template-columns: auto 48px; }
+  .tr-table > tbody > tr.row-detail { padding-left: var(--sp-3); }
+}

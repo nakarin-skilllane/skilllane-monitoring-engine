@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/app.js"></script>
+<style>
+  /* logs.html only. Tokens and shared components live in assets/styles.css; page classes are prefixed lg-. */
+  /* Query bar: free text + submit, then applied filters, then quick filters */
+  .lg-query { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+  .lg-query > .search { flex: 1 1 360px; width: auto; }
+  .lg-query .search__input { padding-right: 44px; }
+  .lg-query .search > .kbd { position: absolute; right: 9px; pointer-events: none; }
+  .lg-query__hint { flex: 1 1 100%; }
+  .lg-filters { margin-top: var(--sp-2); padding: var(--sp-1) 0 var(--sp-2); border-bottom: 1px solid var(--line); }
+  .lg-filters .filterbar { padding: var(--sp-1) 0; gap: var(--sp-2) var(--sp-4); }
+  .lg-fchip-lvl { font-family: var(--font-mono); }
+  .lg-filters .search.lg-user { flex: none; width: 196px; }
+  .lg-filters .select__control { max-width: 260px; }
+  /* Histogram: two stacked small multiples that share the time axis */
+  .lg-hist { margin-top: var(--sp-4); }
+  .lg-hist .chart__sub .num { color: var(--ink-2); }
+  /* Log table */
+  .lg-results { margin-top: var(--sp-4); }
+  .lg-results .panel__head { align-items: center; }
+  .lg-table td { vertical-align: top; line-height: 22px; }
+  .lg-table td.lg-time .ts, .lg-table td .svc { line-height: 22px; }
+  .lg-table td .lvl { vertical-align: 0; margin-top: 2px; }
+  .lg-table td.lg-tog { padding-right: 0; }
+  .lg-table .lg-msgcell { width: 100%; min-width: 380px; }
+  .lg-msg { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; }
+  .lg-src { font: 400 var(--fs-12)/22px var(--font-mono); color: var(--muted); white-space: nowrap; }
+  .lg-title { padding: 0; border: 0; background: none; text-align: left; font: 400 var(--fs-13)/22px var(--font-ui); color: var(--ink-2); cursor: pointer; border-radius: var(--r-1); }
+  .lg-title:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  .lg-row--wrn .lg-title, .lg-row--err .lg-title { color: var(--ink); font-weight: 500; }
+  .lg-row--hint .lg-title { font-weight: 600; }
+  .lg-msg > .kv-list { display: inline-flex; }
+  .lg-table td.num { white-space: nowrap; }
+  .lg-acts { margin-left: auto; }
+  /* Drawer content */
+  .lg-drawer .drawer__body { gap: var(--sp-5); }
+  .lg-frames-title { margin: var(--sp-3) 0 var(--sp-1h); }
+  .lg-drawer .disclosure + .disclosure { margin-top: var(--sp-2); }
+  .lg-drawer .disclosure__body .code { margin-top: var(--sp-1); }
+  .lg-drawer .drawer__foot .btn-copy.btn--cta { margin-left: auto; }
+  .lg-json-note { margin-bottom: var(--sp-1h); }
+  @media (max-width: 599px) {
+    .lg-filters .search.lg-user { width: 100%; }
+    .lg-filters .select, .lg-filters .select__control { max-width: 100%; }
+    .lg-acts { margin-left: 0; }
+    .lg-drawer .drawer__foot .btn-copy.btn--cta { margin-left: 0; }
+    /* each log line: time · level · duration, then the readable message (title, category, chips), then service/role */
+    .lg-table > tbody > tr { grid-template-columns: 24px auto auto minmax(0, 1fr); grid-template-areas: "tog time lvl dur" "msg msg msg msg" "svc svc svc svc"; }
+    .lg-table.table--reflow > tbody > tr > td.lg-msgcell { grid-area: msg; width: auto; min-width: 0; }
+    .lg-tog { grid-area: tog; } .lg-time { grid-area: time; } .lg-lvl { grid-area: lvl; } .lg-svc { grid-area: svc; }
+    .lg-table.table--reflow > tbody > tr > td.lg-dur { grid-area: dur; text-align: right; }
+    .lg-table td, .lg-table td.lg-time .ts, .lg-table td .svc { line-height: 20px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html" aria-current="page"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h" selected>1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h">24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">17 ต.ค. 13:20–14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><span>Log</span></nav>
+          <h1 class="page-title">Log</h1>
+          <p class="page-sub">ทุกบรรทัด log ตามเวลา: ค้น กรอง แล้วเปิดดูว่าพังที่ไหนและต้องแก้อะไร · <span class="env env--prod">prod</span> · 1 ชั่วโมงล่าสุด (13:20–14:20 ICT)</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn--quiet btn-copy" type="button" data-copy="skilllane-monitor/logs?env=prod&amp;from=now-1h&amp;service=school-core-api&amp;level=info,warn,error,fatal"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกลิงก์</span></button>
+          <a class="btn" href="errors.html">ดู error group</a>
+        </div>
+      </header>
+
+      <!-- screen content starts here -->
+
+      <!-- Query bar: one row above everything it scopes (histogram + table) -->
+      <form class="lg-query" role="search" action="logs.html" aria-label="ค้นหา log">
+        <div class="search">
+          <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+          <label class="sr-only" for="lg-q">ค้นใน message, error, route</label>
+          <input class="search__input" id="lg-q" type="search" name="q" placeholder="ค้นใน message, error, route… เช่น ORA-12899 หรือ question bank" autocomplete="off" spellcheck="false">
+          <kbd class="kbd" aria-hidden="true">Enter</kbd>
+        </div>
+        <button class="btn btn--primary" type="submit"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>ค้นหา</button>
+        <p class="hint lg-query__hint">ค้นคำใน <span class="mono">message</span> และ <span class="mono">error_message</span> · วาง trace id 32 ตัวหรือ <span class="mono">u_…</span> ในช่องค้นหาด้านบนเพื่อเปิดตรง ๆ</p>
+      </form>
+
+      <div class="lg-filters">
+        <div class="filterbar" aria-label="ตัวกรองที่ใช้อยู่">
+          <span class="filter-label">ตัวกรองที่ใช้อยู่</span>
+          <div class="chips">
+            <span class="fchip fchip--applied"><span class="fchip__k">service</span><span class="fchip__v">school-core-api</span><button class="fchip__x" type="button" aria-label="เอาตัวกรอง service ออก"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></span>
+            <span class="fchip fchip--applied"><span class="fchip__k">level ≥</span><span class="fchip__v">INF</span><button class="fchip__x" type="button" aria-label="เอาตัวกรอง level ออก"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></span>
+            <button class="btn btn--sm btn--quiet" type="button">ล้างทั้งหมด</button>
+          </div>
+        </div>
+        <div class="filterbar" aria-label="ตัวกรองด่วน">
+          <div class="filterbar__group" role="group" aria-label="Level">
+            <span class="filter-label">Level</span>
+            <div class="chips">
+              <button class="fchip lg-fchip-lvl" type="button" data-toggle aria-pressed="false">DBG <span class="fchip__n">0</span></button>
+              <button class="fchip lg-fchip-lvl" type="button" data-toggle aria-pressed="true">INF <span class="fchip__n">101,979</span></button>
+              <button class="fchip lg-fchip-lvl" type="button" data-toggle aria-pressed="true">WRN <span class="fchip__n">694</span></button>
+              <button class="fchip lg-fchip-lvl" type="button" data-toggle aria-pressed="true">ERR <span class="fchip__n">228</span></button>
+              <button class="fchip lg-fchip-lvl" type="button" data-toggle aria-pressed="true">FTL <span class="fchip__n">0</span></button>
+            </div>
+          </div>
+          <div class="filterbar__group" role="group" aria-label="Event">
+            <span class="filter-label">Event</span>
+            <div class="chips">
+              <button class="fchip mono" type="button" data-toggle aria-pressed="false">http.request</button>
+              <button class="fchip mono" type="button" data-toggle aria-pressed="false">job.*</button>
+              <button class="fchip mono" type="button" data-toggle aria-pressed="false">dependency.*</button>
+            </div>
+          </div>
+          <div class="filterbar__group">
+            <label class="search search--sm lg-user">
+              <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+              <span class="sr-only">User id</span>
+              <input class="search__input" type="search" name="userId" placeholder="user id เช่น u_1029" autocomplete="off" spellcheck="false">
+            </label>
+            <label class="select">
+              <span class="sr-only">Route</span>
+              <select class="select__control" name="route">
+                <option value="" selected>ทุก route</option>
+                <option>GET /question-bank/my</option>
+                <option>GET /me</option>
+                <option>GET /classes/:id/students</option>
+                <option>GET /exams/:id</option>
+                <option>POST /exams/:id/submit</option>
+                <option>GET /classes/:id/report</option>
+                <option>POST /question-bank/import</option>
+                <option>POST /reports/:id/generate</option>
+              </select>
+              <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </label>
+            <label class="select">
+              <span class="sr-only">หมวด error</span>
+              <select class="select__control" name="category">
+                <option value="" selected>ทุกหมวด error</option>
+                <option value="bug">ต้องแก้โค้ด (bug)</option>
+                <option value="input">ข้อมูลที่ส่งมาผิด (input)</option>
+                <option value="data">ข้อมูลในระบบขัดกัน (data)</option>
+                <option value="dependency">ระบบที่เรียกใช้มีปัญหา (dependency)</option>
+                <option value="config">ตั้งค่าผิด (config)</option>
+              </select>
+              <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Histogram by level per minute -->
+      <figure class="chart lg-hist" aria-labelledby="lg-hist-title">
+        <div class="chart__head">
+          <h2 class="chart__title" id="lg-hist-title">Log ต่อนาทีตาม level</h2>
+          <span class="chart__sub"><span class="svc svc-1">school-core-api</span> · prod · 13:20–14:20 ICT · step 1 นาที · รวม <span class="num">102,901</span> บรรทัด</span>
+          <ul class="legend">
+            <li class="legend__item"><span class="legend__key" style="--c:var(--debug-solid)"></span>DBG</li>
+            <li class="legend__item"><span class="legend__key" style="--c:var(--info-solid)"></span>INF</li>
+            <li class="legend__item"><span class="legend__key" style="--c:var(--warn-solid)"></span>WRN</li>
+            <li class="legend__item"><span class="legend__key" style="--c:var(--danger-solid)"></span>ERR</li>
+            <li class="legend__item"><span class="legend__key" style="--c:var(--ink)"></span>FTL</li>
+          </ul>
+        </div>
+        <div class="chart__plot" data-time-axis>
+<svg viewBox="0 0 1140 268" role="img" aria-labelledby="lg-hist-title lg-hist-desc" style="--chart-min:1030px">
+  <desc id="lg-hist-desc">จำนวนบรรทัด log ต่อนาทีของ school-core-api ใน prod 13:20–14:20 แยกตาม level. กราฟบน WRN ERR FTL สเกล 0 ถึง 30, กราฟล่าง DBG INF สเกล 0 ถึง 2,000. ERR รวม 228 บรรทัด อยู่ระหว่าง 0 ถึง 8 ต่อนาทีโดยไม่มีช่วงที่พุ่ง WRN ประมาณ 12 ต่อนาที. Redis cache down 13:42:35 ถึง 13:43:20.</desc>
+  <text class="c-axis-title" x="0" y="12">WRN · ERR · FTL ต่อนาที</text>
+  <text class="c-axis-title" x="0" y="168">DBG · INF ต่อนาที</text>
+  <line class="c-axis" x1="44" x2="1124" y1="140" y2="140"/>
+  <text class="c-tick c-tick--end" x="36" y="144">0</text>
+  <line class="c-grid" x1="44" x2="1124" y1="102.7" y2="102.7"/>
+  <text class="c-tick c-tick--end" x="36" y="106.7">10</text>
+  <line class="c-grid" x1="44" x2="1124" y1="65.3" y2="65.3"/>
+  <text class="c-tick c-tick--end" x="36" y="69.3">20</text>
+  <line class="c-grid" x1="44" x2="1124" y1="28" y2="28"/>
+  <text class="c-tick c-tick--end" x="36" y="32">30</text>
+  <line class="c-axis" x1="44" x2="1124" y1="242" y2="242"/>
+  <text class="c-tick c-tick--end" x="36" y="246">0</text>
+  <line class="c-grid" x1="44" x2="1124" y1="210" y2="210"/>
+  <text class="c-tick c-tick--end" x="36" y="214">1K</text>
+  <line class="c-grid" x1="44" x2="1124" y1="178" y2="178"/>
+  <text class="c-tick c-tick--end" x="36" y="182">2K</text>
+  <text class="c-tick c-tick--mid" x="44" y="262">13:20</text>
+  <text class="c-tick c-tick--mid" x="224" y="262">13:30</text>
+  <text class="c-tick c-tick--mid" x="404" y="262">13:40</text>
+  <text class="c-tick c-tick--mid" x="584" y="262">13:50</text>
+  <text class="c-tick c-tick--mid" x="764" y="262">14:00</text>
+  <text class="c-tick c-tick--mid" x="944" y="262">14:10</text>
+  <text class="c-tick c-tick--mid" x="1124" y="262">14:20</text>
+  <rect class="c-band" x="450.5" y="28" width="13.5" height="112"/>
+  <rect class="c-band" x="450.5" y="178" width="13.5" height="64"/>
+  <path class="c-bar c-lvl-wrn" d="M46 140V117.6H60V140Z"/>
+  <path class="c-bar c-lvl-err" d="M46 115.6V112.1Q46 110.1 48 110.1H58Q60 110.1 60 112.1V115.6Z"/>
+  <path class="c-bar c-lvl-inf" d="M46 242V190.7Q46 188.7 48 188.7H58Q60 188.7 60 190.7V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M64 140V95.2H78V140Z"/>
+  <path class="c-bar c-lvl-err" d="M64 93.2V74.8Q64 72.8 66 72.8H76Q78 72.8 78 74.8V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M64 242V189.2Q64 187.2 66 187.2H76Q78 187.2 78 189.2V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M82 140V102.7H96V140Z"/>
+  <path class="c-bar c-lvl-err" d="M82 100.7V89.7Q82 87.7 84 87.7H94Q96 87.7 96 89.7V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M82 242V189.7Q82 187.7 84 187.7H94Q96 187.7 96 189.7V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M100 140V102.7H114V140Z"/>
+  <path class="c-bar c-lvl-err" d="M100 100.7V97.2Q100 95.2 102 95.2H112Q114 95.2 114 97.2V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M100 242V189.9Q100 187.9 102 187.9H112Q114 187.9 114 189.9V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M118 140V102.7H132V140Z"/>
+  <path class="c-bar c-lvl-err" d="M118 100.7V89.7Q118 87.7 120 87.7H130Q132 87.7 132 89.7V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M118 242V188.8Q118 186.8 120 186.8H130Q132 186.8 132 188.8V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M136 140V87.7H150V140Z"/>
+  <path class="c-bar c-lvl-err" d="M136 85.7V67.3Q136 65.3 138 65.3H148Q150 65.3 150 67.3V85.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M136 242V189.1Q136 187.1 138 187.1H148Q150 187.1 150 189.1V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M154 140V84H168V140Z"/>
+  <path class="c-bar c-lvl-err" d="M154 82V71.1Q154 69.1 156 69.1H166Q168 69.1 168 71.1V82Z"/>
+  <path class="c-bar c-lvl-inf" d="M154 242V189.2Q154 187.2 156 187.2H166Q168 187.2 168 189.2V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M172 140V102.7H186V140Z"/>
+  <path class="c-bar c-lvl-err" d="M172 100.7V89.7Q172 87.7 174 87.7H184Q186 87.7 186 89.7V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M172 242V187.8Q172 185.8 174 185.8H184Q186 185.8 186 187.8V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M190 140V95.2H204V140Z"/>
+  <path class="c-bar c-lvl-err" d="M190 93.2V89.7Q190 87.7 192 87.7H202Q204 87.7 204 89.7V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M190 242V188Q190 186 192 186H202Q204 186 204 188V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M208 140V97.2Q208 95.2 210 95.2H220Q222 95.2 222 97.2V140Z"/>
+  <path class="c-bar c-lvl-inf" d="M208 242V189Q208 187 210 187H220Q222 187 222 189V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M226 140V87.7H240V140Z"/>
+  <path class="c-bar c-lvl-err" d="M226 85.7V74.8Q226 72.8 228 72.8H238Q240 72.8 240 74.8V85.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M226 242V188.1Q226 186.1 228 186.1H238Q240 186.1 240 188.1V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M244 140V102.7H258V140Z"/>
+  <path class="c-bar c-lvl-err" d="M244 100.7V89.7Q244 87.7 246 87.7H256Q258 87.7 258 89.7V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M244 242V188.7Q244 186.7 246 186.7H256Q258 186.7 258 188.7V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M262 140V95.2H276V140Z"/>
+  <path class="c-bar c-lvl-err" d="M262 93.2V67.3Q262 65.3 264 65.3H274Q276 65.3 276 67.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M262 242V188.7Q262 186.7 264 186.7H274Q276 186.7 276 188.7V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M280 140V102.7H294V140Z"/>
+  <path class="c-bar c-lvl-err" d="M280 100.7V89.7Q280 87.7 282 87.7H292Q294 87.7 294 89.7V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M280 242V189.3Q280 187.3 282 187.3H292Q294 187.3 294 189.3V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M298 140V112.1Q298 110.1 300 110.1H310Q312 110.1 312 112.1V140Z"/>
+  <path class="c-bar c-lvl-inf" d="M298 242V188.9Q298 186.9 300 186.9H310Q312 186.9 312 188.9V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M316 140V95.2H330V140Z"/>
+  <path class="c-bar c-lvl-err" d="M316 93.2V89.7Q316 87.7 318 87.7H328Q330 87.7 330 89.7V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M316 242V188.8Q316 186.8 318 186.8H328Q330 186.8 330 188.8V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M334 140V95.2H348V140Z"/>
+  <path class="c-bar c-lvl-err" d="M334 93.2V82.3Q334 80.3 336 80.3H346Q348 80.3 348 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M334 242V188.9Q334 186.9 336 186.9H346Q348 186.9 348 188.9V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M352 140V95.2H366V140Z"/>
+  <path class="c-bar c-lvl-err" d="M352 93.2V82.3Q352 80.3 354 80.3H364Q366 80.3 366 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M352 242V191Q352 189 354 189H364Q366 189 366 191V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M370 140V95.2H384V140Z"/>
+  <path class="c-bar c-lvl-err" d="M370 93.2V82.3Q370 80.3 372 80.3H382Q384 80.3 384 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M370 242V189.6Q370 187.6 372 187.6H382Q384 187.6 384 189.6V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M388 140V95.2H402V140Z"/>
+  <path class="c-bar c-lvl-err" d="M388 93.2V67.3Q388 65.3 390 65.3H400Q402 65.3 402 67.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M388 242V190Q388 188 390 188H400Q402 188 402 190V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M406 140V95.2H420V140Z"/>
+  <path class="c-bar c-lvl-err" d="M406 93.2V89.7Q406 87.7 408 87.7H418Q420 87.7 420 89.7V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M406 242V188.5Q406 186.5 408 186.5H418Q420 186.5 420 188.5V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M424 140V102.7H438V140Z"/>
+  <path class="c-bar c-lvl-err" d="M424 100.7V82.3Q424 80.3 426 80.3H436Q438 80.3 438 82.3V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M424 242V189.9Q424 187.9 426 187.9H436Q438 187.9 438 189.9V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M442 140V95.2H456V140Z"/>
+  <path class="c-bar c-lvl-err" d="M442 93.2V74.8Q442 72.8 444 72.8H454Q456 72.8 456 74.8V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M442 242V191.1Q442 189.1 444 189.1H454Q456 189.1 456 191.1V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M460 140V98.9H474V140Z"/>
+  <path class="c-bar c-lvl-err" d="M460 96.9V96.1Q460 95.2 460.9 95.2H473.1Q474 95.2 474 96.1V96.9Z"/>
+  <path class="c-bar c-lvl-inf" d="M460 242V190.6Q460 188.6 462 188.6H472Q474 188.6 474 190.6V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M478 140V95.2H492V140Z"/>
+  <path class="c-bar c-lvl-err" d="M478 93.2V82.3Q478 80.3 480 80.3H490Q492 80.3 492 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M478 242V190.3Q478 188.3 480 188.3H490Q492 188.3 492 190.3V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M496 140V95.2H510V140Z"/>
+  <path class="c-bar c-lvl-err" d="M496 93.2V82.3Q496 80.3 498 80.3H508Q510 80.3 510 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M496 242V190.5Q496 188.5 498 188.5H508Q510 188.5 510 190.5V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M514 140V87.7H528V140Z"/>
+  <path class="c-bar c-lvl-err" d="M514 85.7V74.8Q514 72.8 516 72.8H526Q528 72.8 528 74.8V85.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M514 242V191Q514 189 516 189H526Q528 189 528 191V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M532 140V95.2H546V140Z"/>
+  <path class="c-bar c-lvl-err" d="M532 93.2V74.8Q532 72.8 534 72.8H544Q546 72.8 546 74.8V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M532 242V191Q532 189 534 189H544Q546 189 546 191V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M550 140V110.1H564V140Z"/>
+  <path class="c-bar c-lvl-err" d="M550 108.1V97.2Q550 95.2 552 95.2H562Q564 95.2 564 97.2V108.1Z"/>
+  <path class="c-bar c-lvl-inf" d="M550 242V190Q550 188 552 188H562Q564 188 564 190V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M568 140V95.2H582V140Z"/>
+  <path class="c-bar c-lvl-err" d="M568 93.2V89.7Q568 87.7 570 87.7H580Q582 87.7 582 89.7V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M568 242V190.3Q568 188.3 570 188.3H580Q582 188.3 582 190.3V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M586 140V97.2Q586 95.2 588 95.2H598Q600 95.2 600 97.2V140Z"/>
+  <path class="c-bar c-lvl-inf" d="M586 242V191.1Q586 189.1 588 189.1H598Q600 189.1 600 191.1V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M604 140V91.5H618V140Z"/>
+  <path class="c-bar c-lvl-err" d="M604 89.5V71.1Q604 69.1 606 69.1H616Q618 69.1 618 71.1V89.5Z"/>
+  <path class="c-bar c-lvl-inf" d="M604 242V191.2Q604 189.2 606 189.2H616Q618 189.2 618 191.2V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M622 140V95.2H636V140Z"/>
+  <path class="c-bar c-lvl-err" d="M622 93.2V82.3Q622 80.3 624 80.3H634Q636 80.3 636 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M622 242V190Q622 188 624 188H634Q636 188 636 190V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M640 140V102.7H654V140Z"/>
+  <path class="c-bar c-lvl-err" d="M640 100.7V74.8Q640 72.8 642 72.8H652Q654 72.8 654 74.8V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M640 242V190.9Q640 188.9 642 188.9H652Q654 188.9 654 190.9V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M658 140V95.2H672V140Z"/>
+  <path class="c-bar c-lvl-err" d="M658 93.2V82.3Q658 80.3 660 80.3H670Q672 80.3 672 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M658 242V191.2Q658 189.2 660 189.2H670Q672 189.2 672 191.2V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M676 140V102.7H690V140Z"/>
+  <path class="c-bar c-lvl-err" d="M676 100.7V89.7Q676 87.7 678 87.7H688Q690 87.7 690 89.7V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M676 242V190.9Q676 188.9 678 188.9H688Q690 188.9 690 190.9V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M694 140V95.2H708V140Z"/>
+  <path class="c-bar c-lvl-err" d="M694 93.2V82.3Q694 80.3 696 80.3H706Q708 80.3 708 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M694 242V190.4Q694 188.4 696 188.4H706Q708 188.4 708 190.4V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M712 140V87.7H726V140Z"/>
+  <path class="c-bar c-lvl-err" d="M712 85.7V67.3Q712 65.3 714 65.3H724Q726 65.3 726 67.3V85.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M712 242V191.2Q712 189.2 714 189.2H724Q726 189.2 726 191.2V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M730 140V84H744V140Z"/>
+  <path class="c-bar c-lvl-err" d="M730 82V59.9Q730 57.9 732 57.9H742Q744 57.9 744 59.9V82Z"/>
+  <path class="c-bar c-lvl-inf" d="M730 242V189.7Q730 187.7 732 187.7H742Q744 187.7 744 189.7V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M748 140V95.2H762V140Z"/>
+  <path class="c-bar c-lvl-err" d="M748 93.2V89.7Q748 87.7 750 87.7H760Q762 87.7 762 89.7V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M748 242V190.2Q748 188.2 750 188.2H760Q762 188.2 762 190.2V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M766 140V102.7H780V140Z"/>
+  <path class="c-bar c-lvl-err" d="M766 100.7V97.2Q766 95.2 768 95.2H778Q780 95.2 780 97.2V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M766 242V189.3Q766 187.3 768 187.3H778Q780 187.3 780 189.3V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M784 140V95.2H798V140Z"/>
+  <path class="c-bar c-lvl-err" d="M784 93.2V74.8Q784 72.8 786 72.8H796Q798 72.8 798 74.8V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M784 242V188.9Q784 186.9 786 186.9H796Q798 186.9 798 188.9V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M802 140V95.2H816V140Z"/>
+  <path class="c-bar c-lvl-err" d="M802 93.2V82.3Q802 80.3 804 80.3H814Q816 80.3 816 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M802 242V190.4Q802 188.4 804 188.4H814Q816 188.4 816 190.4V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M820 140V89.7Q820 87.7 822 87.7H832Q834 87.7 834 89.7V140Z"/>
+  <path class="c-bar c-lvl-inf" d="M820 242V189.6Q820 187.6 822 187.6H832Q834 187.6 834 189.6V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M838 140V87.7H852V140Z"/>
+  <path class="c-bar c-lvl-err" d="M838 85.7V74.8Q838 72.8 840 72.8H850Q852 72.8 852 74.8V85.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M838 242V189.6Q838 187.6 840 187.6H850Q852 187.6 852 189.6V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M856 140V102.7H870V140Z"/>
+  <path class="c-bar c-lvl-err" d="M856 100.7V89.7Q856 87.7 858 87.7H868Q870 87.7 870 89.7V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M856 242V188.7Q856 186.7 858 186.7H868Q870 186.7 870 188.7V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M874 140V106.4H888V140Z"/>
+  <path class="c-bar c-lvl-err" d="M874 104.4V78.5Q874 76.5 876 76.5H886Q888 76.5 888 78.5V104.4Z"/>
+  <path class="c-bar c-lvl-inf" d="M874 242V189.6Q874 187.6 876 187.6H886Q888 187.6 888 189.6V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M892 140V102.7H906V140Z"/>
+  <path class="c-bar c-lvl-err" d="M892 100.7V82.3Q892 80.3 894 80.3H904Q906 80.3 906 82.3V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M892 242V189.6Q892 187.6 894 187.6H904Q906 187.6 906 189.6V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M910 140V97.2Q910 95.2 912 95.2H922Q924 95.2 924 97.2V140Z"/>
+  <path class="c-bar c-lvl-inf" d="M910 242V187.8Q910 185.8 912 185.8H922Q924 185.8 924 187.8V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M928 140V95.2H942V140Z"/>
+  <path class="c-bar c-lvl-err" d="M928 93.2V74.8Q928 72.8 930 72.8H940Q942 72.8 942 74.8V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M928 242V189.9Q928 187.9 930 187.9H940Q942 187.9 942 189.9V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M946 140V102.7H960V140Z"/>
+  <path class="c-bar c-lvl-err" d="M946 100.7V97.2Q946 95.2 948 95.2H958Q960 95.2 960 97.2V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M946 242V189.1Q946 187.1 948 187.1H958Q960 187.1 960 189.1V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M964 140V102.7H978V140Z"/>
+  <path class="c-bar c-lvl-err" d="M964 100.7V89.7Q964 87.7 966 87.7H976Q978 87.7 978 89.7V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M964 242V188.8Q964 186.8 966 186.8H976Q978 186.8 978 188.8V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M982 140V95.2H996V140Z"/>
+  <path class="c-bar c-lvl-err" d="M982 93.2V82.3Q982 80.3 984 80.3H994Q996 80.3 996 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M982 242V188.1Q982 186.1 984 186.1H994Q996 186.1 996 188.1V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M1000 140V104.7Q1000 102.7 1002 102.7H1012Q1014 102.7 1014 104.7V140Z"/>
+  <path class="c-bar c-lvl-inf" d="M1000 242V187.8Q1000 185.8 1002 185.8H1012Q1014 185.8 1014 187.8V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M1018 140V91.5H1032V140Z"/>
+  <path class="c-bar c-lvl-err" d="M1018 89.5V86Q1018 84 1020 84H1030Q1032 84 1032 86V89.5Z"/>
+  <path class="c-bar c-lvl-inf" d="M1018 242V188.5Q1018 186.5 1020 186.5H1030Q1032 186.5 1032 188.5V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M1036 140V95.2H1050V140Z"/>
+  <path class="c-bar c-lvl-err" d="M1036 93.2V82.3Q1036 80.3 1038 80.3H1048Q1050 80.3 1050 82.3V93.2Z"/>
+  <path class="c-bar c-lvl-inf" d="M1036 242V189.6Q1036 187.6 1038 187.6H1048Q1050 187.6 1050 189.6V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M1054 140V102.7H1068V140Z"/>
+  <path class="c-bar c-lvl-err" d="M1054 100.7V74.8Q1054 72.8 1056 72.8H1066Q1068 72.8 1068 74.8V100.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M1054 242V189Q1054 187 1056 187H1066Q1068 187 1068 189V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M1072 140V104.7Q1072 102.7 1074 102.7H1084Q1086 102.7 1086 104.7V140Z"/>
+  <path class="c-bar c-lvl-inf" d="M1072 242V189.4Q1072 187.4 1074 187.4H1084Q1086 187.4 1086 189.4V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M1090 140V87.7H1104V140Z"/>
+  <path class="c-bar c-lvl-err" d="M1090 85.7V74.8Q1090 72.8 1092 72.8H1102Q1104 72.8 1104 74.8V85.7Z"/>
+  <path class="c-bar c-lvl-inf" d="M1090 242V189.7Q1090 187.7 1092 187.7H1102Q1104 187.7 1104 189.7V242Z"/>
+  <path class="c-bar c-lvl-wrn" d="M1108 140V82.3Q1108 80.3 1110 80.3H1120Q1122 80.3 1122 82.3V140Z"/>
+  <path class="c-bar c-lvl-inf" d="M1108 242V189.8Q1108 187.8 1110 187.8H1120Q1122 187.8 1122 189.8V242Z"/>
+  <line class="c-event" x1="450.5" x2="450.5" y1="18" y2="242"/>
+  <text class="c-event-label" x="456.5" y="26">Redis "cache" down 45.2 s</text>
+  <g>
+    <rect class="c-hit" x="44" y="28" width="18" height="214" data-tip="17 ต.ค. 13:20|0::FTL|2::ERR|6::WRN|1,665::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="62" y="28" width="18" height="214" data-tip="17 ต.ค. 13:21|0::FTL|6::ERR|12::WRN|1,713::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="80" y="28" width="18" height="214" data-tip="17 ต.ค. 13:22|0::FTL|4::ERR|10::WRN|1,697::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="98" y="28" width="18" height="214" data-tip="17 ต.ค. 13:23|0::FTL|2::ERR|10::WRN|1,691::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="116" y="28" width="18" height="214" data-tip="17 ต.ค. 13:24|0::FTL|4::ERR|10::WRN|1,725::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="134" y="28" width="18" height="214" data-tip="17 ต.ค. 13:25|0::FTL|6::ERR|14::WRN|1,716::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="152" y="28" width="18" height="214" data-tip="17 ต.ค. 13:26|0::FTL|4::ERR|15::WRN|1,712::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="170" y="28" width="18" height="214" data-tip="17 ต.ค. 13:27|0::FTL|4::ERR|10::WRN|1,757::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="188" y="28" width="18" height="214" data-tip="17 ต.ค. 13:28|0::FTL|2::ERR|12::WRN|1,750::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="206" y="28" width="18" height="214" data-tip="17 ต.ค. 13:29|0::FTL|0::ERR|12::WRN|1,720::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="224" y="28" width="18" height="214" data-tip="17 ต.ค. 13:30|0::FTL|4::ERR|14::WRN|1,746::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="242" y="28" width="18" height="214" data-tip="17 ต.ค. 13:31|0::FTL|4::ERR|10::WRN|1,729::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="260" y="28" width="18" height="214" data-tip="17 ต.ค. 13:32|0::FTL|8::ERR|12::WRN|1,727::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="278" y="28" width="18" height="214" data-tip="17 ต.ค. 13:33|0::FTL|4::ERR|10::WRN|1,709::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="296" y="28" width="18" height="214" data-tip="17 ต.ค. 13:34|0::FTL|0::ERR|8::WRN|1,721::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="314" y="28" width="18" height="214" data-tip="17 ต.ค. 13:35|0::FTL|2::ERR|12::WRN|1,724::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="332" y="28" width="18" height="214" data-tip="17 ต.ค. 13:36|0::FTL|4::ERR|12::WRN|1,721::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="350" y="28" width="18" height="214" data-tip="17 ต.ค. 13:37|0::FTL|4::ERR|12::WRN|1,655::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="368" y="28" width="18" height="214" data-tip="17 ต.ค. 13:38|0::FTL|4::ERR|12::WRN|1,701::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="386" y="28" width="18" height="214" data-tip="17 ต.ค. 13:39|0::FTL|8::ERR|12::WRN|1,688::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="404" y="28" width="18" height="214" data-tip="17 ต.ค. 13:40|0::FTL|2::ERR|12::WRN|1,734::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="422" y="28" width="18" height="214" data-tip="17 ต.ค. 13:41|0::FTL|6::ERR|10::WRN|1,691::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="440" y="28" width="18" height="214" data-tip="17 ต.ค. 13:42|0::FTL|6::ERR|12::WRN|1,653::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="458" y="28" width="18" height="214" data-tip="17 ต.ค. 13:43|0::FTL|1::ERR|11::WRN|1,668::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="476" y="28" width="18" height="214" data-tip="17 ต.ค. 13:44|0::FTL|4::ERR|12::WRN|1,679::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="494" y="28" width="18" height="214" data-tip="17 ต.ค. 13:45|0::FTL|4::ERR|12::WRN|1,671::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="512" y="28" width="18" height="214" data-tip="17 ต.ค. 13:46|0::FTL|4::ERR|14::WRN|1,655::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="530" y="28" width="18" height="214" data-tip="17 ต.ค. 13:47|0::FTL|6::ERR|12::WRN|1,655::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="548" y="28" width="18" height="214" data-tip="17 ต.ค. 13:48|0::FTL|4::ERR|8::WRN|1,686::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="566" y="28" width="18" height="214" data-tip="17 ต.ค. 13:49|0::FTL|2::ERR|12::WRN|1,678::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="584" y="28" width="18" height="214" data-tip="17 ต.ค. 13:50|0::FTL|0::ERR|12::WRN|1,654::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="602" y="28" width="18" height="214" data-tip="17 ต.ค. 13:51|0::FTL|6::ERR|13::WRN|1,651::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="620" y="28" width="18" height="214" data-tip="17 ต.ค. 13:52|0::FTL|4::ERR|12::WRN|1,688::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="638" y="28" width="18" height="214" data-tip="17 ต.ค. 13:53|0::FTL|8::ERR|10::WRN|1,659::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="656" y="28" width="18" height="214" data-tip="17 ต.ค. 13:54|0::FTL|4::ERR|12::WRN|1,649::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="674" y="28" width="18" height="214" data-tip="17 ต.ค. 13:55|0::FTL|4::ERR|10::WRN|1,659::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="692" y="28" width="18" height="214" data-tip="17 ต.ค. 13:56|0::FTL|4::ERR|12::WRN|1,675::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="710" y="28" width="18" height="214" data-tip="17 ต.ค. 13:57|0::FTL|6::ERR|14::WRN|1,651::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="728" y="28" width="18" height="214" data-tip="17 ต.ค. 13:58|0::FTL|7::ERR|15::WRN|1,698::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="746" y="28" width="18" height="214" data-tip="17 ต.ค. 13:59|0::FTL|2::ERR|12::WRN|1,681::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="764" y="28" width="18" height="214" data-tip="17 ต.ค. 14:00|0::FTL|2::ERR|10::WRN|1,710::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="782" y="28" width="18" height="214" data-tip="17 ต.ค. 14:01|0::FTL|6::ERR|12::WRN|1,722::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="800" y="28" width="18" height="214" data-tip="17 ต.ค. 14:02|0::FTL|4::ERR|12::WRN|1,676::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="818" y="28" width="18" height="214" data-tip="17 ต.ค. 14:03|0::FTL|0::ERR|14::WRN|1,699::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="836" y="28" width="18" height="214" data-tip="17 ต.ค. 14:04|0::FTL|4::ERR|14::WRN|1,701::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="854" y="28" width="18" height="214" data-tip="17 ต.ค. 14:05|0::FTL|4::ERR|10::WRN|1,727::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="872" y="28" width="18" height="214" data-tip="17 ต.ค. 14:06|0::FTL|8::ERR|9::WRN|1,700::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="890" y="28" width="18" height="214" data-tip="17 ต.ค. 14:07|0::FTL|6::ERR|10::WRN|1,699::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="908" y="28" width="18" height="214" data-tip="17 ต.ค. 14:08|0::FTL|0::ERR|12::WRN|1,756::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="926" y="28" width="18" height="214" data-tip="17 ต.ค. 14:09|0::FTL|6::ERR|12::WRN|1,691::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="944" y="28" width="18" height="214" data-tip="17 ต.ค. 14:10|0::FTL|2::ERR|10::WRN|1,717::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="962" y="28" width="18" height="214" data-tip="17 ต.ค. 14:11|0::FTL|4::ERR|10::WRN|1,725::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="980" y="28" width="18" height="214" data-tip="17 ต.ค. 14:12|0::FTL|4::ERR|12::WRN|1,747::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="998" y="28" width="18" height="214" data-tip="17 ต.ค. 14:13|0::FTL|0::ERR|10::WRN|1,756::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="1016" y="28" width="18" height="214" data-tip="17 ต.ค. 14:14|0::FTL|2::ERR|13::WRN|1,734::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="1034" y="28" width="18" height="214" data-tip="17 ต.ค. 14:15|0::FTL|4::ERR|12::WRN|1,700::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="1052" y="28" width="18" height="214" data-tip="17 ต.ค. 14:16|0::FTL|8::ERR|10::WRN|1,718::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="1070" y="28" width="18" height="214" data-tip="17 ต.ค. 14:17|0::FTL|0::ERR|10::WRN|1,707::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="1088" y="28" width="18" height="214" data-tip="17 ต.ค. 14:18|0::FTL|4::ERR|14::WRN|1,697::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+    <rect class="c-hit" x="1106" y="28" width="18" height="214" data-tip="17 ต.ค. 14:19|0::FTL|0::ERR|16::WRN|1,695::INF|0::DBG" data-tip-keys="ink,danger-solid,warn-solid,info-solid,debug-solid"/>
+  </g>
+</svg>
+        </div>
+        <div class="chart__foot">
+          <span>สองกราฟแกนแยกกัน: บน WRN ขึ้นไป (0–30), ล่าง DBG และ INF (0–2K) · ERR 228 = error 116 ครั้ง + บรรทัด http.request ที่ตอบ 5xx 112 · แถบแดงจาง = Redis "cache" down · คลิกแท่งเพื่อดูนาทีนั้น ลากเพื่อเลือกช่วง</span>
+          <details class="chart__table">
+            <summary class="summary-line">ดูเป็นตาราง</summary>
+            <div class="table-wrap"><table class="table table--dense"><thead><tr><th scope="col">นาที</th><th scope="col" class="num">FTL</th><th scope="col" class="num">ERR</th><th scope="col" class="num">WRN</th><th scope="col" class="num">INF</th><th scope="col" class="num">DBG</th><th scope="col" class="num">รวม</th></tr></thead><tbody><tr><td class="ts">14:19</td><td class="num">0</td><td class="num">0</td><td class="num">16</td><td class="num">1,695</td><td class="num">0</td><td class="num">1,711</td></tr><tr><td class="ts">14:18</td><td class="num">0</td><td class="num">4</td><td class="num">14</td><td class="num">1,697</td><td class="num">0</td><td class="num">1,715</td></tr><tr><td class="ts">14:17</td><td class="num">0</td><td class="num">0</td><td class="num">10</td><td class="num">1,707</td><td class="num">0</td><td class="num">1,717</td></tr><tr><td class="ts">14:16</td><td class="num">0</td><td class="num">8</td><td class="num">10</td><td class="num">1,718</td><td class="num">0</td><td class="num">1,736</td></tr><tr><td class="ts">14:15</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,700</td><td class="num">0</td><td class="num">1,716</td></tr><tr><td class="ts">14:14</td><td class="num">0</td><td class="num">2</td><td class="num">13</td><td class="num">1,734</td><td class="num">0</td><td class="num">1,749</td></tr><tr><td class="ts">14:13</td><td class="num">0</td><td class="num">0</td><td class="num">10</td><td class="num">1,756</td><td class="num">0</td><td class="num">1,766</td></tr><tr><td class="ts">14:12</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,747</td><td class="num">0</td><td class="num">1,763</td></tr><tr><td class="ts">14:11</td><td class="num">0</td><td class="num">4</td><td class="num">10</td><td class="num">1,725</td><td class="num">0</td><td class="num">1,739</td></tr><tr><td class="ts">14:10</td><td class="num">0</td><td class="num">2</td><td class="num">10</td><td class="num">1,717</td><td class="num">0</td><td class="num">1,729</td></tr><tr><td class="ts">14:09</td><td class="num">0</td><td class="num">6</td><td class="num">12</td><td class="num">1,691</td><td class="num">0</td><td class="num">1,709</td></tr><tr><td class="ts">14:08</td><td class="num">0</td><td class="num">0</td><td class="num">12</td><td class="num">1,756</td><td class="num">0</td><td class="num">1,768</td></tr><tr><td class="ts">14:07</td><td class="num">0</td><td class="num">6</td><td class="num">10</td><td class="num">1,699</td><td class="num">0</td><td class="num">1,715</td></tr><tr><td class="ts">14:06</td><td class="num">0</td><td class="num">8</td><td class="num">9</td><td class="num">1,700</td><td class="num">0</td><td class="num">1,717</td></tr><tr><td class="ts">14:05</td><td class="num">0</td><td class="num">4</td><td class="num">10</td><td class="num">1,727</td><td class="num">0</td><td class="num">1,741</td></tr><tr><td class="ts">14:04</td><td class="num">0</td><td class="num">4</td><td class="num">14</td><td class="num">1,701</td><td class="num">0</td><td class="num">1,719</td></tr><tr><td class="ts">14:03</td><td class="num">0</td><td class="num">0</td><td class="num">14</td><td class="num">1,699</td><td class="num">0</td><td class="num">1,713</td></tr><tr><td class="ts">14:02</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,676</td><td class="num">0</td><td class="num">1,692</td></tr><tr><td class="ts">14:01</td><td class="num">0</td><td class="num">6</td><td class="num">12</td><td class="num">1,722</td><td class="num">0</td><td class="num">1,740</td></tr><tr><td class="ts">14:00</td><td class="num">0</td><td class="num">2</td><td class="num">10</td><td class="num">1,710</td><td class="num">0</td><td class="num">1,722</td></tr><tr><td class="ts">13:59</td><td class="num">0</td><td class="num">2</td><td class="num">12</td><td class="num">1,681</td><td class="num">0</td><td class="num">1,695</td></tr><tr><td class="ts">13:58</td><td class="num">0</td><td class="num">7</td><td class="num">15</td><td class="num">1,698</td><td class="num">0</td><td class="num">1,720</td></tr><tr><td class="ts">13:57</td><td class="num">0</td><td class="num">6</td><td class="num">14</td><td class="num">1,651</td><td class="num">0</td><td class="num">1,671</td></tr><tr><td class="ts">13:56</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,675</td><td class="num">0</td><td class="num">1,691</td></tr><tr><td class="ts">13:55</td><td class="num">0</td><td class="num">4</td><td class="num">10</td><td class="num">1,659</td><td class="num">0</td><td class="num">1,673</td></tr><tr><td class="ts">13:54</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,649</td><td class="num">0</td><td class="num">1,665</td></tr><tr><td class="ts">13:53</td><td class="num">0</td><td class="num">8</td><td class="num">10</td><td class="num">1,659</td><td class="num">0</td><td class="num">1,677</td></tr><tr><td class="ts">13:52</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,688</td><td class="num">0</td><td class="num">1,704</td></tr><tr><td class="ts">13:51</td><td class="num">0</td><td class="num">6</td><td class="num">13</td><td class="num">1,651</td><td class="num">0</td><td class="num">1,670</td></tr><tr><td class="ts">13:50</td><td class="num">0</td><td class="num">0</td><td class="num">12</td><td class="num">1,654</td><td class="num">0</td><td class="num">1,666</td></tr><tr><td class="ts">13:49</td><td class="num">0</td><td class="num">2</td><td class="num">12</td><td class="num">1,678</td><td class="num">0</td><td class="num">1,692</td></tr><tr><td class="ts">13:48</td><td class="num">0</td><td class="num">4</td><td class="num">8</td><td class="num">1,686</td><td class="num">0</td><td class="num">1,698</td></tr><tr><td class="ts">13:47</td><td class="num">0</td><td class="num">6</td><td class="num">12</td><td class="num">1,655</td><td class="num">0</td><td class="num">1,673</td></tr><tr><td class="ts">13:46</td><td class="num">0</td><td class="num">4</td><td class="num">14</td><td class="num">1,655</td><td class="num">0</td><td class="num">1,673</td></tr><tr><td class="ts">13:45</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,671</td><td class="num">0</td><td class="num">1,687</td></tr><tr><td class="ts">13:44</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,679</td><td class="num">0</td><td class="num">1,695</td></tr><tr><td class="ts">13:43</td><td class="num">0</td><td class="num">1</td><td class="num">11</td><td class="num">1,668</td><td class="num">0</td><td class="num">1,680</td></tr><tr><td class="ts">13:42</td><td class="num">0</td><td class="num">6</td><td class="num">12</td><td class="num">1,653</td><td class="num">0</td><td class="num">1,671</td></tr><tr><td class="ts">13:41</td><td class="num">0</td><td class="num">6</td><td class="num">10</td><td class="num">1,691</td><td class="num">0</td><td class="num">1,707</td></tr><tr><td class="ts">13:40</td><td class="num">0</td><td class="num">2</td><td class="num">12</td><td class="num">1,734</td><td class="num">0</td><td class="num">1,748</td></tr><tr><td class="ts">13:39</td><td class="num">0</td><td class="num">8</td><td class="num">12</td><td class="num">1,688</td><td class="num">0</td><td class="num">1,708</td></tr><tr><td class="ts">13:38</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,701</td><td class="num">0</td><td class="num">1,717</td></tr><tr><td class="ts">13:37</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,655</td><td class="num">0</td><td class="num">1,671</td></tr><tr><td class="ts">13:36</td><td class="num">0</td><td class="num">4</td><td class="num">12</td><td class="num">1,721</td><td class="num">0</td><td class="num">1,737</td></tr><tr><td class="ts">13:35</td><td class="num">0</td><td class="num">2</td><td class="num">12</td><td class="num">1,724</td><td class="num">0</td><td class="num">1,738</td></tr><tr><td class="ts">13:34</td><td class="num">0</td><td class="num">0</td><td class="num">8</td><td class="num">1,721</td><td class="num">0</td><td class="num">1,729</td></tr><tr><td class="ts">13:33</td><td class="num">0</td><td class="num">4</td><td class="num">10</td><td class="num">1,709</td><td class="num">0</td><td class="num">1,723</td></tr><tr><td class="ts">13:32</td><td class="num">0</td><td class="num">8</td><td class="num">12</td><td class="num">1,727</td><td class="num">0</td><td class="num">1,747</td></tr><tr><td class="ts">13:31</td><td class="num">0</td><td class="num">4</td><td class="num">10</td><td class="num">1,729</td><td class="num">0</td><td class="num">1,743</td></tr><tr><td class="ts">13:30</td><td class="num">0</td><td class="num">4</td><td class="num">14</td><td class="num">1,746</td><td class="num">0</td><td class="num">1,764</td></tr><tr><td class="ts">13:29</td><td class="num">0</td><td class="num">0</td><td class="num">12</td><td class="num">1,720</td><td class="num">0</td><td class="num">1,732</td></tr><tr><td class="ts">13:28</td><td class="num">0</td><td class="num">2</td><td class="num">12</td><td class="num">1,750</td><td class="num">0</td><td class="num">1,764</td></tr><tr><td class="ts">13:27</td><td class="num">0</td><td class="num">4</td><td class="num">10</td><td class="num">1,757</td><td class="num">0</td><td class="num">1,771</td></tr><tr><td class="ts">13:26</td><td class="num">0</td><td class="num">4</td><td class="num">15</td><td class="num">1,712</td><td class="num">0</td><td class="num">1,731</td></tr><tr><td class="ts">13:25</td><td class="num">0</td><td class="num">6</td><td class="num">14</td><td class="num">1,716</td><td class="num">0</td><td class="num">1,736</td></tr><tr><td class="ts">13:24</td><td class="num">0</td><td class="num">4</td><td class="num">10</td><td class="num">1,725</td><td class="num">0</td><td class="num">1,739</td></tr><tr><td class="ts">13:23</td><td class="num">0</td><td class="num">2</td><td class="num">10</td><td class="num">1,691</td><td class="num">0</td><td class="num">1,703</td></tr><tr><td class="ts">13:22</td><td class="num">0</td><td class="num">4</td><td class="num">10</td><td class="num">1,697</td><td class="num">0</td><td class="num">1,711</td></tr><tr><td class="ts">13:21</td><td class="num">0</td><td class="num">6</td><td class="num">12</td><td class="num">1,713</td><td class="num">0</td><td class="num">1,731</td></tr><tr><td class="ts">13:20</td><td class="num">0</td><td class="num">2</td><td class="num">6</td><td class="num">1,665</td><td class="num">0</td><td class="num">1,673</td></tr></tbody></table></div>
+          </details>
+        </div>
+      </figure>
+
+      <!-- Log table, newest first -->
+      <section class="panel lg-results" aria-labelledby="lg-results-title">
+        <div class="panel__head">
+          <h2 class="panel__title" id="lg-results-title">บรรทัด log</h2>
+          <span class="live" title="ช่วงเวลาแบบล่าสุด: บรรทัดใหม่เข้ามาด้านบนเอง">สด</span><span class="panel__meta">ใหม่สุดก่อน · เวลา ICT · คลิกแถวเพื่อดูรายละเอียด</span>
+          <div class="panel__actions">
+            <button class="btn btn--sm btn--quiet" type="button" id="lg-expand-all"><svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>ขยาย error ทั้งหมด</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="table table--dense table--reflow lg-table">
+            <caption class="sr-only">บรรทัด log ของ school-core-api ใน prod เรียงจากใหม่ไปเก่า</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="col-tight"><span class="sr-only">ขยาย</span></th>
+                <th scope="col" class="col-tight" aria-sort="descending">เวลา</th>
+                <th scope="col" class="col-tight">Level</th>
+                <th scope="col" class="col-tight">Service / role</th>
+                <th scope="col">ข้อความ <span class="t-muted" style="font-weight:400">· หัวข้อ แล้ว key=value</span></th>
+                <th scope="col" class="num">เวลาที่ใช้</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="lg-row--inf is-new"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:19:59.412</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/my</span></li><li class="kv"><span class="kv__k">status</span><span class="kv__v">200</span></li></ul></div></td><td class="num lg-dur">126 ms</td></tr>
+              <tr class="lg-row--inf is-new"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:19:59.388</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/me</span></li><li class="kv"><span class="kv__k">status</span><span class="kv__v">200</span></li></ul></div></td><td class="num lg-dur">18 ms</td></tr>
+              <tr class="lg-row--wrn"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:19:59.301</span></td><td class="lg-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/exams/:id</span></li><li class="kv kv--warn"><span class="kv__k">status</span><span class="kv__v">404</span></li></ul></div></td><td class="num lg-dur">37 ms</td></tr>
+              <tr class="lg-row--wrn lg-row--hint"><td class="lg-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="lg-r4-detail" aria-label="ขยาย Not found 14:19:59.296"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td><td class="lg-time"><span class="ts">14:19:59.296</span></td><td class="lg-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">GetExamHandler</span><button class="lg-title" type="button">Not found</button><span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/exams/:id</span></li><li class="kv kv--warn"><span class="kv__k">status</span><span class="kv__v">404</span></li><li class="kv"><span class="kv__k">source</span><span class="kv__v">GetExamHandler.execute</span></li><li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/exam/get-exam.handler.ts</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">ExamEntity</span></li><li class="kv"><span class="kv__k">duration</span><span class="kv__v">37 ms</span></li></ul></div></td><td class="num lg-dur">37 ms</td></tr>
+              <tr class="row-detail" id="lg-r4-detail" hidden><td></td><td colspan="5"><div class="row-detail__body"><p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>No ExamEntity found by (id). Check the id the client sent, or whether the row was deleted.</p><p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>EntityNotFoundError [HTTP_404] Could not find any entity of type &quot;ExamEntity&quot; matching: { &quot;where&quot;: { &quot;id&quot;: 4471 } }</p><div class="err-row__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=2c9f71e04ab35d68e1f0c7a9b4d3e512" title="2c9f71e04ab35d68e1f0c7a9b4d3e512">2c9f71e04ab35d68e1f0c7a9b4d3e512</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="2c9f71e04ab35d68e1f0c7a9b4d3e512" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span><span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_2201">u_2201</a></span><span>student · s_118</span><span class="row-detail__actions lg-acts"><a class="btn btn--sm btn--quiet" href="errors.html#g5">ดู error group</a><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy="14:19:59.296 WRN school-core-api/api        not found                   method=GET route=/exams/:id status=404 source=GetExamHandler.execute file=src/domain/exam/get-exam.handler.ts target=ExamEntity duration=37 ms
+    error detail: No ExamEntity found by (id). Check the id the client sent, or whether the row was deleted.
+    actual error: EntityNotFoundError [HTTP_404] Could not find any entity of type &quot;ExamEntity&quot; matching: { &quot;where&quot;: { &quot;id&quot;: 4471 } }
+    trace id:     2c9f71e04ab35d68e1f0c7a9b4d3e512"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกแบบ terminal</span></button></span></div></div></td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:19:58.940</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">job.finished</span><button class="lg-title" type="button">job finished</button><span class="tag">BullMQ</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">job</span><span class="kv__v">notification:send</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">512077</span></li><li class="kv"><span class="kv__k">attempt</span><span class="kv__v">1/3</span></li></ul></div></td><td class="num lg-dur">284 ms</td></tr>
+              <tr class="lg-row--wrn"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:19:58.517</span></td><td class="lg-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/exams/:id/submit</span></li><li class="kv kv--warn"><span class="kv__k">status</span><span class="kv__v">400</span></li></ul></div></td><td class="num lg-dur">58 ms</td></tr>
+              <tr class="lg-row--wrn lg-row--hint"><td class="lg-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="lg-r7-detail" aria-label="ขยาย Invalid request 14:19:58.509"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td><td class="lg-time"><span class="ts">14:19:58.509</span></td><td class="lg-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">App</span><button class="lg-title" type="button">Invalid request</button><span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/exams/:id/submit</span></li><li class="kv kv--warn"><span class="kv__k">status</span><span class="kv__v">400</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">answers.*.choice</span></li><li class="kv"><span class="kv__k">duration</span><span class="kv__v">58 ms</span></li></ul></div></td><td class="num lg-dur">58 ms</td></tr>
+              <tr class="row-detail" id="lg-r7-detail" hidden><td></td><td colspan="5"><div class="row-detail__body"><p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>Rejected fields: answers.*.choice. The response message lists the rule each one broke.</p><p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>BadRequestException [HTTP_400] Bad Request Exception</p><div class="err-row__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=7e0d5b38c1a94f26b8e3d0a5c7f19b44" title="7e0d5b38c1a94f26b8e3d0a5c7f19b44">7e0d5b38c1a94f26b8e3d0a5c7f19b44</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="7e0d5b38c1a94f26b8e3d0a5c7f19b44" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span><span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_2201">u_2201</a></span><span>student · s_118</span><span class="row-detail__actions lg-acts"><a class="btn btn--sm btn--quiet" href="errors.html#g6">ดู error group</a><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy="14:19:58.509 WRN school-core-api/api        invalid request             method=POST route=/exams/:id/submit status=400 target=answers.*.choice duration=58 ms
+    error detail: Rejected fields: answers.*.choice. The response message lists the rule each one broke.
+    actual error: BadRequestException [HTTP_400] Bad Request Exception
+    trace id:     7e0d5b38c1a94f26b8e3d0a5c7f19b44"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกแบบ terminal</span></button></span></div></div></td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:19:57.866</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/students</span></li><li class="kv"><span class="kv__k">status</span><span class="kv__v">200</span></li></ul></div></td><td class="num lg-dur">2.2 s</td></tr>
+              <tr class="lg-row--err"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:18:09.254</span></td><td class="lg-lvl"><span class="lvl lvl--err">ERR</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/import</span></li><li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li></ul></div></td><td class="num lg-dur">1.8 s</td></tr>
+              <tr class="lg-row--err lg-row--hint is-clickable" aria-current="true"><td class="lg-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="lg-r10-detail" aria-label="ขยาย Value too long for column 14:18:09.226"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td><td class="lg-time"><span class="ts">14:18:09.226</span></td><td class="lg-lvl"><span class="lvl lvl--err">ERR</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">ImportQuestionBankHandler</span><button class="lg-title" type="button" id="lg-open-ora" data-drawer-open="lg-drawer" data-drawer-param="ora" aria-controls="lg-drawer" aria-expanded="false">Value too long for column</button><span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/import</span></li><li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li><li class="kv"><span class="kv__k">source</span><span class="kv__v">ImportQuestionBankHandler.execute</span></li><li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/question-bank/import-question-bank.handler.ts</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">QuestionBankEntity.title</span></li><li class="kv"><span class="kv__k">duration</span><span class="kv__v">1,842 ms</span></li></ul></div></td><td class="num lg-dur">1.8 s</td></tr>
+              <tr class="row-detail" id="lg-r10-detail" hidden><td></td><td colspan="5"><div class="row-detail__body"><p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.</p><p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>QueryFailedError [ORA-12899] ORA-12899: value too large for column &quot;APP&quot;.&quot;QUESTION_BANK&quot;.&quot;TITLE&quot; (actual: 312, maximum: 255)</p><div class="err-row__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=4bf92f3577b34da6a3ce929d0e0e4736" title="4bf92f3577b34da6a3ce929d0e0e4736">4bf92f3577b34da6a3ce929d0e0e4736</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4bf92f3577b34da6a3ce929d0e0e4736" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span><span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_1029">u_1029</a></span><span>teacher · s_118</span><span>usecase <span class="mono">ImportQuestionBankCommand</span></span><span class="row-detail__actions lg-acts"><button class="btn btn--sm" type="button" data-drawer-open="lg-drawer" aria-controls="lg-drawer" aria-expanded="false">เปิดรายละเอียด</button><a class="btn btn--sm btn--quiet" href="error-detail.html">ดู error group</a><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy="14:18:09.226 ERR school-core-api/api        value too long for column   method=POST route=/question-bank/import status=500 source=ImportQuestionBankHandler.execute file=src/domain/question-bank/import-question-bank.handler.ts target=QuestionBankEntity.title duration=1,842 ms
+    error detail: QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.
+    actual error: QueryFailedError [ORA-12899] ORA-12899: value too large for column &quot;APP&quot;.&quot;QUESTION_BANK&quot;.&quot;TITLE&quot; (actual: 312, maximum: 255)
+    trace id:     4bf92f3577b34da6a3ce929d0e0e4736"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกแบบ terminal</span></button></span></div></div></td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:18:07.414</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">ImportQuestionBankHandler</span><button class="lg-title" type="button">Importing question bank file</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/import</span></li></ul></div></td><td class="num lg-dur"><span class="t-muted">–</span></td></tr>
+              <tr class="lg-row--err"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:16:51.274</span></td><td class="lg-lvl"><span class="lvl lvl--err">ERR</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/report</span></li><li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li></ul></div></td><td class="num lg-dur">196 ms</td></tr>
+              <tr class="lg-row--err lg-row--hint is-expanded"><td class="lg-tog"><button class="row-toggle" type="button" data-expand aria-expanded="true" aria-controls="lg-r13-detail" aria-label="ขยาย Read from undefined value 14:16:51.262"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td><td class="lg-time"><span class="ts">14:16:51.262</span></td><td class="lg-lvl"><span class="lvl lvl--err">ERR</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">GetClassReportHandler</span><button class="lg-title" type="button">Read from undefined value</button><span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span><span class="badge-new">NEW</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/report</span></li><li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li><li class="kv"><span class="kv__k">source</span><span class="kv__v">GetClassReportHandler.execute</span></li><li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/class-report/get-class-report.handler.ts</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">school</span></li><li class="kv"><span class="kv__k">duration</span><span class="kv__v">196 ms</span></li></ul></div></td><td class="num lg-dur">196 ms</td></tr>
+              <tr class="row-detail" id="lg-r13-detail"><td></td><td colspan="5"><div class="row-detail__body"><p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>&quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.</p><p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>TypeError [NULL_READ] Cannot read properties of undefined (reading &#x27;school&#x27;)</p><div class="err-row__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=c51e0a9d3b7f42e6a08d1f3b5e7c9a24" title="c51e0a9d3b7f42e6a08d1f3b5e7c9a24">c51e0a9d3b7f42e6a08d1f3b5e7c9a24</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="c51e0a9d3b7f42e6a08d1f3b5e7c9a24" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span><span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_3318">u_3318</a></span><span>teacher · s_042</span><span>usecase <span class="mono">GetClassReportQuery</span></span><span class="row-detail__actions lg-acts"><a class="btn btn--sm btn--quiet" href="error-detail-null-read.html">ดู error group</a><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy="14:16:51.262 ERR school-core-api/api        read from undefined value   method=GET route=/classes/:id/report status=500 source=GetClassReportHandler.execute file=src/domain/class-report/get-class-report.handler.ts target=school duration=196 ms
+    error detail: &quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.
+    actual error: TypeError [NULL_READ] Cannot read properties of undefined (reading &#x27;school&#x27;)
+    trace id:     c51e0a9d3b7f42e6a08d1f3b5e7c9a24"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกแบบ terminal</span></button></span></div></div></td></tr>
+              <tr class="lg-row--err"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:16:47.903</span></td><td class="lg-lvl"><span class="lvl lvl--err">ERR</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/report</span></li><li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li></ul></div></td><td class="num lg-dur">171 ms</td></tr>
+              <tr class="lg-row--err lg-row--hint"><td class="lg-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="lg-r15-detail" aria-label="ขยาย Read from undefined value 14:16:47.891"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td><td class="lg-time"><span class="ts">14:16:47.891</span></td><td class="lg-lvl"><span class="lvl lvl--err">ERR</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">GetClassReportHandler</span><button class="lg-title" type="button">Read from undefined value</button><span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span><span class="badge-new">NEW</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/report</span></li><li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li><li class="kv"><span class="kv__k">source</span><span class="kv__v">GetClassReportHandler.execute</span></li><li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/class-report/get-class-report.handler.ts</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">school</span></li><li class="kv"><span class="kv__k">duration</span><span class="kv__v">171 ms</span></li></ul></div></td><td class="num lg-dur">171 ms</td></tr>
+              <tr class="row-detail" id="lg-r15-detail" hidden><td></td><td colspan="5"><div class="row-detail__body"><p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>&quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.</p><p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>TypeError [NULL_READ] Cannot read properties of undefined (reading &#x27;school&#x27;)</p><div class="err-row__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=3d8b2f6e1c0a47958f2e6d4c1b0a9e77" title="3d8b2f6e1c0a47958f2e6d4c1b0a9e77">3d8b2f6e1c0a47958f2e6d4c1b0a9e77</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="3d8b2f6e1c0a47958f2e6d4c1b0a9e77" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span><span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_0412">u_0412</a></span><span>admin · s_007</span><span>usecase <span class="mono">GetClassReportQuery</span></span><span class="row-detail__actions lg-acts"><a class="btn btn--sm btn--quiet" href="error-detail-null-read.html">ดู error group</a><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy="14:16:47.891 ERR school-core-api/api        read from undefined value   method=GET route=/classes/:id/report status=500 source=GetClassReportHandler.execute file=src/domain/class-report/get-class-report.handler.ts target=school duration=171 ms
+    error detail: &quot;school&quot; is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.
+    actual error: TypeError [NULL_READ] Cannot read properties of undefined (reading &#x27;school&#x27;)
+    trace id:     3d8b2f6e1c0a47958f2e6d4c1b0a9e77"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกแบบ terminal</span></button></span></div></div></td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:13:15.164</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">job.finished</span><button class="lg-title" type="button">job finished</button><span class="tag">BullMQ</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">job</span><span class="kv__v">report:generate</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">88412</span></li><li class="kv"><span class="kv__k">attempt</span><span class="kv__v">3/3</span></li></ul></div></td><td class="num lg-dur">3.6 s</td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:13:11.520</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">job.started</span><button class="lg-title" type="button">job started</button><span class="tag">BullMQ</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">job</span><span class="kv__v">report:generate</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">88412</span></li><li class="kv"><span class="kv__k">attempt</span><span class="kv__v">3/3</span></li></ul></div></td><td class="num lg-dur"><span class="t-muted">–</span></td></tr>
+              <tr class="lg-row--wrn lg-row--hint"><td class="lg-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="lg-r18-detail" aria-label="ขยาย Google API rate limited 14:12:41.508"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td><td class="lg-time"><span class="ts">14:12:41.508</span></td><td class="lg-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">job.retry</span><button class="lg-title" type="button">Google API rate limited</button><span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span><span class="tag">BullMQ</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">job</span><span class="kv__v">report:generate</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">88412</span></li><li class="kv"><span class="kv__k">attempt</span><span class="kv__v">2/3</span></li><li class="kv"><span class="kv__k">source</span><span class="kv__v">GoogleSheetsService.exportReport</span></li><li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/report/google-sheets.service.ts</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">sheets.googleapis.com</span></li><li class="kv kv--warn"><span class="kv__k">duration</span><span class="kv__v">10,040 ms</span></li></ul></div></td><td class="num lg-dur">10.0 s</td></tr>
+              <tr class="row-detail" id="lg-r18-detail" hidden><td></td><td colspan="5"><div class="row-detail__body"><p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>sheets.googleapis.com returned 429 rateLimitExceeded on &#x27;Write requests per minute per user&#x27;. The job retries with backoff; lower the export concurrency or batch the writes.</p><p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>GaxiosError [rateLimitExceeded] Quota exceeded for quota metric &#x27;Write requests&#x27; and limit &#x27;Write requests per minute per user&#x27; of service &#x27;sheets.googleapis.com&#x27;</p><div class="err-row__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span><span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6" title="e7c3d2a1f09e885ca13e9b0a8d4f21b6">e7c3d2a1f09e885ca13e9b0a8d4f21b6</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="e7c3d2a1f09e885ca13e9b0a8d4f21b6" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span><span>งาน report:generate #88412 · ครั้งที่ 2/3 · จะลองใหม่ (ครั้งที่ 3/3 สำเร็จ 14:13:15)</span><span class="row-detail__actions lg-acts"><a class="btn btn--sm btn--quiet" href="errors.html#g3">ดู error group</a><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy="14:12:41.508 WRN school-core-api/worker     google API rate limited     job=report:generate id=88412 attempt=2/3 source=GoogleSheetsService.exportReport file=src/domain/report/google-sheets.service.ts target=sheets.googleapis.com duration=10,040 ms
+    error detail: sheets.googleapis.com returned 429 rateLimitExceeded on &#x27;Write requests per minute per user&#x27;. The job retries with backoff; lower the export concurrency or batch the writes.
+    actual error: GaxiosError [rateLimitExceeded] Quota exceeded for quota metric &#x27;Write requests&#x27; and limit &#x27;Write requests per minute per user&#x27; of service &#x27;sheets.googleapis.com&#x27;
+    trace id:     e7c3d2a1f09e885ca13e9b0a8d4f21b6"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกแบบ terminal</span></button></span></div></div></td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:12:31.468</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">job.started</span><button class="lg-title" type="button">job started</button><span class="tag">BullMQ</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">job</span><span class="kv__v">report:generate</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">88412</span></li><li class="kv"><span class="kv__k">attempt</span><span class="kv__v">2/3</span></li></ul></div></td><td class="num lg-dur"><span class="t-muted">–</span></td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:11:54.802</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">http.request</span><button class="lg-title" type="button">request completed</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li><li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/students</span></li><li class="kv"><span class="kv__k">status</span><span class="kv__v">200</span></li></ul></div></td><td class="num lg-dur">2.7 s</td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:00:02.731</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">job.finished</span><button class="lg-title" type="button">job finished</button><span class="tag">cron</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">job</span><span class="kv__v">ReportCleanupService.purge</span></li></ul></div></td><td class="num lg-dur">2.7 s</td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">14:00:00.004</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">job.started</span><button class="lg-title" type="button">job started</button><span class="tag">cron</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">job</span><span class="kv__v">ReportCleanupService.purge</span></li></ul></div></td><td class="num lg-dur"><span class="t-muted">–</span></td></tr>
+              <tr class="lg-row--inf"><td class="lg-tog"></td><td class="lg-time"><span class="ts">13:43:20.318</span></td><td class="lg-lvl"><span class="lvl lvl--inf">INF</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">dependency.up</span><button class="lg-title" type="button">redis &quot;cache&quot; is back</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">target</span><span class="kv__v">10.0.3.21:6379</span></li><li class="kv"><span class="kv__k">affects</span><span class="kv__v">cache</span></li><li class="kv"><span class="kv__k">retry</span><span class="kv__v">9</span></li><li class="kv"><span class="kv__k">reason</span><span class="kv__v">recovered</span></li></ul></div></td><td class="num lg-dur">45.2 s</td></tr>
+              <tr class="lg-row--wrn"><td class="lg-tog"></td><td class="lg-time"><span class="ts">13:43:05.118</span></td><td class="lg-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">dependency.still_down</span><button class="lg-title" type="button">redis &quot;cache&quot; still down</button><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">target</span><span class="kv__v">10.0.3.21:6379</span></li><li class="kv"><span class="kv__k">affects</span><span class="kv__v">cache</span></li><li class="kv"><span class="kv__k">retry</span><span class="kv__v">6</span></li></ul></div></td><td class="num lg-dur">30.0 s</td></tr>
+              <tr class="lg-row--err lg-row--hint"><td class="lg-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="lg-r25-detail" aria-label="ขยาย Redis &quot;cache&quot; refused connection 13:42:35.118"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td><td class="lg-time"><span class="ts">13:42:35.118</span></td><td class="lg-lvl"><span class="lvl lvl--err">ERR</span></td><td class="lg-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="lg-msgcell"><div class="lg-msg"><span class="lg-src">dependency.down</span><button class="lg-title" type="button">Redis &quot;cache&quot; refused connection</button><span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span><ul class="kv-list" aria-label="บริบท"><li class="kv"><span class="kv__k">target</span><span class="kv__v">10.0.3.21:6379</span></li><li class="kv"><span class="kv__k">affects</span><span class="kv__v">cache</span></li></ul></div></td><td class="num lg-dur"><span class="t-muted">–</span></td></tr>
+              <tr class="row-detail" id="lg-r25-detail" hidden><td></td><td colspan="5"><div class="row-detail__body"><p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>Nothing is listening at 10.0.3.21:6379. Redis may be stopped or restarting, or REDIS_HOST/REDIS_PORT is wrong.</p><p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>Error [ECONNREFUSED] connect ECONNREFUSED 10.0.3.21:6379</p><div class="err-row__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span>เกิดนอก request: ไม่มี trace · down 45.2 s ถึง 13:43:20</span><span class="row-detail__actions lg-acts"><a class="btn btn--sm" href="jobs.html#dep-cache">ดูสถานะ dependency</a><a class="btn btn--sm btn--quiet" href="errors.html#g4">ดู error group</a><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy="13:42:35.118 ERR school-core-api/api        redis &quot;cache&quot; refused connection target=10.0.3.21:6379 affects=cache
+    error detail: Nothing is listening at 10.0.3.21:6379. Redis may be stopped or restarting, or REDIS_HOST/REDIS_PORT is wrong.
+    actual error: Error [ECONNREFUSED] connect ECONNREFUSED 10.0.3.21:6379"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกแบบ terminal</span></button></span></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel__foot list-foot">
+          <span class="list-foot__count">แสดง <b>25</b> แถว · ในช่วงเวลานี้มี <b>102,901</b> แถว</span>
+          <span class="list-foot__cursor">ต่อจาก 13:42:35.118 ICT · before=2026-10-17T06:42:35.118Z</span>
+          <button class="btn btn--sm" type="button"><svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>โหลดเพิ่ม 100 แถว</button>
+        </div>
+      </section>
+
+      <!-- screen content ends here -->
+
+      <details class="design-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <ul>
+              <li>หน้าที่ developer เปิดเมื่อรู้ว่ามีอะไรผิด: ไล่ log ตามเวลา กรองให้แคบ แล้วเปิดบรรทัดที่พังเพื่อดูว่าแก้ที่ไหน (ข้อ 2 activity log, ข้อ 5 error อ่านง่าย)</li>
+              <li>ทุกแถวมีเวลา ICT ถึง ms, level, service/role และ env อยู่ที่ top bar (ข้อ 1)</li>
+              <li>แถว error ใช้กติกาเดียวกับ components.html ทุกหน้า: หัวข้อ = hint แล้ว chip <code>method, route, status, source</code> (หรือ <code>job</code>), <code>file, target, duration</code> ข้ามตัวที่ไม่มี</li>
+              <li>ใน drawer คัดลอก JSON ดิบและสรุปให้ AI ได้ ชื่อ field ใต้ label คือชื่อคอลัมน์ ClickHouse (ข้อ 4)</li>
+              <li>กราฟแยกเป็นสองกราฟเพราะ INF มากกว่า ERR ประมาณ 450 เท่า: ถ้าซ้อนในแกนเดียว ERR สูงไม่ถึง 1 px</li>
+            </ul>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>ทั้งหน้า: <code>GET /api/logs</code> ด้วย <code>env</code>, <code>from</code>, <code>to</code> จาก top bar และ <code>q</code>, <code>service</code>, <code>level</code> (comma list), <code>event</code>, <code>userId</code>, <code>route</code> (<code>METHOD /path</code>), <code>category</code> จากแถบตัวกรอง</li>
+              <li>กราฟ, ตัวเลขบน chip level และจำนวนแถวทั้งหมด: <code>histogram[{t,debug,info,warn,error,fatal}]</code> step 1 นาที</li>
+              <li>ตาราง: <code>rows: LogRow[]</code> (<code>limit</code> 100; ม็อกแสดง 25) · หัวข้อ = <code>error.hint</code> → title ของ <code>eventCode</code> → <code>message</code> · ข้อความเล็กหน้าหัวข้อ = <code>eventCode</code> หรือ <code>logger</code> เมื่อเป็น app.log · ป้าย NEW จาก <code>fingerprint</code> ของ group ที่ <code>isNew</code> · บรรทัด ORA-12899 เป็น ERR เพราะ response ตอบ 500 (SPEC §12 A: บรรทัดที่พักไว้เขียนเป็น error เมื่อ status ≥ 500 ก่อนบรรทัด http.request)</li>
+              <li>chip: <code>http.method</code>, <code>http.route</code>, <code>error.originFunction</code> (source), <code>error.originFile</code>, <code>error.target</code> หรือ <code>dependency.host:port</code>, <code>job.type / id / attempt</code>, <code>fields["dependency.affects"]</code>; บรรทัด error จาก exception filter ไม่มี status และ duration เอง จึงใช้ค่าจากบรรทัด <code>http.request</code> ของ trace เดียวกัน (ดูคำถาม)</li>
+              <li>โหลดเพิ่ม: <code>before=nextBefore</code> · รายการ route ใน select: <code>overview.routes</code> (top 20)</li>
+              <li>ค่าต่อนาทีในกราฟมาจากตารางเดียวกับ Overview และ components.html; ยอดรวมตรงกับ dataset: request ของ /api 70,800, 5xx 112 request (ERR 2 บรรทัดต่อ request = 224 + ECONNREFUSED 3 + job.failed 1 = 228), 4xx 342 request (277 × 404 + 65 × 400, WRN 2 บรรทัดต่อ request = 684 + retry 4 + ThaID 401 4 + still_down 1 + redelivered 1 = 694)</li>
+              <li>แถวตัวอย่าง 25 แถวเลือกมาให้เห็นบรรทัดทุกแบบ ของจริงที่ ~1,700 บรรทัด/นาที 25 แถวล่าสุดจะอยู่ในวินาทีเดียวกัน · เวลา job #88412 ตรงกับ Trace, งานเบื้องหลัง และ Error</li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li>Motion: แท่ง histogram โตจากแกนซ้ายไปขวาเมื่อเห็นครั้งแรก · บรรทัดใหม่ (<code>tr.is-new</code>) เลื่อนเข้าด้านบนพร้อมพื้นเขียวอ่อนที่จางใน 1.6 s · จุด "สด" กระพริบช้า ๆ เมื่อช่วงเวลาเป็นแบบล่าสุด · ปิดได้ด้วย <code>?motion=off</code> หรือ reduced motion</li>
+              <li>พิมพ์แล้ว Enter = ค้น · × บน chip เอาตัวกรองออก · chip Level/Event กดเปิดปิดได้ · ทุกตัวกรองอยู่ใน URL (คัดลอกลิงก์ได้)</li>
+              <li>กราฟ: ชี้เมาส์ดูจำนวนแต่ละ level ของนาทีนั้น · คลิกแท่ง = ซูมเหลือนาทีนั้น · ลากคลุมหลายแท่ง = เลือกช่วงเวลา · "ดูเป็นตาราง" สำหรับคีย์บอร์ดและ screen reader · จอแคบเลื่อนไปนาทีล่าสุดก่อน</li>
+              <li>คลิกแถวหรือหัวข้อ = เปิด drawer ทางขวา (modal: Tab วนอยู่ใน drawer, Esc, ปุ่มปิด หรือแตะพื้นหลังเพื่อปิด แล้ว focus กลับที่แถว) · ลูกศรหน้าแถว = ขยายรายละเอียด error ในแถว (ต้องแก้อะไร / error จริง / trace + user)</li>
+              <li>ลิงก์ trace ไป <code>trace-detail.html</code> · ลิงก์ user กรองหน้านี้ด้วย <code>userId</code> · "ดู error group" ไปหน้าของ group นั้น · "ดู log ทั้ง trace" กรองหน้านี้ด้วย <code>traceId</code></li>
+              <li>จอแคบกว่า 600 px: แต่ละแถวเป็น 3 บรรทัด (เวลา · level · เวลาที่ใช้ / หัวข้อ หมวด และ chip / service) ตารางไม่ต้องเลื่อนข้าง</li>
+              <li>ม็อกนี้มีรายละเอียด drawer เฉพาะแถว ORA-12899 · หน้าเปิดมาโดยไม่มี drawer ใส่ <code>?drawer=ora</code> ใน URL เพื่อเปิด drawer นั้นตอนโหลด (focus ไม่ย้าย)</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li>status และ duration ของบรรทัด error: ให้ <code>/api/logs</code> join จากบรรทัด <code>http.request</code> ของ trace เดียวกันมาใน <code>LogRow.http.status</code> / <code>durationMs</code> (เสนอใน DESIGN.md §9) หรือ UI ยิง <code>/api/logs?traceId=…&amp;event=http.request</code> เอง</li>
+              <li>pretty format ของ library ยังเขียน <code>path=</code>: หน้าจอใช้ <code>route=</code> ทุกหน้าแล้ว ขอทีม SDK เปลี่ยน key ให้ตรง</li>
+              <li>Raw JSON: เก็บบรรทัดดิบไว้อีกคอลัมน์ หรือประกอบกลับจากคอลัมน์ + <code>labels</code> + <code>fields</code> (ลำดับ key และชนิดข้อมูลบางตัวอาจไม่ตรง เช่น <code>user.roles</code> เป็น array)</li>
+              <li>chip ที่ใช้อยู่ <code>level ≥ INF</code> ซ้ำกับปุ่ม Level: เก็บทั้งสอง (chip สรุปปุ่ม) หรือเก็บแบบเดียว · prod เก็บตั้งแต่ INF (DBG = 0 เสมอ): ซ่อน chip DBG ใน prod หรือไม่</li>
+              <li>ต้องมี live tail (อัปเดตเอง) ไหม: API ตอนนี้ไม่มี streaming</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+
+      <!-- Drawer: detail of one log line (here the ORA-12899 line at 14:18:09.226) -->
+      <aside class="drawer drawer--wide lg-drawer" id="lg-drawer" role="dialog" aria-modal="true" aria-labelledby="lg-drawer-title" aria-hidden="true">
+        <div class="drawer__head">
+          <div class="drawer__heading">
+            <div class="drawer__sub"><span class="lvl lvl--err">ERR</span><span class="ts">17 ต.ค. 14:18:09.226</span><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="env env--prod">prod</span><span class="tag">31.4.0</span><span class="mono">app.log</span></div>
+            <h2 class="drawer__title" id="lg-drawer-title">Value too long for column</h2>
+          </div>
+          <button class="btn-icon" type="button" data-drawer-close aria-label="ปิด"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        </div>
+        <div class="drawer__body">
+          <div class="field-group">
+            <h3 class="field-group__title">สรุป</h3>
+            <dl class="fields">
+              <dt>หัวข้อ<span class="fname">error_hint</span></dt><dd>Value too long for column</dd>
+              <dt>ต้องแก้อะไร<span class="fname">error_fix</span></dt><dd>QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.</dd>
+              <dt>อธิบายทั่วไป<span class="fname">error_hint_detail</span></dt><dd>A text value exceeds the column size. Common in Excel imports; validate length before saving.</dd>
+              <dt>หมวด<span class="fname">error_category</span></dt><dd><span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span></dd>
+              <dt>Error group<span class="fname">fingerprint</span></dt><dd><a href="error-detail.html">214 ครั้ง · 37 users ใน 24 ชั่วโมง</a><span class="hint">ครั้งแรก 16 ต.ค. 09:12 · ล่าสุด 14:18 · fingerprint 11734059218846012237</span></dd>
+            </dl>
+          </div>
+          <div class="field-group">
+            <h3 class="field-group__title">แก้ที่ไหน</h3>
+            <dl class="fields">
+              <dt>Route<span class="fname">http_method · http_route</span></dt><dd class="mono">POST /question-bank/import</dd>
+              <dt>Usecase<span class="fname">usecase</span></dt><dd class="mono">ImportQuestionBankCommand</dd>
+              <dt>Function ต้นทาง<span class="fname">origin_function</span></dt><dd class="mono">ImportQuestionBankHandler.execute</dd>
+              <dt>ไฟล์<span class="fname">origin_file</span></dt><dd class="mono">src/domain/question-bank/import-question-bank.handler.ts</dd>
+              <dt>จุดที่ผิด<span class="fname">error_target</span></dt><dd class="mono">QuestionBankEntity.title</dd>
+              <dt>ขั้นที่พัง<span class="fname">failed_step</span></dt><dd class="mono">oracle INSERT QUESTION_BANK<span class="hint">span ที่ 11 ของ trace · 1,390 → 1,812 ms</span></dd>
+            </dl>
+          </div>
+          <div class="field-group">
+            <h3 class="field-group__title">Error จริง</h3>
+            <dl class="fields">
+              <dt>ประเภท<span class="fname">error_type</span></dt><dd class="mono">QueryFailedError</dd>
+              <dt>Code<span class="fname">error_code</span></dt><dd><span class="tag">ORA-12899</span></dd>
+              <dt>ข้อความ<span class="fname">error_message</span></dt><dd class="err-row__actual">ORA-12899: value too large for column &quot;APP&quot;.&quot;QUESTION_BANK&quot;.&quot;TITLE&quot; (actual: 312, maximum: 255)</dd>
+              <dt>สาเหตุ<span class="fname">error_cause</span></dt><dd><span class="mono">Error [ORA-12899]</span> จาก driver <span class="mono">node-oracledb</span></dd>
+            </dl>
+            <div class="code-block lg-frames-title">
+              <div class="code-block__head"><span class="code-block__title">Stack · frame ในโค้ดแอปก่อน · <span class="mono">error_stack</span></span><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy-target="#lg-stack-full"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอก stack</span></button></div>
+<pre class="code stacktrace"><span class="fr fr--head">QueryFailedError [ORA-12899]</span>
+<span class="fr fr--app">    at async ImportQuestionBankHandler.execute (<span class="fr__loc">src/domain/question-bank/import-question-bank.handler.ts:88:7</span>)</span>
+<span class="fr fr--app">    at async QuestionBankController.import (<span class="fr__loc">src/domain/question-bank/question-bank.controller.ts:54:12</span>)</span></pre>
+            </div>
+            <details class="disclosure mt-2">
+              <summary>Stack เต็ม<span class="disclosure__meta">10 บรรทัด · 2 frame ในแอป</span></summary>
+              <div class="disclosure__body"><pre class="code stacktrace" id="lg-stack-full"><span class="fr fr--head">QueryFailedError: ORA-12899: value too large for column &quot;APP&quot;.&quot;QUESTION_BANK&quot;.&quot;TITLE&quot; (actual: 312, maximum: 255)</span>
+<span class="fr">    at OracleQueryRunner.query (node_modules/typeorm/driver/oracle/OracleQueryRunner.js:178:19)</span>
+<span class="fr">    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)</span>
+<span class="fr">    at async InsertQueryBuilder.execute (node_modules/typeorm/query-builder/InsertQueryBuilder.js:106:33)</span>
+<span class="fr">    at async SubjectExecutor.executeInsertOperations (node_modules/typeorm/persistence/SubjectExecutor.js:260:42)</span>
+<span class="fr">    at async SubjectExecutor.execute (node_modules/typeorm/persistence/SubjectExecutor.js:92:9)</span>
+<span class="fr">    at async EntityPersistExecutor.execute (node_modules/typeorm/persistence/EntityPersistExecutor.js:140:21)</span>
+<span class="fr fr--app">    at async ImportQuestionBankHandler.execute (<span class="fr__loc">src/domain/question-bank/import-question-bank.handler.ts:88:7</span>)</span>
+<span class="fr">    at async CommandBus.execute (node_modules/@nestjs/cqrs/dist/command-bus.js:47:28)</span>
+<span class="fr fr--app">    at async QuestionBankController.import (<span class="fr__loc">src/domain/question-bank/question-bank.controller.ts:54:12</span>)</span>
+<span class="fr">    at async node_modules/@nestjs/core/router/router-execution-context.js:46:28</span></pre></div>
+            </details>
+          </div>
+          <div class="field-group">
+            <h3 class="field-group__title">Request</h3>
+            <dl class="fields">
+              <dt>Method<span class="fname">http_method</span></dt><dd class="mono">POST</dd>
+              <dt>Route<span class="fname">http_route</span></dt><dd class="mono">/question-bank/import</dd>
+              <dt>Path<span class="fname">url_path</span></dt><dd class="mono">/question-bank/import</dd>
+              <dt>Status<span class="fname">http_status</span></dt><dd><span class="http http--5xx">500</span><span class="hint">จากบรรทัด http.request 14:18:09.254 ของ trace เดียวกัน</span></dd>
+              <dt>เวลาที่ใช้<span class="fname">duration_ms</span></dt><dd>1.8 s · 1,842 ms<span class="hint">จากบรรทัด http.request 14:18:09.254</span></dd>
+              <dt>User<span class="fname">user_id · user_roles</span></dt><dd class="mono"><a href="logs.html?userId=u_1029">u_1029</a> · teacher<span class="hint">ไม่ถูกใส่ในข้อความที่คัดลอกให้ AI</span></dd>
+              <dt>โรงเรียน<span class="fname">organization_id</span></dt><dd class="mono">s_118</dd>
+            </dl>
+          </div>
+          <div class="field-group">
+            <h3 class="field-group__title">Trace</h3>
+            <dl class="fields">
+              <dt>Trace id<span class="fname">trace_id</span></dt><dd><span class="idchip"><a href="trace-detail.html">4bf92f3577b34da6a3ce929d0e0e4736</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4bf92f3577b34da6a3ce929d0e0e4736" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span><span class="hint">13 span · 2 service · 1,842 ms · 1 error</span></dd>
+              <dt>Span id<span class="fname">span_id</span></dt><dd class="mono">5f1c3e8a9b2d4c07</dd>
+            </dl>
+          </div>
+          <details class="disclosure">
+            <summary>Raw JSON<span class="disclosure__meta">ECS record ตามที่ skilllane-monitoring เขียน · 29 key</span></summary>
+            <div class="disclosure__body">
+              <p class="hint lg-json-note">จัดย่อหน้าเพื่ออ่าน ปุ่ม "คัดลอก JSON" คัดลอกเป็นบรรทัดเดียวแบบที่ library เขียนลง stdout และส่งเข้า queue</p>
+<pre class="code code--tall" id="lg-raw-json">{
+  &quot;@timestamp&quot;: &quot;2026-10-17T07:18:09.226Z&quot;,
+  &quot;log.level&quot;: &quot;error&quot;,
+  &quot;service.name&quot;: &quot;school-core-api/api&quot;,
+  &quot;service.version&quot;: &quot;31.4.0&quot;,
+  &quot;service.environment&quot;: &quot;prod&quot;,
+  &quot;log.logger&quot;: &quot;ImportQuestionBankHandler&quot;,
+  &quot;event.code&quot;: &quot;app.log&quot;,
+  &quot;message&quot;: &quot;ORA-12899: value too large for column \&quot;APP\&quot;.\&quot;QUESTION_BANK\&quot;.\&quot;TITLE\&quot; (actual: 312, maximum: 255)&quot;,
+  &quot;trace.id&quot;: &quot;4bf92f3577b34da6a3ce929d0e0e4736&quot;,
+  &quot;span.id&quot;: &quot;5f1c3e8a9b2d4c07&quot;,
+  &quot;user.id&quot;: &quot;u_1029&quot;,
+  &quot;user.roles&quot;: [
+    &quot;teacher&quot;
+  ],
+  &quot;organization.id&quot;: &quot;s_118&quot;,
+  &quot;host.name&quot;: &quot;school-core-api-6f9c7d8b4-tx2lp&quot;,
+  &quot;error.type&quot;: &quot;QueryFailedError&quot;,
+  &quot;error.message&quot;: &quot;ORA-12899: value too large for column \&quot;APP\&quot;.\&quot;QUESTION_BANK\&quot;.\&quot;TITLE\&quot; (actual: 312, maximum: 255)&quot;,
+  &quot;error.code&quot;: &quot;ORA-12899&quot;,
+  &quot;error.stack_trace&quot;: &quot;QueryFailedError: ORA-12899: value too large for column \&quot;APP\&quot;.\&quot;QUESTION_BANK\&quot;.\&quot;TITLE\&quot; (actual: 312, maximum: 255)\n    at OracleQueryRunner.query (node_modules/typeorm/driver/oracle/OracleQueryRunner.js:178:19)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async InsertQueryBuilder.execute (node_modules/typeorm/query-builder/InsertQueryBuilder.js:106:33)\n    at async SubjectExecutor.executeInsertOperations (node_modules/typeorm/persistence/SubjectExecutor.js:260:42)\n    at async SubjectExecutor.execute (node_modules/typeorm/persistence/SubjectExecutor.js:92:9)\n    at async EntityPersistExecutor.execute (node_modules/typeorm/persistence/EntityPersistExecutor.js:140:21)\n    at async ImportQuestionBankHandler.execute (src/domain/question-bank/import-question-bank.handler.ts:88:7)\n    at async CommandBus.execute (node_modules/@nestjs/cqrs/dist/command-bus.js:47:28)\n    at async QuestionBankController.import (src/domain/question-bank/question-bank.controller.ts:54:12)\n    at async node_modules/@nestjs/core/router/router-execution-context.js:46:28&quot;,
+  &quot;log.origin.function&quot;: &quot;ImportQuestionBankHandler.execute&quot;,
+  &quot;log.origin.file.name&quot;: &quot;src/domain/question-bank/import-question-bank.handler.ts&quot;,
+  &quot;error.cause&quot;: {
+    &quot;type&quot;: &quot;Error&quot;,
+    &quot;message&quot;: &quot;ORA-12899: value too large for column \&quot;APP\&quot;.\&quot;QUESTION_BANK\&quot;.\&quot;TITLE\&quot; (actual: 312, maximum: 255)&quot;,
+    &quot;code&quot;: &quot;ORA-12899&quot;
+  },
+  &quot;labels&quot;: {
+    &quot;usecase&quot;: &quot;ImportQuestionBankCommand&quot;,
+    &quot;failed_step&quot;: &quot;oracle INSERT QUESTION_BANK&quot;,
+    &quot;error_category&quot;: &quot;data&quot;,
+    &quot;error_target&quot;: &quot;QuestionBankEntity.title&quot;
+  },
+  &quot;http.request.method&quot;: &quot;POST&quot;,
+  &quot;http.route&quot;: &quot;/question-bank/import&quot;,
+  &quot;url.path&quot;: &quot;/question-bank/import&quot;,
+  &quot;dependency.type&quot;: &quot;oracle&quot;,
+  &quot;error.hint&quot;: &quot;Value too long for column&quot;,
+  &quot;error.hint_detail&quot;: &quot;A text value exceeds the column size. Common in Excel imports; validate length before saving.&quot;,
+  &quot;error.fix&quot;: &quot;QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.&quot;
+}</pre>
+            </div>
+          </details>
+          <details class="disclosure">
+            <summary>ข้อความที่ส่งให้ AI<span class="disclosure__meta">Markdown · ชื่อ key ชุดเดียวกับทุกหน้า · ไม่มี user id</span></summary>
+            <div class="disclosure__body">
+<pre class="code code--wrap" id="lg-ai-md">### Value too long for column (ORA-12899, category: data)
+- level: error
+- service: school-core-api/api 31.4.0
+- env: prod
+- when: 2026-10-17 14:18:09.226 ICT
+- request: POST /question-bank/import → 500 in 1,842 ms
+- this_case: QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.
+- what: A text value exceeds the column size. Common in Excel imports; validate length before saving.
+- where: POST /question-bank/import · usecase ImportQuestionBankCommand
+- origin: ImportQuestionBankHandler.execute · src/domain/question-bank/import-question-bank.handler.ts
+- target: QuestionBankEntity.title
+- failed_step: oracle INSERT QUESTION_BANK
+- error: QueryFailedError [ORA-12899] ORA-12899: value too large for column &quot;APP&quot;.&quot;QUESTION_BANK&quot;.&quot;TITLE&quot; (actual: 312, maximum: 255)
+- stack:
+  - at ImportQuestionBankHandler.execute (src/domain/question-bank/import-question-bank.handler.ts:88:7)
+  - at QuestionBankController.import (src/domain/question-bank/question-bank.controller.ts:54:12)
+  - at OracleQueryRunner.query (node_modules/typeorm/driver/oracle/OracleQueryRunner.js:178:19)
+- trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+- counts: group 214 times · 37 users in 24 h
+- fields: see docs/DATA-DICTIONARY.md</pre>
+            </div>
+          </details>
+        </div>
+        <div class="drawer__foot">
+          <a class="btn" href="trace-detail.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>เปิด trace</a>
+          <a class="btn" href="logs.html?traceId=4bf92f3577b34da6a3ce929d0e0e4736"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12L9.5 9v4l-3-1.5V9z"/></svg>ดู log ทั้ง trace</a>
+          <button class="btn btn-copy" type="button" data-copy="{&quot;@timestamp&quot;:&quot;2026-10-17T07:18:09.226Z&quot;,&quot;log.level&quot;:&quot;error&quot;,&quot;service.name&quot;:&quot;school-core-api/api&quot;,&quot;service.version&quot;:&quot;31.4.0&quot;,&quot;service.environment&quot;:&quot;prod&quot;,&quot;log.logger&quot;:&quot;ImportQuestionBankHandler&quot;,&quot;event.code&quot;:&quot;app.log&quot;,&quot;message&quot;:&quot;ORA-12899: value too large for column \&quot;APP\&quot;.\&quot;QUESTION_BANK\&quot;.\&quot;TITLE\&quot; (actual: 312, maximum: 255)&quot;,&quot;trace.id&quot;:&quot;4bf92f3577b34da6a3ce929d0e0e4736&quot;,&quot;span.id&quot;:&quot;5f1c3e8a9b2d4c07&quot;,&quot;user.id&quot;:&quot;u_1029&quot;,&quot;user.roles&quot;:[&quot;teacher&quot;],&quot;organization.id&quot;:&quot;s_118&quot;,&quot;host.name&quot;:&quot;school-core-api-6f9c7d8b4-tx2lp&quot;,&quot;error.type&quot;:&quot;QueryFailedError&quot;,&quot;error.message&quot;:&quot;ORA-12899: value too large for column \&quot;APP\&quot;.\&quot;QUESTION_BANK\&quot;.\&quot;TITLE\&quot; (actual: 312, maximum: 255)&quot;,&quot;error.code&quot;:&quot;ORA-12899&quot;,&quot;error.stack_trace&quot;:&quot;QueryFailedError: ORA-12899: value too large for column \&quot;APP\&quot;.\&quot;QUESTION_BANK\&quot;.\&quot;TITLE\&quot; (actual: 312, maximum: 255)\n    at OracleQueryRunner.query (node_modules/typeorm/driver/oracle/OracleQueryRunner.js:178:19)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async InsertQueryBuilder.execute (node_modules/typeorm/query-builder/InsertQueryBuilder.js:106:33)\n    at async SubjectExecutor.executeInsertOperations (node_modules/typeorm/persistence/SubjectExecutor.js:260:42)\n    at async SubjectExecutor.execute (node_modules/typeorm/persistence/SubjectExecutor.js:92:9)\n    at async EntityPersistExecutor.execute (node_modules/typeorm/persistence/EntityPersistExecutor.js:140:21)\n    at async ImportQuestionBankHandler.execute (src/domain/question-bank/import-question-bank.handler.ts:88:7)\n    at async CommandBus.execute (node_modules/@nestjs/cqrs/dist/command-bus.js:47:28)\n    at async QuestionBankController.import (src/domain/question-bank/question-bank.controller.ts:54:12)\n    at async node_modules/@nestjs/core/router/router-execution-context.js:46:28&quot;,&quot;log.origin.function&quot;:&quot;ImportQuestionBankHandler.execute&quot;,&quot;log.origin.file.name&quot;:&quot;src/domain/question-bank/import-question-bank.handler.ts&quot;,&quot;error.cause&quot;:{&quot;type&quot;:&quot;Error&quot;,&quot;message&quot;:&quot;ORA-12899: value too large for column \&quot;APP\&quot;.\&quot;QUESTION_BANK\&quot;.\&quot;TITLE\&quot; (actual: 312, maximum: 255)&quot;,&quot;code&quot;:&quot;ORA-12899&quot;},&quot;labels&quot;:{&quot;usecase&quot;:&quot;ImportQuestionBankCommand&quot;,&quot;failed_step&quot;:&quot;oracle INSERT QUESTION_BANK&quot;,&quot;error_category&quot;:&quot;data&quot;,&quot;error_target&quot;:&quot;QuestionBankEntity.title&quot;},&quot;http.request.method&quot;:&quot;POST&quot;,&quot;http.route&quot;:&quot;/question-bank/import&quot;,&quot;url.path&quot;:&quot;/question-bank/import&quot;,&quot;dependency.type&quot;:&quot;oracle&quot;,&quot;error.hint&quot;:&quot;Value too long for column&quot;,&quot;error.hint_detail&quot;:&quot;A text value exceeds the column size. Common in Excel imports; validate length before saving.&quot;,&quot;error.fix&quot;:&quot;QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.&quot;}"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอก JSON</span></button>
+          <button class="btn btn--cta btn-copy" type="button" data-copy-target="#lg-ai-md"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+        </div>
+      </aside>
+
+    </main>
+  </div>
+</div>
+<script>
+  /* logs.html only: a click on the selected row opens its drawer; "expand all" opens every error row. ?drawer=ora (app.js) opens the drawer on load. */
+  (function () {
+    function ready(fn) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
+    ready(function () {
+      document.addEventListener('click', function (e) {
+        var tr = e.target.closest && e.target.closest('tr.is-clickable');
+        if (!tr || e.target.closest('a, button, input, select, summary, label')) return;
+        var opener = tr.querySelector('[data-drawer-open]');
+        if (opener) opener.click();
+      });
+      var all = document.getElementById('lg-expand-all');
+      if (all) all.addEventListener('click', function () {
+        Array.prototype.forEach.call(document.querySelectorAll('.lg-table .row-toggle[aria-expanded="false"]'), function (b) { b.click(); });
+      });
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+/* Users, roles, account (/admin/*, /account): prefix adm- */
+.adm-field { display: grid; gap: var(--sp-1); min-width: 0; }
+.adm-field__label { font-size: var(--fs-12); font-weight: 600; color: var(--ink-2); }
+.adm-field__hint { font-size: var(--fs-12); color: var(--muted); }
+.adm-input {
+  height: 34px; width: 100%; padding: 0 var(--sp-2); border: 1px solid var(--control-line); border-radius: var(--r-2);
+  background: var(--surface); color: var(--ink); font: 400 var(--fs-13)/1.2 var(--font-ui);
+}
+.adm-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--accent); }
+.adm-form { display: grid; gap: var(--sp-4); }
+.adm-form__row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-3); }
+.adm-form__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); justify-content: flex-end; }
+.adm-section { display: grid; gap: var(--sp-2); }
+.adm-section__title { font-size: var(--fs-13); font-weight: 600; }
+.adm-section__sub { font-size: var(--fs-12); color: var(--muted); }
+.adm-checks { display: flex; flex-wrap: wrap; gap: var(--sp-1h) var(--sp-3); }
+.adm-check { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-13); cursor: pointer; }
+.adm-check input { width: 15px; height: 15px; accent-color: var(--accent); }
+.adm-matrix th, .adm-matrix td { text-align: center; }
+.adm-matrix th:first-child, .adm-matrix td:first-child { text-align: left; }
+.adm-matrix td:first-child small { display: block; color: var(--muted); font-size: var(--fs-12); }
+.adm-row-actions { display: flex; flex-wrap: wrap; gap: var(--sp-1); justify-content: flex-end; }
+.adm-status--active { color: var(--ok); }
+.adm-status--pending { color: var(--warn); }
+.adm-status--banned { color: var(--danger); }
+.adm-link { display: flex; gap: var(--sp-2); align-items: center; }
+.adm-link .adm-input { font-family: var(--font-mono); font-size: var(--fs-12); }
+.adm-effective { display: grid; gap: 4px; font-size: var(--fs-13); }
+.adm-effective__row { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); align-items: baseline; }
+.adm-effective__from { color: var(--muted); font-size: var(--fs-12); }
+.adm-stack { display: grid; gap: var(--sp-4); }
+.adm-modal {
+  width: min(560px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line); border-radius: var(--r-3);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-overlay);
+}
+.adm-modal::backdrop { background: var(--scrim); }
+.adm-modal__head { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-4) var(--sp-4) 0; }
+.adm-modal__title { flex: 1; font-size: var(--fs-16); font-weight: 600; line-height: 1.35; }
+.adm-modal__body { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-13); }
+.adm-modal__foot { display: flex; justify-content: flex-end; gap: var(--sp-2); padding: 0 var(--sp-4) var(--sp-4); }
+.adm-invite { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: 1px dashed var(--line-strong); border-radius: var(--r-2); background: var(--surface-2); }
+/* On/off switch (button role="switch"): the knob slides right when on; --danger when it means "banned" */
+.adm-switch { display: inline-flex; align-items: center; gap: var(--sp-2); padding: 0; border: 0; background: none; color: var(--ink); font-size: var(--fs-13); cursor: pointer; }
+.adm-switch[disabled] { opacity: 0.55; cursor: progress; }
+.adm-switch__track {
+  position: relative; width: 36px; height: 20px; flex: none; border-radius: var(--r-pill);
+  background: var(--surface-3); border: 1px solid var(--line-strong); transition: background var(--dur-2) var(--ease-out);
+}
+.adm-switch__track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); transition: transform var(--dur-2) var(--ease-out);
+}
+.adm-switch[aria-checked="true"] .adm-switch__track { background: var(--danger-solid); border-color: var(--danger-solid); }
+.adm-switch[aria-checked="true"] .adm-switch__track::after { transform: translateX(16px); }
+.adm-switch:focus-visible { outline: none; }
+.adm-switch:focus-visible .adm-switch__track { outline: 2px solid var(--focus); outline-offset: 2px; }

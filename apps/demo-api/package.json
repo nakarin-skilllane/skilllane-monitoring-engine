@@ -1,0 +1,35 @@
+{
+  "name": "@skilllane/monitoring-demo-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demo NestJS app (school-core-api-like) that uses skilllane-monitoring, plus a traffic generator",
+  "main": "dist/src/main.js",
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "start": "node dist/src/main.js",
+    "start:core-api": "DEMO_SERVICE=core APP_ROLE=api OTEL_SERVICE_NAME=school-core-api NODE_OPTIONS='--require skilllane-monitoring/register' node dist/src/main.js",
+    "start:core-worker": "DEMO_SERVICE=core APP_ROLE=worker OTEL_SERVICE_NAME=school-core-api NODE_OPTIONS='--require skilllane-monitoring/register' node dist/src/main.js",
+    "start:etl-api": "DEMO_SERVICE=etl APP_ROLE=api OTEL_SERVICE_NAME=school-etl-api NODE_OPTIONS='--require skilllane-monitoring/register' node dist/src/main.js",
+    "traffic": "node scripts/traffic.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "skilllane-monitoring": "link:../../../skilllane-monitoring/packages/monitoring",
+    "@nestjs/bullmq": "^11.0.4",
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/cqrs": "^11.0.3",
+    "@nestjs/platform-express": "^11.1.0",
+    "@opentelemetry/api": "^1.9.0",
+    "axios": "^1.9.0",
+    "bullmq": "^5.56.0",
+    "ioredis": "^5.3.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.3"
+  }
+}

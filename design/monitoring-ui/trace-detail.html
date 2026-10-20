@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trace detail · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/app.js"></script>
+<style>
+  /* trace-detail.html only. Tokens and components come from assets/styles.css; page classes use the td- prefix. */
+
+  /* Page header: route as title, ids and services in one meta row */
+  .td-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
+  .td-title__route { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0; overflow-wrap: anywhere; min-width: 0; }
+  .td-meta { gap: var(--sp-2) var(--sp-5); }
+  .td-meta__group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; max-width: 100%; }
+  .td-meta__arrow { color: var(--muted); }
+
+  .td-callout-meta { display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-12); }
+  .td-kpis .kpi__label .svc { font-size: var(--fs-12); }
+
+  /* Waterfall: extends .wf with tree guides, full-height gridlines every 250 ms and log markers */
+  .td-wf { --td-step: 14px; }
+  .td-wf .wf__row { position: relative; }
+  .td-wf .wf__name {
+    align-self: stretch;
+    padding-left: calc(var(--d, 0) * var(--td-step));
+    background: repeating-linear-gradient(to right, transparent 0 3px, var(--line-strong) 3px 4px, transparent 4px var(--td-step)) 0 0 / calc(var(--d, 0) * var(--td-step)) 100% no-repeat;
+  }
+  .td-wf .wf__name > span:last-child { overflow: visible; }
+  /* rows 5–8 ran in school-etl-api: the guide under span #4 (the HTTP client call) turns into a 2 px service-coloured rail */
+  .td-wf .td-remote .wf__name {
+    background:
+      linear-gradient(var(--svc-2), var(--svc-2)) calc(2 * var(--td-step) + 3px) 0 / 2px 100% no-repeat,
+      repeating-linear-gradient(to right, transparent 0 3px, var(--line-strong) 3px 4px, transparent 4px var(--td-step)) 0 0 / calc(var(--d, 0) * var(--td-step)) 100% no-repeat;
+  }
+  .td-wf .wf__track {
+    align-self: stretch; height: auto;
+    background: linear-gradient(to right, var(--grid) 1px, transparent 1px) 0 0 / 13.5722% 100% repeat-x; /* 250 ms of 1,842 */
+    box-shadow: inset -1px 0 0 var(--grid);
+  }
+  .td-wf .wf__track .dur { top: calc(50% - 6px); bottom: auto; height: 12px; }
+  .td-r { text-align: right; }
+
+  .td-pick {
+    flex: 0 1 auto; min-width: 0; padding: 0; border: 0; background: none;
+    font: inherit; color: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  }
+  .td-pick::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+  .td-pick:focus-visible { outline: none; }
+  .td-pick:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--r-1); }
+  .td-wf .wf__row:hover .td-pick { color: var(--accent); }
+  .td-wf .wf__row.is-error:hover .td-pick { color: var(--danger); text-decoration: underline; text-underline-offset: 2px; }
+  .td-lib, .td-peer { color: var(--muted); flex: none; }
+  .td-hop { display: inline-flex; align-items: center; gap: 3px; flex: none; color: var(--ink-2); font-size: var(--fs-11); }
+  .td-hop .i { width: 12px; height: 12px; color: var(--muted); }
+
+  /* Log lane + markers. INF = ring (outline weight), ERR = solid diamond; both carry a 2 px surface ring */
+  .td-lane { min-height: 40px; background: var(--surface-2); }
+  .td-lane:hover { background: var(--surface-2); }
+  .td-lane .wf__name { font-family: var(--font-ui); color: var(--ink-2); font-weight: 500; background: none; }
+  .td-lane .wf__name::before { display: none; }
+  .td-lane .wf__name .i { color: var(--muted); }
+  .td-log {
+    position: absolute; z-index: 2; left: calc(var(--t) * 1%); top: var(--y, 50%);
+    width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--info-solid); box-shadow: 0 0 0 2px var(--surface);
+  }
+  .td-log::before { content: ""; position: absolute; inset: -9px; }
+  .td-log--err { border: 0; border-radius: 1px; background: var(--danger-solid); transform: rotate(45deg); }
+  .td-log:hover, .td-log:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .td-key-log { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--info-solid); background: var(--surface); flex: none; }
+  .td-key-log--err { border: 0; border-radius: 1px; background: var(--danger-solid); transform: rotate(45deg); width: 8px; height: 8px; }
+  .td-key-rail { width: 2px; height: 12px; border-radius: 1px; background: var(--svc-2); flex: none; }
+  .td-wf-foot { display: grid; gap: var(--sp-2); }
+  /* Motion: each log marker appears at its own time, just after the span bars reach it (styles.css section 5) */
+  :root[data-motion="on"] .td-wf:not(.is-in) .td-log { opacity: 0; }
+  :root[data-motion="on"] .td-wf.is-in .td-log { animation: mo-pop var(--dur-2) var(--ease-out) calc(var(--t, 0) * 5ms + var(--dur-2)) backwards; }
+  .td-wf-foot .legend { margin: 0; }
+
+  /* Selected span panel */
+  .td-sd-head { align-items: center; }
+  .td-sd-title { font: 600 14px/1.4 var(--font-mono); color: var(--ink); overflow-wrap: anywhere; min-width: 0; }
+  .td-sd-grid { gap: var(--sp-6); }
+  .td-sd-grid .fields pre.code { margin-top: 2px; }
+  .td-sd-grid .table-wrap { margin-top: var(--sp-1); }
+  .td-sd-grid .table td { overflow-wrap: anywhere; }
+  .td-sd-grid .kv-list { margin-top: var(--sp-2); }
+
+
+  /* Narrow (< 720 px): .wf in styles.css stacks name + ms over a full-width bar; the tree guides give way to plain indentation */
+  @media (max-width: 719px) {
+    .td-wf { --td-step: 10px; }
+    .td-wf .wf__name, .td-wf .td-remote .wf__name { align-self: center; background: none; }
+    /* keep the name on the same line as its service key (8 px + 6 px gap), and after the ERR badge on the error row */
+    .td-wf .td-pick { white-space: normal; overflow-wrap: anywhere; max-width: calc(100% - 14px); }
+    .td-wf .is-error .td-pick { max-width: calc(100% - 54px); }
+    .td-wf .wf__track { align-self: auto; }
+    .td-wf .td-lane { min-height: 0; }
+    .td-wf .td-lane .wf__track { height: 34px; }
+    .td-sd-grid { gap: var(--sp-5); }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html" aria-current="page"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h" selected>1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h">24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">17 ต.ค. 13:20–14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><a href="traces.html">Trace</a><span class="crumbs__sep" aria-hidden="true">/</span><span class="mono" title="4bf92f3577b34da6a3ce929d0e0e4736">4bf92f35…</span></nav>
+          <h1 class="page-title td-title"><span class="td-title__route">POST /question-bank/import</span><span class="http http--5xx">500</span></h1>
+          <p class="page-sub">Request เดียวที่ข้าม 2 service: เวลาหมดไปกับขั้นไหน และพังที่ขั้นไหน · <span class="env env--prod">prod</span> · <span class="ts">17 ต.ค. 14:18:07.412</span> ICT</p>
+          <div class="page-head__meta td-meta">
+            <span class="idchip"><span class="idchip__k">trace</span><span class="idchip__v">4bf92f3577b34da6a3ce929d0e0e4736</span><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4bf92f3577b34da6a3ce929d0e0e4736" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span>
+            <span class="td-meta__group" aria-label="Service ที่ trace นี้ผ่าน">
+              <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="tag" title="service.version">31.4.0</span>
+              <svg class="i i--sm td-meta__arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+              <span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span>
+            </span>
+            <span class="td-meta__group">
+              <span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_1029">u_1029</a></span>
+              <span>teacher · โรงเรียน <span class="mono">s_118</span></span>
+            </span>
+          </div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn--quiet btn-copy" type="button" data-copy="skilllane-monitor/traces/4bf92f3577b34da6a3ce929d0e0e4736?env=prod"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกลิงก์</span></button>
+          <a class="btn" href="logs.html?traceId=4bf92f3577b34da6a3ce929d0e0e4736"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>ดู log ของ trace นี้</a>
+          <button class="btn btn--cta btn-copy" type="button" data-copy-target="#ai-md-trace"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+        </div>
+      </header>
+
+      <!-- screen content starts here -->
+
+      <!-- Failed step: span with an exception + the error log line of this trace -->
+      <div class="callouts">
+        <div class="callout callout--error" role="status">
+          <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l3.75 3.75v5l-3.75 3.75h-5L1.75 10.5v-5z"/><path d="M8 5v3.5M8 10.9v.1"/></svg>
+          <p class="callout__title">พังที่ span #11 <span class="mono">oracle INSERT QUESTION_BANK</span>: Value too long for column</p>
+          <p class="callout__text">QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.<span class="td-callout-meta">ที่ <span class="mono">ImportQuestionBankHandler.execute</span> · ไม่ใช่ครั้งเดียว: error group นี้เกิด 214 ครั้ง · 37 users ใน 24 ชั่วโมง</span></p>
+          <div class="callout__actions"><a class="btn btn--sm" href="#span-detail-section" data-pick="11">ดู span</a><a class="btn btn--sm" href="error-detail.html">เปิด error</a></div>
+        </div>
+      </div>
+
+      <div class="kpis kpis--4 td-kpis mt-4">
+        <div class="kpi">
+          <span class="kpi__label">เวลารวม</span>
+          <span class="kpi__value">1,842<span class="kpi__unit">ms</span></span>
+          <div class="kpi__foot"><span class="kpi__delta">p95 ของ route นี้ 2.1 s (1 ชั่วโมง)</span></div>
+        </div>
+        <div class="kpi kpi--alert">
+          <span class="kpi__label">ผลลัพธ์</span>
+          <span class="kpi__value">500<span class="kpi__unit">HTTP</span></span>
+          <div class="kpi__foot"><span class="kpi__delta kpi__delta--bad">พังที่ span #11 · +1,390 ms</span></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">Span</span>
+          <span class="kpi__value">13</span>
+          <div class="kpi__foot"><span class="kpi__delta">error 1 · 2 service · log 4</span></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">เวลาใน <span class="svc svc-2">school-etl-api</span></span>
+          <span class="kpi__value">1,302<span class="kpi__unit">ms</span></span>
+          <div class="kpi__foot"><span class="kpi__delta">71 % ของ trace · parse-excel 994 ms</span></div>
+        </div>
+      </div>
+
+      <!-- Waterfall -->
+      <section class="section" aria-labelledby="h-wf">
+        <div class="section__head">
+          <h2 class="section__title" id="h-wf">Waterfall</h2>
+          <span class="section__meta">13 span ตามเวลาเริ่ม · แกน 0–1,842 ms นับจาก <span class="ts">14:18:07.412</span> · เส้นตั้งทุก 250 ms · คลิก span เพื่อดูรายละเอียด</span>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <div class="wf td-wf" role="table" aria-label="Waterfall ของ trace 4bf92f35…: 13 span และหมุด log 4 จุด">
+              <div class="wf__scale" role="row">
+                <span role="columnheader">Span</span>
+                <span class="wf__ticks" role="columnheader" aria-label="แกนเวลา 0 ถึง 1,842 ms"><span style="--t:0">0 ms</span><span style="--t:27.1444">500</span><span style="--t:54.2888">1,000</span><span style="--t:81.4332">1,500</span><span class="wf__tick-end">1,842</span></span>
+                <span class="td-r" role="columnheader">เวลา</span>
+              </div>
+
+              <!-- log lane: every log line of the trace at its time; collisions stack vertically -->
+              <div class="wf__row td-lane" role="row">
+                <span class="wf__name" role="cell"><svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg><span>Log ของ trace <span class="tab__count">4</span></span></span>
+                <span class="wf__track" role="cell">
+                  <a class="td-log" href="#log-1" style="--t:0.109" data-tip="+2 ms · 14:18:07.414|INF::Importing question bank file" data-tip-keys="info-solid" aria-label="log INF 14:18:07.414 Importing question bank file"></a>
+                  <a class="td-log" href="#log-2" style="--t:71.498" data-tip="+1,317 ms · 14:18:08.729|INF::Parsed excel rows=120" data-tip-keys="info-solid" aria-label="log INF 14:18:08.729 Parsed excel"></a>
+                  <a class="td-log td-log--err" href="#log-3" style="--t:98.480;--y:28%" data-tip="+1,814 ms · 14:18:09.226|ERR::Value too long for column" data-tip-keys="danger-solid" aria-label="log ERR 14:18:09.226 Value too long for column"></a>
+                  <a class="td-log td-log--err" href="#log-4" style="--t:100;--y:72%" data-tip="+1,842 ms · 14:18:09.254|ERR::http.request POST /question-bank/import 500" data-tip-keys="danger-solid" aria-label="log ERR 14:18:09.254 http.request 500"></a>
+                </span>
+                <span class="wf__ms" role="cell"></span>
+              </div>
+
+              <div class="wf__row" role="row" style="--c:var(--svc-1)" data-span="1">
+                <span class="wf__name" role="cell" style="--d:0"><button class="td-pick" type="button" data-pick="1" aria-controls="span-detail">POST /question-bank/import</button><span class="tag">SERVER</span><span class="http http--5xx">500</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:0;--w:100"></i></span><a class="td-log td-log--err" href="#log-4" style="--t:100" tabindex="-1" data-tip="+1,842 ms · 14:18:09.254|ERR::http.request 500" data-tip-keys="danger-solid" aria-label="log ERR ของ span นี้ 14:18:09.254"></a></span>
+                <span class="wf__ms" role="cell">1,842 ms</span>
+              </div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)" data-span="2">
+                <span class="wf__name" role="cell" style="--d:1"><button class="td-pick" type="button" data-pick="2" aria-controls="span-detail">request handler - /question-bank/import</button><span class="tag">INTERNAL</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:0.109;--w:99.783"></i></span><a class="td-log" href="#log-1" style="--t:0.109" tabindex="-1" data-tip="+2 ms · 14:18:07.414|INF::Importing question bank file" data-tip-keys="info-solid" aria-label="log INF ของ span นี้ 14:18:07.414"></a><a class="td-log td-log--err" href="#log-3" style="--t:98.480" tabindex="-1" data-tip="+1,814 ms · 14:18:09.226|ERR::Value too long for column" data-tip-keys="danger-solid" aria-label="log ERR ของ span นี้ 14:18:09.226"></a></span>
+                <span class="wf__ms" role="cell">1,838 ms</span>
+              </div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)" data-span="3">
+                <span class="wf__name" role="cell" style="--d:2"><button class="td-pick" type="button" data-pick="3" aria-controls="span-detail">GET</button><span class="td-lib">ioredis</span><span class="tag">CLIENT</span><span class="td-peer">→ 10.0.3.21:6379</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:0.326;--w:0.109"></i></span></span>
+                <span class="wf__ms" role="cell">2 ms</span>
+              </div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)" data-span="4">
+                <span class="wf__name" role="cell" style="--d:2"><button class="td-pick" type="button" data-pick="4" aria-controls="span-detail">POST</button><span class="td-lib">http client</span><span class="tag">CLIENT</span><span class="td-peer">→ school-etl-api:5102</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:0.651;--w:71.118"></i></span></span>
+                <span class="wf__ms" role="cell">1,310 ms</span>
+              </div>
+              <div class="wf__row td-remote" role="row" style="--c:var(--svc-2)" data-span="5">
+                <span class="wf__name" role="cell" style="--d:3"><button class="td-pick" type="button" data-pick="5" aria-controls="span-detail">POST /etl/parse-excel</button><span class="tag">SERVER</span><span class="td-hop" title="รันใน school-etl-api เรียกมาจาก span #4 ผ่าน HTTP"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h8M7 5l3 3-3 3M13 3v10"/></svg>school-etl-api/api</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-2)"><i style="--s:0.869;--w:70.684"></i></span></span>
+                <span class="wf__ms" role="cell">1,302 ms</span>
+              </div>
+              <div class="wf__row td-remote" role="row" style="--c:var(--svc-2)" data-span="6">
+                <span class="wf__name" role="cell" style="--d:4"><button class="td-pick" type="button" data-pick="6" aria-controls="span-detail">request handler - /etl/parse-excel</button><span class="tag">INTERNAL</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-2)"><i style="--s:0.923;--w:70.575"></i></span><a class="td-log" href="#log-2" style="--t:71.498" tabindex="-1" data-tip="+1,317 ms · 14:18:08.729|INF::Parsed excel rows=120" data-tip-keys="info-solid" aria-label="log INF ของ span นี้ 14:18:08.729"></a></span>
+                <span class="wf__ms" role="cell">1,300 ms</span>
+              </div>
+              <div class="wf__row td-remote" role="row" style="--c:var(--svc-2)" data-span="7">
+                <span class="wf__name" role="cell" style="--d:5"><button class="td-pick" type="button" data-pick="7" aria-controls="span-detail">S3.GetObject</button><span class="tag">CLIENT</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-2)"><i style="--s:1.194;--w:15.364"></i></span></span>
+                <span class="wf__ms" role="cell">283 ms</span>
+              </div>
+              <div class="wf__row td-remote" role="row" style="--c:var(--svc-2)" data-span="8">
+                <span class="wf__name" role="cell" style="--d:5"><button class="td-pick" type="button" data-pick="8" aria-controls="span-detail">parse-excel</button><span class="tag">INTERNAL</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-2)"><i style="--s:16.721;--w:53.963"></i></span></span>
+                <span class="wf__ms" role="cell">994 ms</span>
+              </div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)" data-span="9">
+                <span class="wf__name" role="cell" style="--d:2"><button class="td-pick" type="button" data-pick="9" aria-controls="span-detail">oracle SELECT QUESTION_BANK</button><span class="tag">CLIENT</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:72.204;--w:1.737"></i></span></span>
+                <span class="wf__ms" role="cell">32 ms</span>
+              </div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)" data-span="10">
+                <span class="wf__name" role="cell" style="--d:2"><button class="td-pick" type="button" data-pick="10" aria-controls="span-detail">oracle SELECT SUBJECT</button><span class="tag">CLIENT</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:74.104;--w:0.869"></i></span></span>
+                <span class="wf__ms" role="cell">16 ms</span>
+              </div>
+              <div class="wf__row is-error is-selected" role="row" style="--c:var(--svc-1)" data-span="11">
+                <span class="wf__name" role="cell" style="--d:2"><span class="lvl lvl--err">ERR</span><button class="td-pick" type="button" data-pick="11" aria-controls="span-detail" aria-current="true">oracle INSERT QUESTION_BANK</button><span class="tag">CLIENT</span></span>
+                <span class="wf__track" role="cell"><span class="dur is-error"><i style="--s:75.461;--w:22.910"></i></span></span>
+                <span class="wf__ms" role="cell">422 ms</span>
+              </div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)" data-span="12">
+                <span class="wf__name" role="cell" style="--d:2"><button class="td-pick" type="button" data-pick="12" aria-controls="span-detail">oracle ROLLBACK</button><span class="tag">CLIENT</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:98.534;--w:0.597"></i></span></span>
+                <span class="wf__ms" role="cell">11 ms</span>
+              </div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)" data-span="13">
+                <span class="wf__name" role="cell" style="--d:2"><button class="td-pick" type="button" data-pick="13" aria-controls="span-detail">POST /question-bank/import response write</button><span class="tag">INTERNAL</span></span>
+                <span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:99.240;--w:0.651"></i></span></span>
+                <span class="wf__ms" role="cell">12 ms</span>
+              </div>
+            </div>
+          </div>
+          <div class="panel__foot td-wf-foot">
+            <ul class="legend">
+              <li class="legend__item"><span class="legend__key" style="--c:var(--svc-1)"></span>school-core-api</li>
+              <li class="legend__item"><span class="legend__key" style="--c:var(--svc-2)"></span>school-etl-api</li>
+              <li class="legend__item"><span class="td-key-rail" aria-hidden="true"></span>ช่วงที่รันใน school-etl-api (เรียกผ่าน HTTP จาก span #4)</li>
+              <li class="legend__item"><span class="legend__key" style="--c:var(--danger-solid)"></span>span ที่ error (มี ERR กำกับ)</li>
+              <li class="legend__item"><span class="td-key-log" aria-hidden="true"></span>log INF</li>
+              <li class="legend__item"><span class="td-key-log td-key-log--err" aria-hidden="true"></span>log ERR</li>
+            </ul>
+            <details class="chart__table">
+              <summary class="summary-line">ดูเป็นตาราง (13 span)</summary>
+              <div class="table-wrap">
+                <table class="table table--dense">
+                  <caption>เวลาเป็น ms นับจาก 14:18:07.412 ICT</caption>
+                  <thead><tr><th scope="col" class="num">#</th><th scope="col">Span</th><th scope="col">Service</th><th scope="col">Kind</th><th scope="col" class="num">Parent</th><th scope="col" class="num">เริ่ม</th><th scope="col" class="num">จบ</th><th scope="col" class="num">เวลา</th><th scope="col">สถานะ</th></tr></thead>
+                  <tbody>
+                    <tr><td class="num">1</td><td class="mono nowrap">POST /question-bank/import</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">SERVER</td><td class="num t-muted">–</td><td class="num">0</td><td class="num">1,842</td><td class="num">1,842</td><td class="mono t-danger">ERROR · 500</td></tr>
+                    <tr><td class="num">2</td><td class="mono nowrap">request handler - /question-bank/import</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">INTERNAL</td><td class="num">1</td><td class="num">2</td><td class="num">1,840</td><td class="num">1,838</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">3</td><td class="mono nowrap">GET (ioredis)</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">CLIENT</td><td class="num">2</td><td class="num">6</td><td class="num">8</td><td class="num">2</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">4</td><td class="mono nowrap">POST (http client)</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">CLIENT</td><td class="num">2</td><td class="num">12</td><td class="num">1,322</td><td class="num">1,310</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">5</td><td class="mono nowrap">POST /etl/parse-excel</td><td><span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span></td><td class="mono">SERVER</td><td class="num">4</td><td class="num">16</td><td class="num">1,318</td><td class="num">1,302</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">6</td><td class="mono nowrap">request handler - /etl/parse-excel</td><td><span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span></td><td class="mono">INTERNAL</td><td class="num">5</td><td class="num">17</td><td class="num">1,317</td><td class="num">1,300</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">7</td><td class="mono nowrap">S3.GetObject</td><td><span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span></td><td class="mono">CLIENT</td><td class="num">6</td><td class="num">22</td><td class="num">305</td><td class="num">283</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">8</td><td class="mono nowrap">parse-excel</td><td><span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span></td><td class="mono">INTERNAL</td><td class="num">6</td><td class="num">308</td><td class="num">1,302</td><td class="num">994</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">9</td><td class="mono nowrap">oracle SELECT QUESTION_BANK</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">CLIENT</td><td class="num">2</td><td class="num">1,330</td><td class="num">1,362</td><td class="num">32</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">10</td><td class="mono nowrap">oracle SELECT SUBJECT</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">CLIENT</td><td class="num">2</td><td class="num">1,365</td><td class="num">1,381</td><td class="num">16</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr aria-current="true"><td class="num">11</td><td class="mono nowrap">oracle INSERT QUESTION_BANK</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">CLIENT</td><td class="num">2</td><td class="num">1,390</td><td class="num">1,812</td><td class="num">422</td><td class="mono t-danger">ERROR · ORA-12899</td></tr>
+                    <tr><td class="num">12</td><td class="mono nowrap">oracle ROLLBACK</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">CLIENT</td><td class="num">2</td><td class="num">1,815</td><td class="num">1,826</td><td class="num">11</td><td class="mono t-muted">UNSET</td></tr>
+                    <tr><td class="num">13</td><td class="mono nowrap">POST /question-bank/import response write</td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td class="mono">INTERNAL</td><td class="num">2</td><td class="num">1,828</td><td class="num">1,840</td><td class="num">12</td><td class="mono t-muted">UNSET</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- Selected span (static markup = span #11; the page script re-fills it when another span is picked) -->
+      <section class="section" id="span-detail-section" aria-labelledby="h-span">
+        <div class="section__head">
+          <h2 class="section__title" id="h-span">Span ที่เลือก</h2>
+          <span class="section__meta" id="sd-pos">#11 จาก 13 · ขั้นที่พัง (failed step)</span>
+        </div>
+        <div class="panel" id="span-detail">
+          <div class="panel__head td-sd-head">
+            <span id="sd-badge"><span class="lvl lvl--err">ERR</span></span>
+            <h3 class="td-sd-title" id="sd-title">oracle INSERT QUESTION_BANK</h3>
+            <span class="tag" id="sd-kind">CLIENT</span>
+            <span class="svc svc-1" id="sd-svc">school-core-api<span class="svc__role">/api</span></span>
+            <div class="panel__actions"><button class="btn btn--sm btn--quiet btn-copy" type="button" id="sd-copy" data-copy="e5c2a8f1b7d94c3a"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอก span id</span></button></div>
+          </div>
+          <div class="panel__body">
+            <div class="grid grid--2 td-sd-grid">
+              <div>
+                <div class="field-group">
+                  <h3 class="field-group__title">Span</h3>
+                  <dl class="fields">
+                    <dt>ประเภท<span class="fname">kind</span></dt><dd class="mono" id="sd-f-kind">CLIENT</dd>
+                    <dt>Service · role<span class="fname">service · role</span></dt><dd id="sd-f-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></dd>
+                    <dt>เริ่มที่<span class="fname">timestamp</span></dt><dd id="sd-f-start"><span class="mono">+1,390 ms</span> · <span class="ts">14:18:08.802</span></dd>
+                    <dt>เวลาที่ใช้<span class="fname">duration_ns</span></dt><dd id="sd-f-dur"><span class="mono">422 ms</span> · 22.9 % ของ trace</dd>
+                    <dt>สถานะ<span class="fname">status_code · status_message</span></dt><dd id="sd-f-status"><span class="mono t-danger">ERROR</span> · <span class="mono">ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)</span></dd>
+                    <dt>ปลายทาง<span class="fname">peer</span></dt><dd class="mono" id="sd-f-peer">oracle-db:1521</dd>
+                    <dt>Span id<span class="fname">span_id</span></dt><dd class="mono" id="sd-f-id">e5c2a8f1b7d94c3a</dd>
+                    <dt>Parent<span class="fname">parent_span_id</span></dt><dd id="sd-f-parent"><a href="#span-detail-section" data-pick="2" class="mono">#2 request handler - /question-bank/import</a> <span class="mono t-muted">3c1d8e2f7a9b4c60</span></dd>
+                  </dl>
+                </div>
+                <div class="field-group" id="sd-db">
+                  <h3 class="field-group__title">Database</h3>
+                  <dl class="fields">
+                    <dt>ระบบ<span class="fname">db_system</span></dt><dd class="mono" id="sd-f-dbsys">oracle</dd>
+                    <dt>คำสั่ง<span class="fname">db_statement</span></dt><dd id="sd-f-stmt-wrap"><pre class="code code--wrap" id="sd-f-stmt">INSERT INTO "APP"."QUESTION_BANK" ("TITLE", "SUBJECT_ID", "CREATED_BY") VALUES (:1, :2, :3)</pre></dd>
+                  </dl>
+                </div>
+              </div>
+              <div>
+                <div class="field-group" id="sd-exc">
+                  <h3 class="field-group__title">Exception event</h3>
+                  <dl class="fields">
+                    <dt>เวลา<span class="fname">events[].time</span></dt><dd><span class="mono">+1,812 ms</span> · <span class="ts">14:18:09.224</span></dd>
+                    <dt>ประเภท<span class="fname">exception_type</span></dt><dd class="mono">Error</dd>
+                    <dt>ข้อความ<span class="fname">exception_message</span></dt><dd><span class="err-row__actual">ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)</span></dd>
+                    <dt>ตรงกับ error<span class="fname">logs.error_hint</span></dt><dd><a href="error-detail.html">Value too long for column</a> <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span></dd>
+                  </dl>
+                </div>
+                <div class="field-group">
+                  <h3 class="field-group__title">Attribute ทั้งหมด<span class="fname" style="margin:0">attributes</span></h3>
+                  <div class="table-wrap">
+                    <table class="table table--dense">
+                      <thead><tr><th scope="col">key</th><th scope="col">value</th></tr></thead>
+                      <tbody id="sd-attrs">
+                        <tr><td class="mono nowrap">db.system</td><td class="mono">oracle</td></tr>
+                        <tr><td class="mono nowrap">db.user</td><td class="mono">APP</td></tr>
+                        <tr><td class="mono nowrap">db.statement</td><td class="mono">INSERT INTO "APP"."QUESTION_BANK" ("TITLE", "SUBJECT_ID", "CREATED_BY") VALUES (:1, :2, :3)</td></tr>
+                        <tr><td class="mono nowrap">net.peer.name</td><td class="mono">oracle-db</td></tr>
+                        <tr><td class="mono nowrap">net.peer.port</td><td class="mono">1521</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="field-group">
+                  <h3 class="field-group__title">Resource<span class="fname" style="margin:0">resource</span></h3>
+                  <ul class="kv-list" id="sd-res" aria-label="Resource ของ service">
+                    <li class="kv"><span class="kv__k">service.name</span><span class="kv__v">school-core-api</span></li>
+                    <li class="kv"><span class="kv__k">app.role</span><span class="kv__v">api</span></li>
+                    <li class="kv"><span class="kv__k">service.version</span><span class="kv__v">31.4.0</span></li>
+                    <li class="kv"><span class="kv__k">deployment.environment.name</span><span class="kv__v">prod</span></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- The trace's log lines in time order, readable error format -->
+      <section class="section" aria-labelledby="h-logs">
+        <div class="section__head">
+          <h2 class="section__title" id="h-logs">Log ของ trace นี้</h2>
+          <span class="section__meta">4 บรรทัดตามเวลา · INF 2 · ERR 2 · <span class="ts">14:18:07.414–14:18:09.254</span></span>
+          <div class="section__actions"><a class="btn btn--sm" href="logs.html?traceId=4bf92f3577b34da6a3ce929d0e0e4736">เปิดใน Log<svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a></div>
+        </div>
+        <div class="err-list">
+          <article class="err-row" id="log-1">
+            <div class="err-row__head">
+              <span class="lvl lvl--inf">INF</span>
+              <h3 class="err-row__title"><span class="err-row__code">ImportQuestionBankHandler</span>Importing question bank file</h3>
+              <span class="err-row__count"><span class="ts">14:18:07.414</span><span class="mono t-muted">+2 ms</span></span>
+            </div>
+            <ul class="kv-list" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li>
+              <li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/import</span></li>
+              <li class="kv"><span class="kv__k">source</span><span class="kv__v">ImportQuestionBankHandler</span></li>
+            </ul>
+            <div class="err-row__meta">
+              <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span>
+              <span>span <a href="#span-detail-section" data-pick="2" class="mono">#2 request handler - /question-bank/import</a></span>
+              <span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_1029">u_1029</a></span>
+            </div>
+          </article>
+          <article class="err-row" id="log-2">
+            <div class="err-row__head">
+              <span class="lvl lvl--inf">INF</span>
+              <h3 class="err-row__title"><span class="err-row__code">ParseExcelHandler</span>Parsed excel</h3>
+              <span class="err-row__count"><span class="ts">14:18:08.729</span><span class="mono t-muted">+1,317 ms</span></span>
+            </div>
+            <ul class="kv-list" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li>
+              <li class="kv"><span class="kv__k">route</span><span class="kv__v">/etl/parse-excel</span></li>
+              <li class="kv"><span class="kv__k">rows</span><span class="kv__v">120</span></li>
+            </ul>
+            <div class="err-row__meta">
+              <span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span>
+              <span>span <a href="#span-detail-section" data-pick="6" class="mono">#6 request handler - /etl/parse-excel</a></span>
+              <span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_1029">u_1029</a></span>
+            </div>
+          </article>
+          <article class="err-row" id="log-3">
+            <div class="err-row__head">
+              <span class="lvl lvl--err">ERR</span>
+              <h3 class="err-row__title"><span class="err-row__code">ImportQuestionBankHandler</span><a href="error-detail.html">Value too long for column</a></h3>
+              <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+              <span class="err-row__count"><span class="ts">14:18:09.226</span><span class="mono t-muted">+1,814 ms</span></span>
+            </div>
+            <ul class="kv-list" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li>
+              <li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/import</span></li>
+              <li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li>
+              <li class="kv"><span class="kv__k">source</span><span class="kv__v">ImportQuestionBankHandler.execute</span></li>
+              <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/question-bank/import-question-bank.handler.ts</span></li>
+              <li class="kv"><span class="kv__k">target</span><span class="kv__v">QuestionBankEntity.title</span></li>
+            </ul>
+            <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.</p>
+            <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>QueryFailedError [ORA-12899] ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)</p>
+            <div class="err-row__meta">
+              <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span>
+              <span>failed step <a href="#span-detail-section" data-pick="11" class="mono">#11 oracle INSERT QUESTION_BANK</a></span>
+              <span>usecase <span class="mono">ImportQuestionBankCommand</span></span>
+              <span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_1029">u_1029</a></span>
+              <span>teacher · s_118</span>
+            </div>
+          </article>
+          <article class="err-row" id="log-4">
+            <div class="err-row__head">
+              <span class="lvl lvl--err">ERR</span>
+              <h3 class="err-row__title"><span class="err-row__code">http.request</span>request completed</h3>
+              <span class="err-row__count"><span class="ts">14:18:09.254</span><span class="mono t-muted">+1,842 ms</span></span>
+            </div>
+            <ul class="kv-list" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li>
+              <li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/import</span></li>
+              <li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li>
+              <li class="kv"><span class="kv__k">duration</span><span class="kv__v">1,842 ms</span></li>
+            </ul>
+            <div class="err-row__meta">
+              <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span>
+              <span>span <a href="#span-detail-section" data-pick="1" class="mono">#1 POST /question-bank/import</a></span>
+              <span>บรรทัดสรุปของ request ไม่นับเป็น error group</span>
+              <span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_1029">u_1029</a></span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="ai-summary" aria-labelledby="h-ai">
+        <div class="section__head">
+          <h2 class="section__title" id="h-ai">คัดลอกให้ AI</h2>
+          <span class="section__meta">ข้อความในกล่องคือสิ่งที่ปุ่ม "คัดลอกให้ AI" คัดลอกทุกตัวอักษร · key ชุดเดียวกับทุกหน้า · ไม่มีข้อมูลส่วนบุคคล</span>
+        </div>
+        <div class="ai-box">
+          <div class="code-block">
+            <div class="code-block__head"><span class="code-block__title">Markdown · error ของ trace + span + log</span><button class="btn btn--sm btn--primary btn-copy" type="button" data-copy-target="#ai-md-trace"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button></div>
+<pre class="code code--wrap code--tall" id="ai-md-trace"><span class="c-key">### Value too long for column</span> (ORA-12899, category: data)
+- level: error
+- service: school-core-api/api 31.4.0
+- env: prod
+- when: 2026-10-17 14:18:09.226 ICT
+- request: POST /question-bank/import → 500 in 1,842 ms
+- this_case: QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.
+- what: A text value exceeds the column size. Common in Excel imports; validate length before saving.
+- where: POST /question-bank/import · usecase ImportQuestionBankCommand
+- origin: ImportQuestionBankHandler.execute · src/domain/question-bank/import-question-bank.handler.ts
+- target: QuestionBankEntity.title
+- failed_step: oracle INSERT QUESTION_BANK (span #11 · CLIENT · +1,390 ms · 422 ms · peer oracle-db:1521)
+- error: QueryFailedError [ORA-12899] ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)
+- trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+- spans: 13 (1 error) · services: school-core-api/api 31.4.0 → school-etl-api/api · school-etl-api 1,302 of 1,842 ms (S3.GetObject 283 ms, parse-excel 994 ms) · oracle 4 calls 481 ms
+- span_tree (start → end ms):
+  1 POST /question-bank/import · SERVER · school-core-api · 0 → 1,842 · ERROR 500
+    2 request handler - /question-bank/import · INTERNAL · 2 → 1,840
+  3 GET (ioredis) · CLIENT · 6 → 8 · peer 10.0.3.21:6379
+  4 POST (http client) · CLIENT · 12 → 1,322 · peer school-etl-api:5102
+  5 POST /etl/parse-excel · SERVER · school-etl-api · 16 → 1,318
+  6 request handler - /etl/parse-excel · INTERNAL · 17 → 1,317
+  7 S3.GetObject · CLIENT · 22 → 305
+  8 parse-excel · INTERNAL · 308 → 1,302
+  9 oracle SELECT QUESTION_BANK · CLIENT · 1,330 → 1,362
+  10 oracle SELECT SUBJECT · CLIENT · 1,365 → 1,381
+  11 oracle INSERT QUESTION_BANK · CLIENT · 1,390 → 1,812 · ERROR ORA-12899
+  12 oracle ROLLBACK · CLIENT · 1,815 → 1,826
+  13 POST /question-bank/import response write · INTERNAL · 1,828 → 1,840
+- logs:
+  - 14:18:07.414 INF school-core-api/api ImportQuestionBankHandler: Importing question bank file
+  - 14:18:08.729 INF school-etl-api/api Parsed excel rows=120
+  - 14:18:09.226 ERR school-core-api/api Value too long for column · QueryFailedError [ORA-12899]
+  - 14:18:09.254 ERR school-core-api/api http.request request completed POST /question-bank/import 500 1,842 ms
+- counts: group 214 times · 37 users in 24 h
+- fields: see docs/DATA-DICTIONARY.md</pre>
+          </div>
+          <div class="panel ai-box__notes">
+            <div class="panel__head"><h3 class="panel__title">ใส่อะไร ไม่ใส่อะไร</h3></div>
+            <div class="panel__body">
+              <div>
+                <h3>ใส่</h3>
+                <ul>
+                  <li>error ของ trace ตาม template เดียวกับทุกหน้า (DESIGN.md §6b)</li>
+                  <li>span ที่พังพร้อม peer และ statement ที่ใส่ค่าเป็น <span class="mono">:1, :2</span></li>
+                  <li>ต้นไม้ span 13 ตัวและ log 4 บรรทัดของ trace</li>
+                  <li>trace id ให้ AI อ้างอิงกลับได้</li>
+                </ul>
+              </div>
+              <div>
+                <h3>ไม่ใส่</h3>
+                <ul>
+                  <li><span class="mono">user_id</span>, <span class="mono">organization_id</span> และ role ของ user</li>
+                  <li>ค่าของ parameter ใน SQL, request body, ชื่อไฟล์ที่อัปโหลด</li>
+                  <li>IP, user agent, header</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- screen content ends here -->
+
+      <details class="design-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <p>Dev ที่ถือ trace id หนึ่งตัว (จาก header <code>request-id</code>, จากหน้า Error หรือ Log) ต้องเห็นในหน้าเดียวว่า request นี้ผ่าน service ไหน เวลาหมดไปที่ขั้นไหน พังที่ span ไหน และต้องแก้อะไร ตอบข้อกำหนดข้อ 3 (per-request tracing) ข้อ 5 (error ที่บอกว่าแก้ตรงไหน) และข้อ 4 (คัดลอกให้ AI)</p>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>ทั้งหน้าเรียกครั้งเดียว: <code>GET /api/traces/4bf92f35…</code> → <code>{ traceId, start, durationMs, services, spans, logs }</code></li>
+              <li>หัวหน้า: route และ status จาก span ที่ไม่มี <code>parentSpanId</code> (<code>http.method/route/status</code>), เวลา <code>start</code>, service จาก <code>services</code>; user และโรงเรียนจาก <code>logs[].userId / organizationId</code> เพราะ SpanRow ไม่มี user</li>
+              <li>KPI: <code>durationMs</code>, <code>spans.length</code>, error = span ที่มี <code>exception</code>, เวลาใน school-etl-api = <code>durationMs</code> ของ span SERVER ของ service นั้น; p95 ของ route มาจาก <code>/api/overview</code> <code>routes[].p95Ms</code> (เรียกเพิ่ม)</li>
+              <li>Callout: span ที่ <code>statusCode = ERROR</code> และมี <code>exception</code> + log ระดับ error ใน <code>logs[]</code> (<code>error.hint</code>, <code>error.fix</code>, <code>failedStep</code>, <code>error.originFunction</code>); 214 ครั้ง · 37 users มาจาก <code>/api/errors/:fingerprint</code> โดยใช้ <code>logs[].fingerprint</code> ของบรรทัด error</li>
+              <li>Waterfall: จุดเริ่ม = <code>startTime − start</code>, ความยาว = <code>durationMs</code>, ย่อหน้า = <code>parentSpanId</code>, สี = <code>service</code>, ป้าย = <code>kind</code>, ลูกศร = <code>peer</code>; หมุด log จาก <code>logs[].timestamp</code>, <code>level</code> และ <code>spanId</code> (หมุดซ้ำบนแถวของ span เจ้าของ)</li>
+              <li>Span ที่เลือก: SpanRow ทั้งแถว (<code>kind, service, role, startTime, durationMs, statusCode, statusMessage, db, peer, exception, attributes, events</code>); Resource มาจากคอลัมน์ <code>resource</code> ของ ClickHouse</li>
+              <li>Log: <code>logs[]</code> เรียงตาม <code>timestamp</code> แสดงตามกติกา readable error (หัวข้อ = hint → title ของ event → message, ข้อความเล็กหน้าหัวข้อ = <code>eventCode</code> หรือ <code>logger</code>); ป้าย version จาก <code>LogRow.version</code> / <code>SpanRow.version</code>; สรุปสำหรับ AI ประกอบฝั่ง client จาก response เดียวกัน (ไม่ใส่ user)</li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li>Motion: แถบ span โตจากซ้ายไปขวาตามลำดับเวลาเริ่ม (หน่วงตาม <code>--s</code>, รวมไม่เกิน 700 ms) ให้เห็นลำดับการเรียก · span ที่ error มีวงแดงกระเพื่อมหนึ่งครั้ง · หมุด log โผล่ตามเวลาของมัน</li>
+              <li>คลิกหรือกด Enter ที่ span ไหนก็ได้ → แถวมีแถบ accent และ panel "Span ที่เลือก" เปลี่ยนตาม (ของจริงเก็บใน URL <code>?span=&lt;spanId&gt;</code>; เปิดหน้ามาเลือก span ที่ error ตัวแรกให้)</li>
+              <li>หมุด log: hover หรือ focus แสดงเวลา level และข้อความ; คลิกแล้วเลื่อนไปที่บรรทัด log นั้น</li>
+              <li>ลิงก์ "Parent", "span #…" และ "failed step" เลือก span นั้น; ปุ่ม "ดู span" ใน callout ก็เช่นกัน</li>
+              <li>คัดลอก trace id, span id, ลิงก์หน้า และ "คัดลอกให้ AI" (Markdown ในกล่อง "สรุปสำหรับ AI")</li>
+              <li>"ดู log ของ trace นี้" และ "เปิดใน Log" → <code>logs.html?traceId=…</code>; ชื่อ error และ "เปิด error" → <code>error-detail.html</code>; user → Log กรองตาม user</li>
+              <li>จอแคบกว่า 720 px: แต่ละ span เป็นสองบรรทัด (ชื่อ + เวลา / แท่งเต็มความกว้าง) แกนเวลาเดียวกันทุกแถว ไม่ต้องเลื่อนข้าง; "ดูเป็นตาราง" ให้ค่าครบทุก span</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li><code>errorCount</code>: span #1 ก็มี status ERROR เพราะตอบ 500 หน้านี้นับ "error 1" = span ที่มี exception (#11) ตาม dataset engine จะนับแบบนี้ไหม</li>
+              <li><code>SpanRow</code> มี <code>version</code>, <code>host</code> แล้ว แต่ยังไม่มี <code>resource</code> และ user: หน้านี้เอา user จาก <code>logs[]</code> และ Resource จากคอลัมน์ ClickHouse ควรให้ API ส่ง <code>resource</code> มาใน SpanRow ไหม</li>
+              <li>exception ของ span เป็น error ของ driver (<code>Error</code> ORA-12899) ส่วน log เป็น <code>QueryFailedError</code> ของ TypeORM แสดงทั้งสองแบบนี้เข้าใจง่ายพอไหม</li>
+              <li>trace ที่มีหลายร้อย span ต้องพับ/ขยาย subtree และค้นหา span (ยังไม่ได้ออกแบบ) · span ที่เลือกเก็บใน URL <code>?span=&lt;spanId&gt;</code> และเปิดหน้ามาเลือก span ที่ error ตัวแรก ตกลงไหม</li>
+              <li>span id ทั้งหมด, peer ของ Oracle และ db.statement ของ span อื่นนอกจาก #11 เป็นค่าตัวอย่าง dataset ไม่ได้ระบุ</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+    </main>
+  </div>
+</div>
+<script>
+/* trace-detail.html only: pick a span in the waterfall and re-fill the "Span ที่เลือก" panel. Mock data = Trace A from BRIEF.md. */
+(function () {
+  'use strict';
+  var TOTAL = 1842, T0 = 7412; // trace start = 14:18:07.412 ICT
+  var ORA = 'ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)';
+  function oracle(stmt) { return { sys: 'oracle', stmt: stmt, attrs: [['db.system', 'oracle'], ['db.user', 'APP'], ['db.statement', stmt], ['net.peer.name', 'oracle-db'], ['net.peer.port', '1521']] }; }
+  var q1 = oracle('SELECT "ID", "TITLE" FROM "APP"."QUESTION_BANK" WHERE "SUBJECT_ID" = :1');
+  var q2 = oracle('SELECT "ID", "NAME" FROM "APP"."SUBJECT" WHERE "ID" = :1');
+  var q3 = oracle('INSERT INTO "APP"."QUESTION_BANK" ("TITLE", "SUBJECT_ID", "CREATED_BY") VALUES (:1, :2, :3)');
+  var q4 = oracle('ROLLBACK');
+  var S = {
+    1:  { id: '00f067aa0ba902b7', p: 0, name: 'POST /question-bank/import', kind: 'SERVER', svc: 1, s: 0, e: 1842, status: 'ERROR', msg: 'HTTP 500', attrs: [['http.request.method', 'POST'], ['http.route', '/question-bank/import'], ['url.path', '/question-bank/import'], ['http.response.status_code', '500']] },
+    2:  { id: '3c1d8e2f7a9b4c60', p: 1, name: 'request handler - /question-bank/import', kind: 'INTERNAL', svc: 1, s: 2, e: 1840, attrs: [['nestjs.type', 'request_context'], ['http.route', '/question-bank/import']] },
+    3:  { id: '9e4b2a7c1d6f8e03', p: 2, name: 'GET', lib: 'ioredis', kind: 'CLIENT', svc: 1, s: 6, e: 8, peer: '10.0.3.21:6379', db: { sys: 'redis' }, attrs: [['db.system', 'redis'], ['net.peer.name', '10.0.3.21'], ['net.peer.port', '6379']] },
+    4:  { id: 'b72d5e9a0c4f1e86', p: 2, name: 'POST', lib: 'http client', kind: 'CLIENT', svc: 1, s: 12, e: 1322, peer: 'school-etl-api:5102', attrs: [['http.request.method', 'POST'], ['server.address', 'school-etl-api'], ['server.port', '5102'], ['url.full', 'http://school-etl-api:5102/etl/parse-excel'], ['http.response.status_code', '200']] },
+    5:  { id: '1f6a3c8e2b9d7a45', p: 4, name: 'POST /etl/parse-excel', kind: 'SERVER', svc: 2, s: 16, e: 1318, attrs: [['http.request.method', 'POST'], ['http.route', '/etl/parse-excel'], ['http.response.status_code', '200']] },
+    6:  { id: '6d0e9b4f3a2c8d17', p: 5, name: 'request handler - /etl/parse-excel', kind: 'INTERNAL', svc: 2, s: 17, e: 1317, attrs: [['nestjs.type', 'request_context'], ['http.route', '/etl/parse-excel']] },
+    7:  { id: 'c48a1f7e5d3b2096', p: 6, name: 'S3.GetObject', kind: 'CLIENT', svc: 2, s: 22, e: 305, attrs: [['rpc.system', 'aws-api'], ['rpc.service', 'S3'], ['rpc.method', 'GetObject']] },
+    8:  { id: '2e9c7b1a6f4d8e53', p: 6, name: 'parse-excel', kind: 'INTERNAL', svc: 2, s: 308, e: 1302, attrs: [] },
+    9:  { id: '8b3f6d2c9e1a7f04', p: 2, name: 'oracle SELECT QUESTION_BANK', kind: 'CLIENT', svc: 1, s: 1330, e: 1362, peer: 'oracle-db:1521', db: q1, attrs: q1.attrs },
+    10: { id: '4a7e1c9b3d6f2e85', p: 2, name: 'oracle SELECT SUBJECT', kind: 'CLIENT', svc: 1, s: 1365, e: 1381, peer: 'oracle-db:1521', db: q2, attrs: q2.attrs },
+    11: { id: 'e5c2a8f1b7d94c3a', p: 2, name: 'oracle INSERT QUESTION_BANK', kind: 'CLIENT', svc: 1, s: 1390, e: 1812, status: 'ERROR', msg: ORA, peer: 'oracle-db:1521', db: q3, attrs: q3.attrs, exc: true, failed: true },
+    12: { id: '7f9d3b6e2a1c5d08', p: 2, name: 'oracle ROLLBACK', kind: 'CLIENT', svc: 1, s: 1815, e: 1826, peer: 'oracle-db:1521', db: q4, attrs: q4.attrs },
+    13: { id: 'd1b6e4a9c3f7280e', p: 2, name: 'POST /question-bank/import response write', kind: 'INTERNAL', svc: 1, s: 1828, e: 1840, attrs: [] }
+  };
+  var SVC = { 1: ['school-core-api', '31.4.0'], 2: ['school-etl-api', ''] };
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function num(v) { return v.toLocaleString('en-US'); }
+  function clock(off) { var t = T0 + off, s = Math.floor(t / 1000), ms = t % 1000; return '14:18:' + (s < 10 ? '0' : '') + s + '.' + ('00' + ms).slice(-3); }
+  function svcTag(n) { var t = el('span', 'svc svc-' + n, SVC[n][0]); t.appendChild(el('span', 'svc__role', '/api')); return t; }
+  function fill(id, nodes) { var d = $(id); d.textContent = ''; nodes.forEach(function (x) { d.appendChild(typeof x === 'string' ? document.createTextNode(x) : x); }); }
+  function kv(k, v) { var li = el('li', 'kv'); li.appendChild(el('span', 'kv__k', k)); li.appendChild(el('span', 'kv__v', v)); return li; }
+
+  function select(n) {
+    var sp = S[n]; if (!sp) return;
+    var label = sp.lib ? sp.name + ' (' + sp.lib + ')' : sp.name;
+    var err = sp.status === 'ERROR';
+    Array.prototype.forEach.call(document.querySelectorAll('.td-wf [data-span]'), function (r) {
+      var on = r.getAttribute('data-span') === String(n);
+      r.classList.toggle('is-selected', on);
+      var b = r.querySelector('.td-pick'); if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+    });
+    $('sd-pos').textContent = '#' + n + ' จาก 13' + (sp.failed ? ' · ขั้นที่พัง (failed step)' : '');
+    fill('sd-badge', sp.exc ? [el('span', 'lvl lvl--err', 'ERR')] : []);
+    $('sd-title').textContent = label;
+    $('sd-kind').textContent = sp.kind;
+    var head = $('sd-svc'); head.replaceWith(svcTag(sp.svc)); head = document.querySelector('.td-sd-head > .svc'); head.id = 'sd-svc';
+    $('sd-copy').setAttribute('data-copy', sp.id);
+    $('sd-f-kind').textContent = sp.kind;
+    fill('sd-f-svc', [svcTag(sp.svc)]);
+    fill('sd-f-start', [el('span', 'mono', '+' + num(sp.s) + ' ms'), ' · ', el('span', 'ts', clock(sp.s))]);
+    var d = sp.e - sp.s;
+    fill('sd-f-dur', [el('span', 'mono', num(d) + ' ms'), ' · ' + (d / TOTAL * 100).toFixed(1) + ' % ของ trace']);
+    fill('sd-f-status', err ? [el('span', 'mono t-danger', 'ERROR'), ' · ', el('span', 'mono', sp.msg)] : [el('span', 'mono t-muted', 'UNSET')]);
+    $('sd-f-peer').textContent = sp.peer || '–';
+    $('sd-f-id').textContent = sp.id;
+    if (sp.p) {
+      var pa = S[sp.p], a = el('a', 'mono', '#' + sp.p + ' ' + (pa.lib ? pa.name + ' (' + pa.lib + ')' : pa.name));
+      a.href = '#span-detail-section'; a.setAttribute('data-pick', String(sp.p));
+      fill('sd-f-parent', [a, ' ', el('span', 'mono t-muted', pa.id)]);
+    } else fill('sd-f-parent', [el('span', 't-muted', '– (span แรกของ trace)')]);
+    $('sd-db').hidden = !sp.db;
+    if (sp.db) {
+      $('sd-f-dbsys').textContent = sp.db.sys;
+      $('sd-f-stmt').textContent = sp.db.stmt || '';
+      $('sd-f-stmt-wrap').hidden = !sp.db.stmt; $('sd-f-stmt-wrap').previousElementSibling.hidden = !sp.db.stmt;
+    }
+    $('sd-exc').hidden = !sp.exc;
+    var body = $('sd-attrs'); body.textContent = '';
+    if (!sp.attrs.length) { var tr = el('tr'), td = el('td', 't-muted', 'span นี้ไม่มี attribute เพิ่มเติม'); td.colSpan = 2; tr.appendChild(td); body.appendChild(tr); }
+    sp.attrs.forEach(function (p) { var tr = el('tr'); tr.appendChild(el('td', 'mono nowrap', p[0])); tr.appendChild(el('td', 'mono', p[1])); body.appendChild(tr); });
+    var res = [kv('service.name', SVC[sp.svc][0]), kv('app.role', 'api')];
+    if (SVC[sp.svc][1]) res.push(kv('service.version', SVC[sp.svc][1]));
+    res.push(kv('deployment.environment.name', 'prod'));
+    fill('sd-res', res);
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-pick]');
+    if (!t) return;
+    select(Number(t.getAttribute('data-pick')));
+    if (t.tagName === 'A') { e.preventDefault(); $('span-detail-section').scrollIntoView({ block: 'start' }); }
+  });
+})();
+</script>
+</body>
+</html>

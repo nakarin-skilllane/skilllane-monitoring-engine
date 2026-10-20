@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>งานเบื้องหลัง · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<script src="assets/app.js"></script>
+<style>
+  /* jobs.html only: every class is prefixed .jb- ; tokens and shared components from assets/styles.css, no literal colours */
+  .jb-kpis { margin-top: var(--sp-4); }
+  .jb-filter { max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+  .jb-filter::-webkit-scrollbar { display: none; }
+
+  /* Jobs table: one table, one row group per queue system */
+  .jb-table { min-width: 1040px; }
+  .jb-group > th { padding: 10px var(--sp-3) 7px; font-weight: 400; color: var(--ink-2); }
+  .jb-table tbody + tbody .jb-group > th { border-top: 1px solid var(--line); }
+  .jb-table tbody tr.jb-group:hover > th { background: var(--surface); }
+  .jb-group__in { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); font-size: var(--fs-12); line-height: var(--lh-ui); }
+  .jb-q { display: grid; gap: 1px; min-width: 0; }
+  .cell-sub { display: block; font-size: var(--fs-11); font-weight: 400; color: var(--muted); line-height: 1.35; white-space: nowrap; }
+  .jb-out { display: flex; gap: 2px; width: 96px; height: 6px; border-radius: 1px; }
+  .jb-out > i { display: block; flex: var(--n) 1 0px; min-width: 2px; border-radius: 1px; background: var(--bar-neutral); }
+  .jb-out > i.jb-out__retry { background: var(--warn-solid); }
+  .jb-out > i.jb-out__fail { background: var(--danger-solid); }
+  .jb-out:focus-visible { outline-offset: 5px; }
+  .jb-last { display: grid; gap: 1px; min-width: 160px; max-width: 230px; white-space: normal; }
+  .jb-last__hint { font-size: var(--fs-12); color: var(--ink); line-height: 1.35; }
+  .jb-ev { display: inline-flex; align-items: center; gap: var(--sp-1h); font-size: var(--fs-12); color: var(--ink-2); line-height: 1.35; }
+  .jb-legend { margin: var(--sp-2) 0 0; justify-content: flex-start; }
+  .jb-foot { margin-top: var(--sp-1); }
+
+  /* Expanded rows: lines written by the library */
+  .jb-lines .table td { vertical-align: top; }
+  .jb-line { display: grid; gap: 3px; min-width: 0; }
+  .jb-line__title { font-weight: 600; color: var(--ink); }
+  .jb-code { font: 400 var(--fs-11)/1.4 var(--font-mono); color: var(--muted); }
+  .jb-detail { display: grid; gap: var(--sp-3); min-width: 0; }
+
+  /* Failure list */
+  .jb-open { padding: 0; border: 0; background: none; font: 500 12.5px/1.3 var(--font-mono); color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 2px; }
+  .jb-open:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
+  .jb-fail { min-width: 1020px; }
+
+  /* Dependencies: where the state comes from */
+  .jb-flow { margin-bottom: var(--sp-3); }
+  .jb-deps { min-width: 1000px; }
+  .jb-state { display: grid; gap: 2px; max-width: 170px; }
+  .jb-src { display: grid; gap: 2px; max-width: 200px; }
+  .jb-state .cell-sub, .jb-src .cell-sub { white-space: normal; }
+  .jb-src__line { display: flex; align-items: center; gap: var(--sp-1h); white-space: nowrap; }
+  .jb-src__line code { font-size: 12px; color: var(--ink); }
+  .jb-tl-col { width: 36%; min-width: 300px; }
+  .jb-tl { display: block; width: 100%; height: 20px; overflow: visible; }
+  .jb-tl .c-grid { vector-effect: non-scaling-stroke; }
+  .jb-tl__up, .jb-z-up { fill: var(--ok-line); }
+  .jb-z-down { fill: var(--danger-solid); }
+  .jb-tl__halo { stroke: var(--surface); stroke-width: 7px; vector-effect: non-scaling-stroke; }
+  .jb-tl__down { stroke: var(--danger-solid); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+  .jb-tl__warn { stroke: var(--warn-solid); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+  .jb-tl__hit { fill: none; stroke: transparent; stroke-width: 18px; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: crosshair; }
+  .jb-tl__hit:hover { stroke: var(--hover-bg); }
+  .jb-zoom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: var(--sp-4); align-items: start; }
+  .jb-zoom .chart__plot > svg { max-width: 560px; }
+
+  @media (max-width: 1099px) {
+    .jb-zoom { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 599px) {
+    .jb-table, .jb-fail { min-width: 0; }
+    /* queue rows: name, then the four counts, then outcome bar + p95, then last failure and events */
+    .jb-table > tbody > tr:not(.jb-group):not(.row-detail) { grid-template-columns: 24px repeat(4, auto) minmax(0, 1fr); grid-template-areas: "tog name name name name name" ". st fin rt fl ." ". out out p95 p95 p95" ". last last last last last" ". ev ev ev ev ev"; }
+    .jb-c-tog { grid-area: tog; } .jb-c-name { grid-area: name; } .jb-c-st { grid-area: st; } .jb-c-fin { grid-area: fin; } .jb-c-rt { grid-area: rt; } .jb-c-fl { grid-area: fl; }
+    .jb-c-out { grid-area: out; } .jb-c-p95 { grid-area: p95; } .jb-c-last { grid-area: last; } .jb-c-ev { grid-area: ev; }
+    .jb-table .jb-group > th { padding: var(--sp-2) 0 var(--sp-1); background: transparent; border: 0; }
+    .jb-table > tbody > tr.jb-group { background: var(--surface-2); }
+    .jb-last { max-width: none; }
+    .jb-table > tbody > tr > td.t-muted:empty, .jb-table .jb-c-last.t-muted, .jb-table .jb-c-ev.t-muted { display: none; }
+    /* failure rows: time · level · result · duration, then job id · attempt · cause, then service and trace */
+    .jb-fail > tbody > tr { grid-template-columns: auto auto auto minmax(0, 1fr); grid-template-areas: "time lvl res dur" "id att cause cause" "svc svc tr tr"; }
+    .jb-c-time { grid-area: time; } .jb-c-lvl { grid-area: lvl; } .jb-c-res { grid-area: res; } .jb-c-id { grid-area: id; } .jb-c-att { grid-area: att; } .jb-c-cause { grid-area: cause; } .jb-c-svc { grid-area: svc; } .jb-c-tr { grid-area: tr; justify-self: end; min-width: 0; max-width: 100%; }
+    .jb-fail.table--reflow > tbody > tr > td.jb-c-dur { grid-area: dur; text-align: right; }
+    .jb-c-tr .idchip { max-width: 170px !important; }
+    /* dependency rows: name + state, then service, then the 24 h strip, then the line that set the state */
+    .jb-deps { min-width: 0; }
+    .jb-deps > tbody > tr:not(.row-detail) { grid-template-columns: 24px minmax(0, 1fr) auto; grid-template-areas: "tog dep state" ". svc svc" ". tl tl" ". src src"; }
+    .jd-tog { grid-area: tog; } .jd-dep { grid-area: dep; } .jd-state { grid-area: state; justify-self: end; } .jd-svc { grid-area: svc; } .jd-tl { grid-area: tl; } .jd-src { grid-area: src; }
+    .jd-state .jb-state { justify-items: end; text-align: right; }
+    .jb-src, .jb-state { max-width: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html" aria-current="page"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h">1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h" selected>24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">16 ต.ค. 14:20 – 17 ต.ค. 14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><span>งานเบื้องหลัง</span></nav>
+          <h1 class="page-title">งานเบื้องหลัง</h1>
+          <p class="page-sub">Queue, cron และ consumer ทำงานครบไหม อะไรล้มเหลวจริง อะไรแค่ retry และระบบที่เรียกใช้ล่มช่วงไหน · <span class="env env--prod">prod</span> · 24 ชั่วโมงล่าสุด (16 ต.ค. 14:20 – 17 ต.ค. 14:20 ICT)</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn--quiet btn-copy" type="button" data-copy="skilllane-monitor/jobs?env=prod&amp;from=now-24h"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg><span class="btn-copy__label">คัดลอกลิงก์</span></button>
+          <a class="btn" href="logs.html?event=job.failed">เปิด Log ของ job ที่ล้มเหลว<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+        </div>
+      </header>
+
+      <!-- screen content starts here -->
+      <div class="callouts">
+        <div class="callout callout--warn" role="status">
+          <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>
+          <p class="callout__title">report:generate ล้มเหลวจริง 3 job: Google API rate limited</p>
+          <p class="callout__text">24 ชั่วโมง: retry 38 ครั้ง และครบ 3/3 attempt 3 job (ล่าสุด #88391 13:58) · sheets.googleapis.com</p>
+          <div class="callout__actions"><a class="btn btn--sm" href="#failures">ดูรายการ</a></div>
+        </div>
+        <div class="callout callout--warn" role="status">
+          <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>
+          <p class="callout__title">ThaID ปฏิเสธ request 4 ครั้ง (401) ใน 1 ชั่วโมงล่าสุด</p>
+          <p class="callout__text">imauth.bora.dopa.go.th ยังตอบอยู่ (ไม่มี dependency.down) แต่ตอบ 401 · ตรวจ credentials ของ ThaID</p>
+          <div class="callout__actions"><a class="btn btn--sm" href="#dep-thaid">ดู dependency</a></div>
+        </div>
+        <div class="callout" role="status">
+          <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 7.25v3.5M8 5.2v.1"/></svg>
+          <p class="callout__title">Redis "cache" กลับมาแล้วตั้งแต่ 13:43:20</p>
+          <p class="callout__text">down 45.2 วินาที (13:42:35–13:43:20) · 10.0.3.21:6379 · ECONNREFUSED 3 ครั้ง</p>
+          <div class="callout__actions"><a class="btn btn--sm" href="#dep-cache">ดูช่วงที่ล่ม</a></div>
+        </div>
+      </div>
+
+      <div class="kpis kpis--5 jb-kpis" aria-label="สรุป 24 ชั่วโมงล่าสุด">
+        <div class="kpi kpi--alert">
+          <span class="kpi__label"><svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true" style="color:var(--danger)"><path d="M5.5 1.75h5l3.75 3.75v5l-3.75 3.75h-5L1.75 10.5v-5z"/><path d="M8 5v3.5M8 10.9v.1"/></svg>Job ที่ล้มเหลวจริง</span>
+          <span class="kpi__value">5<span class="kpi__unit">ครั้ง</span></span>
+          <div class="kpi__foot"><span class="kpi__delta">report:generate 3 · export:class-score 1 · cron 1</span></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">Retry และ redeliver</span>
+          <span class="kpi__value">42<span class="kpi__unit">ครั้ง</span></span>
+          <div class="kpi__foot"><span class="kpi__delta">report:generate retry 38 · lms.sync redeliver 4</span></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">Dependency ที่ down ตอนนี้</span>
+          <span class="kpi__value">0<span class="kpi__unit">จาก 5</span></span>
+          <div class="kpi__foot"><span class="kpi__delta">ล่าสุด redis cache down 45.2 s เมื่อ 13:42:35</span></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">Job ที่เริ่ม (นับทุก attempt)</span>
+          <span class="kpi__value">3,890</span>
+          <div class="kpi__foot"><span class="kpi__delta">BullMQ 2,910 · RabbitMQ 860 · cron 120</span></div>
+        </div>
+        <div class="kpi">
+          <span class="kpi__label">Kafka message</span>
+          <span class="kpi__value">345,600</span>
+          <div class="kpi__foot"><span class="kpi__delta">240 ต่อนาที · p95 38 ms · ล้มเหลว 0</span></div>
+        </div>
+      </div>
+
+      <!-- ===== queues ===== -->
+      <section class="section" id="queues" aria-labelledby="h-queues">
+        <div class="section__head">
+          <h2 class="section__title" id="h-queues">Queue, topic และ cron</h2>
+          <span class="section__meta">7 รายการ · นับจากบรรทัด job.* ที่ library เขียน ใน 24 ชั่วโมงล่าสุด</span>
+        </div>
+        <div class="filterbar">
+          <div class="jb-filter">
+            <div class="seg" role="group" aria-label="กรองตามระบบ queue" data-choice data-jb-filter>
+              <button class="seg__btn" type="button" aria-pressed="true" data-src="all">ทั้งหมด</button>
+              <button class="seg__btn" type="button" aria-pressed="false" data-src="bullmq">BullMQ</button>
+              <button class="seg__btn" type="button" aria-pressed="false" data-src="kafka">Kafka</button>
+              <button class="seg__btn" type="button" aria-pressed="false" data-src="rabbitmq">RabbitMQ</button>
+              <button class="seg__btn" type="button" aria-pressed="false" data-src="cron">cron</button>
+            </div>
+          </div>
+          <span class="hint">queue ของแอปเอง ไม่ใช่ queue ที่ส่ง log มาให้ skilllane monitor</span>
+        </div>
+        <div class="table-wrap">
+          <table class="table table--reflow jb-table" id="jobs-table">
+            <caption class="sr-only">Queue, topic และ cron ของ prod ใน 24 ชั่วโมงล่าสุด แยกตามระบบ queue</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="col-tight"><span class="sr-only">ขยาย</span></th>
+                <th scope="col">Queue / topic · job type</th>
+                <th scope="col" class="num" title="บรรทัด job.started นับทุก attempt">เริ่ม</th>
+                <th scope="col" class="num">สำเร็จ</th>
+                <th scope="col" class="num">Retry</th>
+                <th scope="col" class="num">ล้มเหลว</th>
+                <th scope="col">ผลลัพธ์</th>
+                <th scope="col" class="num">p95</th>
+                <th scope="col">ล้มเหลวล่าสุด</th>
+                <th scope="col">เหตุการณ์</th>
+              </tr>
+            </thead>
+
+            <tbody data-src="bullmq">
+              <tr class="jb-group"><th scope="rowgroup" colspan="10"><span class="jb-group__in"><span class="tag">BullMQ</span><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span><span>3 queue บน redis "queue" 10.0.3.22:6379</span></span></th></tr>
+              <tr>
+                <td class="jb-c-tog"></td>
+                <td class="jb-c-name"><span class="jb-q"><span class="queue-name">report</span><span class="queue-sub mono">report:generate</span></span></td>
+                <td class="jb-c-st num" data-label="เริ่ม">380</td>
+                <td class="jb-c-fin num" data-label="สำเร็จ">339</td>
+                <td class="jb-c-rt num t-warn" data-label="retry">38</td>
+                <td class="jb-c-fl num t-danger" data-label="ล้มเหลว">3</td>
+                <td class="jb-c-out"><span class="jb-out" tabindex="0" role="img" aria-label="สำเร็จ 339 retry 38 ล้มเหลวจริง 3 จาก 380 attempt" data-tip="report:generate · 380 attempt|339::สำเร็จ|38::retry|3::ล้มเหลวจริง" data-tip-keys="bar-neutral,warn-solid,danger-solid"><i style="--n:339"></i><i class="jb-out__retry" style="--n:38"></i><i class="jb-out__fail" style="--n:3"></i></span></td>
+                <td class="jb-c-p95 num" data-label="p95">4.2 s</td>
+                <td class="jb-c-last"><span class="jb-last"><span class="ts">13:58:07</span><span class="jb-last__hint">Google API rate limited</span><span class="cell-sub">#88391 · attempt 3/3</span></span></td>
+                <td class="jb-c-ev"><a class="small" href="#failures">ดูรายการ 41 บรรทัด</a></td>
+              </tr>
+              <tr>
+                <td class="jb-c-tog"></td>
+                <td class="jb-c-name"><span class="jb-q"><span class="queue-name">notification</span><span class="queue-sub mono">notification:send</span></span></td>
+                <td class="jb-c-st num" data-label="เริ่ม">2,410</td>
+                <td class="jb-c-fin num" data-label="สำเร็จ">2,410</td>
+                <td class="jb-c-rt num t-muted" data-label="retry">0</td>
+                <td class="jb-c-fl num t-muted" data-label="ล้มเหลว">0</td>
+                <td class="jb-c-out"><span class="jb-out" tabindex="0" role="img" aria-label="สำเร็จ 2,410 จาก 2,410 attempt" data-tip="notification:send · 2,410 attempt|2,410::สำเร็จ|0::retry|0::ล้มเหลว" data-tip-keys="bar-neutral,warn-solid,danger-solid"><i style="--n:2410"></i></span></td>
+                <td class="jb-c-p95 num" data-label="p95">310 ms</td>
+                <td class="jb-c-last t-muted">–</td>
+                <td class="jb-c-ev t-muted">–</td>
+              </tr>
+              <tr>
+                <td class="jb-c-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="job-export-detail" aria-label="ขยาย export:class-score"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                <td class="jb-c-name"><span class="jb-q"><span class="queue-name">export</span><span class="queue-sub mono">export:class-score</span></span></td>
+                <td class="jb-c-st num" data-label="เริ่ม">120</td>
+                <td class="jb-c-fin num" data-label="สำเร็จ">119</td>
+                <td class="jb-c-rt num t-muted" data-label="retry">0</td>
+                <td class="jb-c-fl num t-danger" data-label="ล้มเหลว">1</td>
+                <td class="jb-c-out"><span class="jb-out" tabindex="0" role="img" aria-label="สำเร็จ 119 ล้มเหลวจริง 1 จาก 120 attempt" data-tip="export:class-score · 120 attempt|119::สำเร็จ|0::retry|1::ล้มเหลวจริง" data-tip-keys="bar-neutral,warn-solid,danger-solid"><i style="--n:119"></i><i class="jb-out__fail" style="--n:1"></i></span></td>
+                <td class="jb-c-p95 num" data-label="p95">12.6 s</td>
+                <td class="jb-c-last"><span class="jb-last"><span class="ts">09:52:31</span><span class="jb-last__hint">Storage request timed out</span><span class="cell-sub">#20931 · attempt 1/1</span></span></td>
+                <td class="jb-c-ev"><span class="jb-ev">ตั้ง attempts = 1 จึงไม่ retry</span></td>
+              </tr>
+              <tr class="row-detail" id="job-export-detail" hidden>
+                <td></td>
+                <td colspan="9">
+                  <div class="err-list">
+                    <article class="err-row">
+                      <div class="err-row__head">
+                        <span class="lvl lvl--err">ERR</span>
+                        <h3 class="err-row__title">Storage request timed out</h3>
+                        <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+                        <span class="err-row__count"><span class="ts">17 ต.ค. 09:52:31.770</span></span>
+                      </div>
+                      <ul class="kv-list" aria-label="บริบท">
+                        <li class="kv"><span class="kv__k">job</span><span class="kv__v">export:class-score</span></li>
+                        <li class="kv"><span class="kv__k">id</span><span class="kv__v">20931</span></li>
+                        <li class="kv kv--warn"><span class="kv__k">attempt</span><span class="kv__v">1/1</span></li>
+                        <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/export/export-class-score.processor.ts</span></li>
+                        <li class="kv"><span class="kv__k">duration</span><span class="kv__v">21,480 ms</span></li>
+                      </ul>
+                      <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>The upload/download did not finish in time. Large files or a slow network; retry.</p>
+                      <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>RequestTimeout [RequestTimeout] Your socket connection to the server was not read from or written to within the timeout period. Idle connections will be closed.</p>
+                      <div class="err-row__meta">
+                        <span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span>
+                        <span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=8f2d6a0c4b1e93d7a5c0e8f1b2d4a697">8f2d6a0c4b1e93d7a5c0e8f1b2d4a697</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="8f2d6a0c4b1e93d7a5c0e8f1b2d4a697" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span>
+                        <span>job_final = 1 · job นี้ตั้ง attempts ไว้ 1 จึงไม่ได้ retry</span>
+                      </div>
+                    </article>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+
+            <tbody data-src="kafka">
+              <tr class="jb-group"><th scope="rowgroup" colspan="10"><span class="jb-group__in"><span class="tag">Kafka</span><span class="svc svc-1">school-core-api<span class="svc__role">/persister</span></span><span>consumer 1 topic บน kafka-0.kafka:9092</span></span></th></tr>
+              <tr>
+                <td class="jb-c-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="job-kafka-detail" aria-label="ขยาย school.events.score"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                <td class="jb-c-name"><span class="jb-q"><span class="queue-name">school.events.score</span><span class="queue-sub mono">message</span></span></td>
+                <td class="jb-c-st num" data-label="เริ่ม">345,600</td>
+                <td class="jb-c-fin num" data-label="สำเร็จ">345,600</td>
+                <td class="jb-c-rt num t-muted" data-label="retry">0</td>
+                <td class="jb-c-fl num t-muted" data-label="ล้มเหลว">0</td>
+                <td class="jb-c-out"><span class="jb-out" tabindex="0" role="img" aria-label="สำเร็จ 345,600 จาก 345,600 message" data-tip="school.events.score · 345,600 message|345,600::สำเร็จ|0::ล้มเหลว" data-tip-keys="bar-neutral,danger-solid"><i style="--n:345600"></i></span></td>
+                <td class="jb-c-p95 num" data-label="p95">38 ms</td>
+                <td class="jb-c-last t-muted">–</td>
+                <td class="jb-c-ev"><span class="jb-ev"><span class="lvl lvl--wrn">WRN</span>consumer group rebalance <span class="ts">13:05</span></span></td>
+              </tr>
+              <tr class="row-detail" id="job-kafka-detail" hidden>
+                <td></td>
+                <td colspan="9">
+                  <div class="jb-detail">
+                    <div class="table-wrap jb-lines">
+                      <table class="table table--dense">
+                        <caption class="sr-only">บรรทัด consumer.* ของ school.events.score</caption>
+                        <thead><tr><th scope="col">เวลา</th><th scope="col">ระดับ</th><th scope="col">บรรทัดจาก library</th></tr></thead>
+                        <tbody>
+                          <tr><td class="ts">13:05:12.340</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">consumer group rebalancing</span><ul class="kv-list"><li class="kv"><span class="kv__k">job</span><span class="kv__v">school.events.score</span></li></ul><span class="jb-code">consumer.rebalancing</span></span></td></tr>
+                          <tr><td class="ts">13:05:15.902</td><td><span class="lvl lvl--inf">INF</span></td><td><span class="jb-line"><span class="jb-line__title">consumer joined group</span><ul class="kv-list"><li class="kv"><span class="kv__k">job</span><span class="kv__v">school.events.score</span></li><li class="kv"><span class="kv__k">partitions</span><span class="kv__v">0,1,2</span></li></ul><span class="jb-code">consumer.joined</span></span></td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p class="hint">rebalance ใช้ 3.6 s ระหว่างนั้น consumer หยุดอ่านชั่วคราว ไม่มี message ที่ล้มเหลว (failed 0)</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+
+            <tbody data-src="rabbitmq">
+              <tr class="jb-group"><th scope="rowgroup" colspan="10"><span class="jb-group__in"><span class="tag">RabbitMQ</span><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span><span>consumer 1 queue บน 10.0.5.10:5672</span></span></th></tr>
+              <tr>
+                <td class="jb-c-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="job-rabbit-detail" aria-label="ขยาย lms.sync"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                <td class="jb-c-name"><span class="jb-q"><span class="queue-name">lms.sync</span><span class="queue-sub mono">message</span></span></td>
+                <td class="jb-c-st num" data-label="เริ่ม">860</td>
+                <td class="jb-c-fin num" data-label="สำเร็จ">860</td>
+                <td class="jb-c-rt num" data-label="retry"><span class="t-warn">4</span><span class="cell-sub">redeliver</span></td>
+                <td class="jb-c-fl num t-muted" data-label="ล้มเหลว">0</td>
+                <td class="jb-c-out"><span class="jb-out" tabindex="0" role="img" aria-label="สำเร็จรอบแรก 856 redeliver แล้วสำเร็จ 4 จาก 860 message" data-tip="lms.sync · 860 message|856::สำเร็จรอบแรก|4::redeliver แล้วสำเร็จ|0::ล้มเหลว" data-tip-keys="bar-neutral,warn-solid,danger-solid"><i style="--n:856"></i><i class="jb-out__retry" style="--n:4"></i></span></td>
+                <td class="jb-c-p95 num t-muted" data-label="p95">–</td>
+                <td class="jb-c-last t-muted">–</td>
+                <td class="jb-c-ev"><span class="jb-ev"><span class="lvl lvl--wrn">WRN</span>redelivered 4 ครั้ง</span></td>
+              </tr>
+              <tr class="row-detail" id="job-rabbit-detail" hidden>
+                <td></td>
+                <td colspan="9">
+                  <div class="jb-detail">
+                    <div class="table-wrap jb-lines">
+                      <table class="table table--dense">
+                        <caption class="sr-only">บรรทัด job.redelivered ของ lms.sync</caption>
+                        <thead><tr><th scope="col">เวลา</th><th scope="col">ระดับ</th><th scope="col">บรรทัดจาก library</th></tr></thead>
+                        <tbody>
+                          <tr><td class="ts">13:26:30.248</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">message redelivered</span><ul class="kv-list"><li class="kv"><span class="kv__k">job</span><span class="kv__v">lms.sync</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">b81e5a3c</span></li></ul><span class="jb-code">job.redelivered</span></span></td></tr>
+                          <tr><td class="ts">11:58:03.871</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">message redelivered</span><ul class="kv-list"><li class="kv"><span class="kv__k">job</span><span class="kv__v">lms.sync</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">9c27d0f6</span></li></ul><span class="jb-code">job.redelivered</span></span></td></tr>
+                          <tr><td class="ts">09:40:17.552</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">message redelivered</span><ul class="kv-list"><li class="kv"><span class="kv__k">job</span><span class="kv__v">lms.sync</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">7a03e4b1</span></li></ul><span class="jb-code">job.redelivered</span></span></td></tr>
+                          <tr><td class="ts">03:12:44.105</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">message redelivered</span><ul class="kv-list"><li class="kv"><span class="kv__k">job</span><span class="kv__v">lms.sync</span></li><li class="kv"><span class="kv__k">id</span><span class="kv__v">5f1c0a92</span></li></ul><span class="jb-code">job.redelivered</span></span></td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p class="hint">broker ส่ง message ซ้ำเพราะรอบแรกไม่ได้ ack ทั้ง 4 ครั้งสำเร็จในรอบที่สอง (failed 0)</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+
+            <tbody data-src="cron">
+              <tr class="jb-group"><th scope="rowgroup" colspan="10"><span class="jb-group__in"><span class="tag">cron</span><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span><span>@nestjs/schedule · ชื่อ job คือ Class.method</span></span></th></tr>
+              <tr>
+                <td class="jb-c-tog"></td>
+                <td class="jb-c-name"><span class="jb-q"><span class="queue-name">ReportCleanupService.purge</span><span class="queue-sub">ทุกชั่วโมง</span></span></td>
+                <td class="jb-c-st num" data-label="เริ่ม">24</td>
+                <td class="jb-c-fin num" data-label="สำเร็จ">24</td>
+                <td class="jb-c-rt num t-muted" data-label="retry">–</td>
+                <td class="jb-c-fl num t-muted" data-label="ล้มเหลว">0</td>
+                <td class="jb-c-out"><span class="jb-out" tabindex="0" role="img" aria-label="สำเร็จ 24 จาก 24 รอบ" data-tip="ReportCleanupService.purge · 24 รอบ|24::สำเร็จ|0::ล้มเหลว" data-tip-keys="bar-neutral,danger-solid"><i style="--n:24"></i></span></td>
+                <td class="jb-c-p95 num t-muted" data-label="p95">–</td>
+                <td class="jb-c-last t-muted">–</td>
+                <td class="jb-c-ev"><span class="state state--ok">ล่าสุด 14:00 สำเร็จ</span></td>
+              </tr>
+              <tr>
+                <td class="jb-c-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="job-cron-detail" aria-label="ขยาย AttendanceSyncService.sync"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                <td class="jb-c-name"><span class="jb-q"><span class="queue-name">AttendanceSyncService.sync</span><span class="queue-sub">ทุก 15 นาที</span></span></td>
+                <td class="jb-c-st num" data-label="เริ่ม">96</td>
+                <td class="jb-c-fin num" data-label="สำเร็จ">95</td>
+                <td class="jb-c-rt num t-muted" data-label="retry">–</td>
+                <td class="jb-c-fl num t-danger" data-label="ล้มเหลว">1</td>
+                <td class="jb-c-out"><span class="jb-out" tabindex="0" role="img" aria-label="สำเร็จ 95 ล้มเหลว 1 จาก 96 รอบ" data-tip="AttendanceSyncService.sync · 96 รอบ|95::สำเร็จ|1::ล้มเหลว" data-tip-keys="bar-neutral,danger-solid"><i style="--n:95"></i><i class="jb-out__fail" style="--n:1"></i></span></td>
+                <td class="jb-c-p95 num t-muted" data-label="p95">–</td>
+                <td class="jb-c-last"><span class="jb-last"><span class="ts">11:45:06</span><span class="jb-last__hint">Lock wait timed out</span><span class="cell-sub">รอบ 11:45</span></span></td>
+                <td class="jb-c-ev"><span class="state state--ok">รอบถัดไป 12:00 สำเร็จ</span></td>
+              </tr>
+              <tr class="row-detail" id="job-cron-detail" hidden>
+                <td></td>
+                <td colspan="9">
+                  <div class="err-list">
+                    <article class="err-row">
+                      <div class="err-row__head">
+                        <span class="lvl lvl--err">ERR</span>
+                        <h3 class="err-row__title">Lock wait timed out</h3>
+                        <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+                        <span class="err-row__count"><span class="ts">17 ต.ค. 11:45:06.214</span></span>
+                      </div>
+                      <ul class="kv-list" aria-label="บริบท">
+                        <li class="kv"><span class="kv__k">job</span><span class="kv__v">AttendanceSyncService.sync</span></li>
+                        <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/attendance/attendance-sync.service.ts</span></li>
+                        <li class="kv"><span class="kv__k">duration</span><span class="kv__v">6,214 ms</span></li>
+                      </ul>
+                      <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>SELECT ... FOR UPDATE WAIT gave up because another transaction kept the row locked. Usually load-related; retry or shorten the transaction.</p>
+                      <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>QueryFailedError [ORA-30006] ORA-30006: resource busy; acquire with WAIT timeout expired</p>
+                      <div class="err-row__meta">
+                        <span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span>
+                        <span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=1b7e9c3a5d0f42e8b6a1c4d7e0f9a238">1b7e9c3a5d0f42e8b6a1c4d7e0f9a238</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="1b7e9c3a5d0f42e8b6a1c4d7e0f9a238" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span>
+                        <span>cron ไม่ retry เอง รอบถัดไป 12:00 สำเร็จ</span>
+                      </div>
+                    </article>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="legend jb-legend">
+          <li class="legend__item"><span class="legend__key" style="--c:var(--bar-neutral)"></span>สำเร็จ</li>
+          <li class="legend__item"><span class="legend__key" style="--c:var(--warn-solid)"></span>retry / redeliver</li>
+          <li class="legend__item"><span class="legend__key" style="--c:var(--danger-solid)"></span>ล้มเหลวจริง</li>
+          <li class="legend__item t-muted">ผลลัพธ์ยาวตามสัดส่วนจริง ส่วนที่ไม่ใช่ศูนย์กว้างอย่างน้อย 2 px</li>
+        </ul>
+        <p class="hint jb-foot">BullMQ: เริ่ม = สำเร็จ + retry + ล้มเหลว (380 = 339 + 38 + 3) · p95 คิดจากงานที่สำเร็จ · cron ไม่มี retry จึงแสดง –</p>
+      </section>
+
+      <!-- ===== report:generate failures ===== -->
+      <section class="section" id="failures" aria-labelledby="h-failures">
+        <div class="section__head">
+          <h2 class="section__title" id="h-failures">report:generate ที่ล้มเหลว</h2>
+          <span class="section__meta">BullMQ queue <span class="mono">report</span> · 41 บรรทัด = job.retry 38 + job.failed 3 · ใหม่สุดก่อน</span>
+          <div class="section__actions"><a class="btn btn--sm" href="logs.html?event=job.retry,job.failed&amp;q=report:generate">ดูทั้ง 41 บรรทัดใน Log</a></div>
+        </div>
+        <div class="err-list">
+          <article class="err-row">
+            <div class="err-row__head">
+              <span class="lvl lvl--err">ERR</span>
+              <h3 class="err-row__title"><a href="errors.html#g3">Google API rate limited</a></h3>
+              <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+              <span class="err-row__count"><span><b>41</b> ครั้ง</span><span><b>38</b> retry</span><span><b>3</b> ล้มเหลวจริง</span></span>
+            </div>
+            <ul class="kv-list" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">job</span><span class="kv__v">report:generate</span></li>
+              <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/report/google-sheets.service.ts</span></li>
+              <li class="kv"><span class="kv__k">target</span><span class="kv__v">sheets.googleapis.com</span></li>
+            </ul>
+            <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes.</p>
+            <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>GaxiosError [rateLimitExceeded] Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute per user' of service 'sheets.googleapis.com'</p>
+            <div class="err-row__meta">
+              <span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span>
+              <span>source <span class="mono">GoogleSheetsService.exportReport</span></span>
+              <span>ล่าสุด <span class="ts">17 ต.ค. 14:12:41</span></span>
+              <span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6">e7c3d2a1f09e885ca13e9b0a8d4f21b6</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="e7c3d2a1f09e885ca13e9b0a8d4f21b6" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span>
+            </div>
+          </article>
+        </div>
+        <div class="table-wrap mt-3">
+          <table class="table table--dense table--reflow jb-fail">
+            <caption class="sr-only">บรรทัด job.retry และ job.failed ล่าสุด 8 จาก 41 บรรทัดของ report:generate</caption>
+            <thead>
+              <tr>
+                <th scope="col">เวลา</th>
+                <th scope="col">ระดับ</th>
+                <th scope="col">Service</th>
+                <th scope="col">Job id</th>
+                <th scope="col" class="num">Attempt</th>
+                <th scope="col">ผล</th>
+                <th scope="col">สาเหตุ (error_hint)</th>
+                <th scope="col" class="num">เวลาที่ใช้</th>
+                <th scope="col">Trace</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="ts jb-c-time">14:12:41.508</td>
+                <td class="jb-c-lvl"><span class="lvl lvl--wrn">WRN</span></td>
+                <td class="jb-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td>
+                <td class="jb-c-id"><button class="jb-open" type="button" data-drawer-open="drawer-job" data-drawer-param="job" aria-controls="drawer-job" aria-expanded="false" aria-label="เปิดรายละเอียด job 88412 attempt 2 จาก 3">#88412</button></td>
+                <td class="num jb-c-att" data-label="attempt">2/3</td>
+                <td class="jb-c-res"><span class="t-warn">retry ต่อ</span></td>
+                <td class="jb-c-cause">Google API rate limited</td>
+                <td class="num jb-c-dur">10.0 s</td>
+                <td class="jb-c-tr"><span class="idchip" style="max-width:200px"><a href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6" title="e7c3d2a1f09e885ca13e9b0a8d4f21b6">e7c3d2a1f09e885ca13e9b0a8d4f21b6</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="e7c3d2a1f09e885ca13e9b0a8d4f21b6" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td>
+              </tr>
+              <tr><td class="ts jb-c-time">14:12:20.377</td><td class="jb-c-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="jb-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="jb-c-id"><span class="mono">#88412</span></td><td class="num jb-c-att" data-label="attempt">1/3</td><td class="jb-c-res"><span class="t-warn">retry ต่อ</span></td><td class="jb-c-cause">Google API rate limited</td><td class="num jb-c-dur">9.9 s</td><td class="jb-c-tr"><span class="idchip" style="max-width:200px"><a href="trace-detail.html?traceId=5d0b7e2c94a1f36e8c07d4b9a2e1f580" title="5d0b7e2c94a1f36e8c07d4b9a2e1f580">5d0b7e2c94a1f36e8c07d4b9a2e1f580</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="5d0b7e2c94a1f36e8c07d4b9a2e1f580" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td></tr>
+              <tr><td class="ts jb-c-time">13:58:07.912</td><td class="jb-c-lvl"><span class="lvl lvl--err">ERR</span></td><td class="jb-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="jb-c-id"><span class="mono">#88391</span></td><td class="num jb-c-att" data-label="attempt">3/3</td><td class="jb-c-res"><span class="t-danger">ล้มเหลวจริง</span></td><td class="jb-c-cause">Google API rate limited</td><td class="num jb-c-dur">10.1 s</td><td class="jb-c-tr"><span class="idchip" style="max-width:200px"><a href="trace-detail.html?traceId=0c8e4f61b2d97a35e1f0c4a8b6d2e973" title="0c8e4f61b2d97a35e1f0c4a8b6d2e973">0c8e4f61b2d97a35e1f0c4a8b6d2e973</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="0c8e4f61b2d97a35e1f0c4a8b6d2e973" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td></tr>
+              <tr><td class="ts jb-c-time">13:57:44.150</td><td class="jb-c-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="jb-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="jb-c-id"><span class="mono">#88391</span></td><td class="num jb-c-att" data-label="attempt">2/3</td><td class="jb-c-res"><span class="t-warn">retry ต่อ</span></td><td class="jb-c-cause">Google API rate limited</td><td class="num jb-c-dur">10.0 s</td><td class="jb-c-tr"><span class="idchip" style="max-width:200px"><a href="trace-detail.html?traceId=91a4d7e03c5b8f26a0e7d1c9b4f38a52" title="91a4d7e03c5b8f26a0e7d1c9b4f38a52">91a4d7e03c5b8f26a0e7d1c9b4f38a52</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="91a4d7e03c5b8f26a0e7d1c9b4f38a52" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td></tr>
+              <tr><td class="ts jb-c-time">13:57:21.603</td><td class="jb-c-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="jb-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="jb-c-id"><span class="mono">#88391</span></td><td class="num jb-c-att" data-label="attempt">1/3</td><td class="jb-c-res"><span class="t-warn">retry ต่อ</span></td><td class="jb-c-cause">Google API rate limited</td><td class="num jb-c-dur">10.1 s</td><td class="jb-c-tr"><span class="idchip" style="max-width:200px"><a href="trace-detail.html?traceId=3f7b2c90e6a14d58b9c0f2e7a1d6c834" title="3f7b2c90e6a14d58b9c0f2e7a1d6c834">3f7b2c90e6a14d58b9c0f2e7a1d6c834</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="3f7b2c90e6a14d58b9c0f2e7a1d6c834" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td></tr>
+              <tr><td class="ts jb-c-time">13:11:09.274</td><td class="jb-c-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="jb-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="jb-c-id"><span class="mono">#88377</span></td><td class="num jb-c-att" data-label="attempt">1/3</td><td class="jb-c-res"><span class="t-warn">retry ต่อ</span></td><td class="jb-c-cause">Google API rate limited</td><td class="num jb-c-dur">9.9 s</td><td class="jb-c-tr"><span class="idchip" style="max-width:200px"><a href="trace-detail.html?traceId=b6e10d4a7f9c2358e4a0b1c7d9f2e605" title="b6e10d4a7f9c2358e4a0b1c7d9f2e605">b6e10d4a7f9c2358e4a0b1c7d9f2e605</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="b6e10d4a7f9c2358e4a0b1c7d9f2e605" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td></tr>
+              <tr><td class="ts jb-c-time">12:47:52.086</td><td class="jb-c-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="jb-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="jb-c-id"><span class="mono">#88340</span></td><td class="num jb-c-att" data-label="attempt">1/3</td><td class="jb-c-res"><span class="t-warn">retry ต่อ</span></td><td class="jb-c-cause">Google API rate limited</td><td class="num jb-c-dur">10.0 s</td><td class="jb-c-tr"><span class="idchip" style="max-width:200px"><a href="trace-detail.html?traceId=2a9d5f13c8e04b76a1f3d0e9c5b78e21" title="2a9d5f13c8e04b76a1f3d0e9c5b78e21">2a9d5f13c8e04b76a1f3d0e9c5b78e21</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="2a9d5f13c8e04b76a1f3d0e9c5b78e21" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td></tr>
+              <tr><td class="ts jb-c-time">12:05:13.660</td><td class="jb-c-lvl"><span class="lvl lvl--wrn">WRN</span></td><td class="jb-c-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td><td class="jb-c-id"><span class="mono">#88296</span></td><td class="num jb-c-att" data-label="attempt">2/3</td><td class="jb-c-res"><span class="t-warn">retry ต่อ</span></td><td class="jb-c-cause">Google API rate limited</td><td class="num jb-c-dur">10.0 s</td><td class="jb-c-tr"><span class="idchip" style="max-width:200px"><a href="trace-detail.html?traceId=d47c0b8e2f5a9136c8e1a0d4f7b2c9e3" title="d47c0b8e2f5a9136c8e1a0d4f7b2c9e3">d47c0b8e2f5a9136c8e1a0d4f7b2c9e3</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="d47c0b8e2f5a9136c8e1a0d4f7b2c9e3" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint mt-2">แสดง 8 จาก 41 บรรทัด · ล้มเหลวจริง (ครบ 3/3) 3 job: #88391 13:58:07 · #88207 11:26:44 · #88044 09:03:15 · กดเลข job เพื่อเปิดรายละเอียด</p>
+      </section>
+
+      <!-- ===== dependencies ===== -->
+      <section class="section" id="dependencies" aria-labelledby="h-deps">
+        <div class="section__head">
+          <h2 class="section__title" id="h-deps">ระบบที่เรียกใช้ (dependency)</h2>
+          <span class="section__meta">5 รายการของ prod · สถานะมาจากบรรทัด log ที่ library เขียนเองเมื่อต่อไม่ได้และเมื่อกลับมา</span>
+        </div>
+        <ol class="flow jb-flow" aria-label="บรรทัด log ที่กำหนดสถานะ dependency">
+          <li class="flow__node flow__node--lead"><span class="lvl lvl--err">ERR</span><code>dependency.down</code><span class="flow__text">ต่อไม่ได้ครั้งแรก: สถานะเป็น <b>down</b> ตั้งแต่เวลาของบรรทัดนี้</span></li>
+          <li class="flow__node flow__node--lead"><span class="lvl lvl--wrn">WRN</span><code>dependency.still_down</code><span class="flow__text">ทุก 30 s ระหว่างที่ยังต่อไม่ได้ พร้อม retry และเวลาที่ล่มมาแล้ว</span></li>
+          <li class="flow__node flow__node--lead"><span class="lvl lvl--inf">INF</span><code>dependency.up</code><span class="flow__text">กลับมาแล้ว: สถานะเป็น <b>up</b> และ duration คือเวลาที่ล่มทั้งหมด</span></li>
+        </ol>
+        <p class="hint">Library เขียนเมื่อเชื่อมต่อครั้งแรก (<code>dependency.up</code> reason connected) และเมื่อสถานะเปลี่ยน ถ้าไม่มีบรรทัดอื่นในช่วงนี้แปลว่าไม่ได้ล่ม (แสดงเป็น up) · ThaID มีแค่ <code>http.outbound_failed</code> (ตอบ 4xx) ซึ่งไม่เปลี่ยนสถานะ จึงแสดงเป็นเตือน</p>
+        <div class="table-wrap mt-3">
+          <table class="table table--reflow jb-deps">
+            <caption class="sr-only">Dependency ของ prod: สถานะตอนนี้ ประวัติ 24 ชั่วโมง และบรรทัด log ที่ให้สถานะนั้น</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="col-tight"><span class="sr-only">ขยาย</span></th>
+                <th scope="col">Dependency · host:port</th>
+                <th scope="col">Service</th>
+                <th scope="col">สถานะตอนนี้</th>
+                <th scope="col" class="jb-tl-col">24 ชั่วโมง (16 ต.ค. 14:20 → 17 ต.ค. 14:20)<div class="mini-axis" aria-hidden="true"><span style="--x:15.278">18:00</span><span style="--x:31.944">22:00</span><span style="--x:48.611">02:00</span><span style="--x:65.278">06:00</span><span style="--x:81.944">10:00</span><span class="mini-axis__end">14:20</span></div></th>
+                <th scope="col">ที่มาของสถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr id="dep-thaid">
+                <td class="jd-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="dep-thaid-detail" aria-label="ขยาย ThaID"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                <td class="jd-dep"><span class="dep"><span class="dep__top"><span class="tag">http</span><span class="dep__name">ThaID</span></span><span class="dep__host">imauth.bora.dopa.go.th</span></span></td>
+                <td class="jd-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                <td class="jd-state"><span class="jb-state"><span class="state state--warn">up · 401 × 4</span><span class="cell-sub">ถูกปฏิเสธ 4 ครั้งใน 1 ชั่วโมงล่าสุด</span></span></td>
+                <td class="jd-tl"><svg class="jb-tl" viewBox="0 0 1440 20" preserveAspectRatio="none" role="img" aria-label="ThaID ใน 24 ชั่วโมง: up ตลอด ถูกปฏิเสธ 401 สี่ครั้ง 13:51 ถึง 14:14"><line class="c-grid" x1="220" x2="220" y1="0" y2="20"/><line class="c-grid" x1="460" x2="460" y1="0" y2="20"/><line class="c-grid" x1="700" x2="700" y1="0" y2="20"/><line class="c-grid" x1="940" x2="940" y1="0" y2="20"/><line class="c-grid" x1="1180" x2="1180" y1="0" y2="20"/><line class="c-grid" x1="1420" x2="1420" y1="0" y2="20"/><rect class="jb-tl__up" x="0" y="5" width="1440" height="10"/><line class="jb-tl__halo" x1="1411.12" x2="1411.12" y1="2" y2="18"/><line class="jb-tl__halo" x1="1418.7" x2="1418.7" y1="2" y2="18"/><line class="jb-tl__halo" x1="1426.32" x2="1426.32" y1="2" y2="18"/><line class="jb-tl__halo" x1="1434.92" x2="1434.92" y1="2" y2="18"/><line class="jb-tl__warn" x1="1411.12" x2="1411.12" y1="2" y2="18"/><line class="jb-tl__warn" x1="1418.7" x2="1418.7" y1="2" y2="18"/><line class="jb-tl__warn" x1="1426.32" x2="1426.32" y1="2" y2="18"/><line class="jb-tl__warn" x1="1434.92" x2="1434.92" y1="2" y2="18"/><line class="c-hit jb-tl__hit" x1="1423" x2="1423" y1="0" y2="20" tabindex="0" data-tip="ThaID · 17 ต.ค. http.outbound_failed|401::13:51:07|401::13:58:42|401::14:06:19|401::14:14:55"/></svg></td>
+                <td class="jd-src"><span class="jb-src"><span class="jb-src__line"><span class="lvl lvl--wrn">WRN</span><code>http.outbound_failed</code></span><span class="cell-sub">× 4 · ล่าสุด 14:14:55 · ไม่ใช่ dependency.down</span></span></td>
+              </tr>
+              <tr class="row-detail" id="dep-thaid-detail" hidden>
+                <td></td>
+                <td colspan="5">
+                  <div class="jb-detail">
+                    <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร (error_hint_detail)</span>imauth.bora.dopa.go.th answered 4xx. Check credentials (401/403), the URL (404) or the payload (400); 429 means rate limited.</p>
+                    <div class="table-wrap jb-lines">
+                      <table class="table table--dense">
+                        <caption class="sr-only">บรรทัด http.outbound_failed ของ ThaID</caption>
+                        <thead><tr><th scope="col">เวลา</th><th scope="col">ระดับ</th><th scope="col">บรรทัดจาก library</th></tr></thead>
+                        <tbody>
+                          <tr><td class="ts">14:14:55.031</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">"ThaID" API rejected request</span><ul class="kv-list"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv kv--warn"><span class="kv__k">status</span><span class="kv__v">401</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">imauth.bora.dopa.go.th</span></li></ul><span class="jb-code">http.outbound_failed · AxiosError [ERR_BAD_REQUEST] Request failed with status code 401</span></span></td></tr>
+                          <tr><td class="ts">14:06:19.418</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">"ThaID" API rejected request</span><ul class="kv-list"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv kv--warn"><span class="kv__k">status</span><span class="kv__v">401</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">imauth.bora.dopa.go.th</span></li></ul><span class="jb-code">http.outbound_failed · AxiosError [ERR_BAD_REQUEST] Request failed with status code 401</span></span></td></tr>
+                          <tr><td class="ts">13:58:42.767</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">"ThaID" API rejected request</span><ul class="kv-list"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv kv--warn"><span class="kv__k">status</span><span class="kv__v">401</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">imauth.bora.dopa.go.th</span></li></ul><span class="jb-code">http.outbound_failed · AxiosError [ERR_BAD_REQUEST] Request failed with status code 401</span></span></td></tr>
+                          <tr><td class="ts">13:51:07.205</td><td><span class="lvl lvl--wrn">WRN</span></td><td><span class="jb-line"><span class="jb-line__title">"ThaID" API rejected request</span><ul class="kv-list"><li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li><li class="kv kv--warn"><span class="kv__k">status</span><span class="kv__v">401</span></li><li class="kv"><span class="kv__k">target</span><span class="kv__v">imauth.bora.dopa.go.th</span></li></ul><span class="jb-code">http.outbound_failed · AxiosError [ERR_BAD_REQUEST] Request failed with status code 401</span></span></td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p class="hint">4xx ไม่ทำให้ library เขียน dependency.down เพราะปลายทางยังตอบอยู่ สถานะจึงยังเป็น up แต่หน้าจอนี้เตือนจากบรรทัดเหล่านี้</p>
+                  </div>
+                </td>
+              </tr>
+
+              <tr id="dep-cache" class="is-expanded">
+                <td class="jd-tog"><button class="row-toggle" type="button" data-expand aria-expanded="true" aria-controls="dep-cache-detail" aria-label="ขยาย redis cache"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                <td class="jd-dep"><span class="dep"><span class="dep__top"><span class="tag">redis</span><span class="dep__name">cache</span></span><span class="dep__host">10.0.3.21:6379</span></span></td>
+                <td class="jd-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                <td class="jd-state"><span class="jb-state"><span class="state state--ok">up ตั้งแต่ 13:43:20</span><span class="cell-sub"><span class="t-danger">down 45.2 s</span> 13:42:35–13:43:20</span></span></td>
+                <td class="jd-tl"><svg class="jb-tl" viewBox="0 0 1440 20" preserveAspectRatio="none" role="img" aria-label="redis cache ใน 24 ชั่วโมง: up ตลอด ยกเว้น down 45.2 วินาที 13:42:35 ถึง 13:43:20"><line class="c-grid" x1="220" x2="220" y1="0" y2="20"/><line class="c-grid" x1="460" x2="460" y1="0" y2="20"/><line class="c-grid" x1="700" x2="700" y1="0" y2="20"/><line class="c-grid" x1="940" x2="940" y1="0" y2="20"/><line class="c-grid" x1="1180" x2="1180" y1="0" y2="20"/><line class="c-grid" x1="1420" x2="1420" y1="0" y2="20"/><rect class="jb-tl__up" x="0" y="5" width="1440" height="10"/><line class="jb-tl__halo" x1="1402.96" x2="1402.96" y1="0" y2="20"/><line class="jb-tl__down" x1="1402.96" x2="1402.96" y1="0" y2="20"/><line class="c-hit jb-tl__hit" x1="1402.96" x2="1402.96" y1="0" y2="20" tabindex="0" data-tip="redis cache · 17 ต.ค.|45.2 s::down 13:42:35.118–13:43:20.318|retry 6::still_down 13:43:05.118"/></svg></td>
+                <td class="jd-src"><span class="jb-src"><span class="jb-src__line"><span class="lvl lvl--inf">INF</span><code>dependency.up</code></span><span class="cell-sub">13:43:20.318 · ล่าสุดจาก 3 บรรทัด</span></span></td>
+              </tr>
+              <tr class="row-detail" id="dep-cache-detail">
+                <td></td>
+                <td colspan="5">
+                  <div class="jb-zoom">
+                    <figure class="chart chart--bare">
+                      <div class="chart__head">
+                        <h3 class="chart__title" id="zoom-title">redis "cache" ช่วง 13:42–13:44</h3>
+                        <span class="chart__sub">ขยาย 2 นาทีตามสเกลจริง · เส้นตั้ง = เวลาของบรรทัด log</span>
+                        <ul class="legend">
+                          <li class="legend__item"><span class="legend__key" style="--c:var(--ok-line)"></span>up</li>
+                          <li class="legend__item"><span class="legend__key" style="--c:var(--danger-solid)"></span>down</li>
+                        </ul>
+                      </div>
+                      <div class="chart__plot">
+<svg viewBox="0 0 500 86" role="img" aria-labelledby="zoom-title zoom-desc" style="--chart-min:450px">
+  <desc id="zoom-desc">up จนถึง 13:42:35.118 จากนั้น down 45.2 วินาทีจนถึง 13:43:20.318 แล้ว up อีกครั้ง</desc>
+  <line class="c-event" x1="151.23" x2="151.23" y1="3" y2="40"/>
+  <text class="c-event-label" x="147.23" y="12" text-anchor="end">dependency.down</text>
+  <line class="c-event" x1="270.23" x2="270.23" y1="3" y2="40"/>
+  <text class="c-event-label" x="274.23" y="12">dependency.still_down</text>
+  <line class="c-event" x1="330.52" x2="330.52" y1="21" y2="40"/>
+  <text class="c-event-label" x="334.52" y="30">dependency.up · 45.2 s</text>
+  <rect class="jb-z-up" x="12" y="42" width="138.23" height="14"/>
+  <rect class="jb-z-down" x="152.23" y="42" width="177.29" height="14"/>
+  <rect class="jb-z-up" x="331.52" y="42" width="156.48" height="14"/>
+  <line class="c-axis" x1="12" x2="488" y1="64" y2="64"/>
+  <line class="c-axis" x1="12" x2="12" y1="64" y2="68"/>
+  <line class="c-axis" x1="91.33" x2="91.33" y1="64" y2="68"/>
+  <line class="c-axis" x1="170.67" x2="170.67" y1="64" y2="68"/>
+  <line class="c-axis" x1="250" x2="250" y1="64" y2="68"/>
+  <line class="c-axis" x1="329.33" x2="329.33" y1="64" y2="68"/>
+  <line class="c-axis" x1="408.67" x2="408.67" y1="64" y2="68"/>
+  <line class="c-axis" x1="488" x2="488" y1="64" y2="68"/>
+  <text class="c-tick" x="12" y="81">13:42:00</text>
+  <text class="c-tick c-tick--mid" x="91.33" y="81">13:42:20</text>
+  <text class="c-tick c-tick--mid" x="170.67" y="81">13:42:40</text>
+  <text class="c-tick c-tick--mid" x="250" y="81">13:43:00</text>
+  <text class="c-tick c-tick--mid" x="329.33" y="81">13:43:20</text>
+  <text class="c-tick c-tick--mid" x="408.67" y="81">13:43:40</text>
+  <text class="c-tick c-tick--end" x="488" y="81">13:44:00</text>
+  <rect class="c-hit" x="12" y="38" width="139.23" height="22" tabindex="0" data-tip="13:42:00–13:42:35.118|up::ก่อนบรรทัด dependency.down"/>
+  <rect class="c-hit" x="151.23" y="38" width="179.29" height="22" tabindex="0" data-tip="13:42:35.118–13:43:20.318|45.2 s::down|retry 6::still_down 13:43:05.118"/>
+  <rect class="c-hit" x="330.52" y="38" width="157.48" height="22" tabindex="0" data-tip="ตั้งแต่ 13:43:20.318|up::dependency.up · retry 13"/>
+</svg>
+                      </div>
+                    </figure>
+                    <div class="table-wrap jb-lines">
+                      <table class="table table--dense">
+                        <caption class="sr-only">บรรทัด dependency.* ของ redis cache ที่กำหนดสถานะ</caption>
+                        <thead><tr><th scope="col">เวลา</th><th scope="col">ระดับ</th><th scope="col">บรรทัดจาก library</th><th scope="col">สถานะ</th></tr></thead>
+                        <tbody>
+                          <tr>
+                            <td class="ts">13:42:35.118</td>
+                            <td><span class="lvl lvl--err">ERR</span></td>
+                            <td><span class="jb-line"><span class="jb-line__title">Redis "cache" refused connection</span><ul class="kv-list"><li class="kv"><span class="kv__k">target</span><span class="kv__v">10.0.3.21:6379</span></li><li class="kv"><span class="kv__k">affects</span><span class="kv__v">cache</span></li></ul><span class="jb-code">dependency.down · Error [ECONNREFUSED] connect ECONNREFUSED 10.0.3.21:6379</span></span></td>
+                            <td><span class="state state--down">down</span></td>
+                          </tr>
+                          <tr>
+                            <td class="ts">13:43:05.118</td>
+                            <td><span class="lvl lvl--wrn">WRN</span></td>
+                            <td><span class="jb-line"><span class="jb-line__title">redis "cache" still down</span><ul class="kv-list"><li class="kv"><span class="kv__k">target</span><span class="kv__v">10.0.3.21:6379</span></li><li class="kv"><span class="kv__k">retry</span><span class="kv__v">6</span></li><li class="kv"><span class="kv__k">duration</span><span class="kv__v">30.0 s</span></li></ul><span class="jb-code">dependency.still_down</span></span></td>
+                            <td><span class="state state--down">ยัง down</span></td>
+                          </tr>
+                          <tr>
+                            <td class="ts">13:43:20.318</td>
+                            <td><span class="lvl lvl--inf">INF</span></td>
+                            <td><span class="jb-line"><span class="jb-line__title">redis "cache" is back</span><ul class="kv-list"><li class="kv"><span class="kv__k">target</span><span class="kv__v">10.0.3.21:6379</span></li><li class="kv"><span class="kv__k">retry</span><span class="kv__v">9</span></li><li class="kv"><span class="kv__k">reason</span><span class="kv__v">recovered</span></li><li class="kv"><span class="kv__k">duration</span><span class="kv__v">45.2 s</span></li></ul><span class="jb-code">dependency.up</span></span></td>
+                            <td><span class="state state--ok">up</span></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <p class="hint mt-2">Error group ที่เกี่ยวข้อง: <a href="errors.html#g4">Redis "cache" refused connection</a> · ECONNREFUSED 3 ครั้ง · <span class="mono">attempts</span> ใน /api/dependencies = 2 (บรรทัดที่ล้มเหลวในช่วงนี้: down + still_down) · client retry ล่าสุด 9 (จากบรรทัด up)</p>
+                </td>
+              </tr>
+
+              <tr>
+                <td class="jd-tog"></td>
+                <td class="jd-dep"><span class="dep"><span class="dep__top"><span class="tag">redis</span><span class="dep__name">queue</span></span><span class="dep__host">10.0.3.22:6379</span></span></td>
+                <td class="jd-svc"><span class="svc-list"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></span></td>
+                <td class="jd-state"><span class="jb-state"><span class="state state--ok">up</span><span class="cell-sub">ไม่ได้ล่มใน 24 ชั่วโมง</span></span></td>
+                <td class="jd-tl"><svg class="jb-tl" viewBox="0 0 1440 20" preserveAspectRatio="none" role="img" aria-label="redis queue ใน 24 ชั่วโมง: up ตลอด"><line class="c-grid" x1="220" x2="220" y1="0" y2="20"/><line class="c-grid" x1="460" x2="460" y1="0" y2="20"/><line class="c-grid" x1="700" x2="700" y1="0" y2="20"/><line class="c-grid" x1="940" x2="940" y1="0" y2="20"/><line class="c-grid" x1="1180" x2="1180" y1="0" y2="20"/><line class="c-grid" x1="1420" x2="1420" y1="0" y2="20"/><rect class="jb-tl__up" x="0" y="5" width="1440" height="10"/></svg></td>
+                <td class="jd-src"><span class="jb-src"><span class="jb-src__line"><span class="lvl lvl--inf">INF</span><code>dependency.up</code></span><span class="cell-sub">reason connected ตอน pod เริ่ม · ไม่มีบรรทัดอื่นใน 24 ชั่วโมง</span></span></td>
+              </tr>
+              <tr>
+                <td class="jd-tog"></td>
+                <td class="jd-dep"><span class="dep"><span class="dep__top"><span class="tag">kafka</span><span class="dep__name">producer</span></span><span class="dep__host">kafka-0.kafka:9092</span></span></td>
+                <td class="jd-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td>
+                <td class="jd-state"><span class="jb-state"><span class="state state--ok">up</span><span class="cell-sub">ไม่ได้ล่มใน 24 ชั่วโมง</span></span></td>
+                <td class="jd-tl"><svg class="jb-tl" viewBox="0 0 1440 20" preserveAspectRatio="none" role="img" aria-label="kafka producer ใน 24 ชั่วโมง: up ตลอด"><line class="c-grid" x1="220" x2="220" y1="0" y2="20"/><line class="c-grid" x1="460" x2="460" y1="0" y2="20"/><line class="c-grid" x1="700" x2="700" y1="0" y2="20"/><line class="c-grid" x1="940" x2="940" y1="0" y2="20"/><line class="c-grid" x1="1180" x2="1180" y1="0" y2="20"/><line class="c-grid" x1="1420" x2="1420" y1="0" y2="20"/><rect class="jb-tl__up" x="0" y="5" width="1440" height="10"/></svg></td>
+                <td class="jd-src"><span class="jb-src"><span class="jb-src__line"><span class="lvl lvl--inf">INF</span><code>dependency.up</code></span><span class="cell-sub">reason connected ตอน pod เริ่ม · ไม่มีบรรทัดอื่นใน 24 ชั่วโมง</span></span></td>
+              </tr>
+              <tr>
+                <td class="jd-tog"></td>
+                <td class="jd-dep"><span class="dep"><span class="dep__top"><span class="tag">rabbitmq</span><span class="dep__name">rabbitmq</span></span><span class="dep__host">10.0.5.10:5672</span></span></td>
+                <td class="jd-svc"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></td>
+                <td class="jd-state"><span class="jb-state"><span class="state state--ok">up</span><span class="cell-sub">ไม่ได้ล่มใน 24 ชั่วโมง</span></span></td>
+                <td class="jd-tl"><svg class="jb-tl" viewBox="0 0 1440 20" preserveAspectRatio="none" role="img" aria-label="rabbitmq rabbitmq ใน 24 ชั่วโมง: up ตลอด"><line class="c-grid" x1="220" x2="220" y1="0" y2="20"/><line class="c-grid" x1="460" x2="460" y1="0" y2="20"/><line class="c-grid" x1="700" x2="700" y1="0" y2="20"/><line class="c-grid" x1="940" x2="940" y1="0" y2="20"/><line class="c-grid" x1="1180" x2="1180" y1="0" y2="20"/><line class="c-grid" x1="1420" x2="1420" y1="0" y2="20"/><rect class="jb-tl__up" x="0" y="5" width="1440" height="10"/></svg></td>
+                <td class="jd-src"><span class="jb-src"><span class="jb-src__line"><span class="lvl lvl--inf">INF</span><code>dependency.up</code></span><span class="cell-sub">reason connected ตอน pod เริ่ม · ไม่มีบรรทัดอื่นใน 24 ชั่วโมง</span></span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="legend jb-legend">
+          <li class="legend__item"><span class="legend__key" style="--c:var(--ok-line)"></span>up</li>
+          <li class="legend__item"><span class="legend__key" style="--c:var(--danger-solid)"></span>down (ขีดกว้างอย่างน้อย 3 px: 45.2 s ใน 24 ชั่วโมงแคบกว่า 1 px)</li>
+          <li class="legend__item"><span class="legend__key" style="--c:var(--warn-solid)"></span>ถูกปฏิเสธ 4xx</li>
+          <li class="legend__item t-muted">ขีดจางบนล่าง = ทุก 4 ชั่วโมง · ชี้หรือกด Tab ที่ขีดเพื่อดูเวลา</li>
+        </ul>
+      </section>
+      <!-- screen content ends here -->
+
+      <details class="design-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <p>On-call ดูว่างานเบื้องหลังของแอป (BullMQ, Kafka, RabbitMQ, cron) ทำครบไหม อะไรล้มเหลวจริง อะไรแค่ retry แล้วผ่าน และระบบที่เรียกใช้ล่มช่วงไหน นานเท่าไร สถานะนั้นมาจากบรรทัด log ไหน หน้านี้ทำให้เห็นข้อ 1 (service/role ของทุกกลุ่ม), ข้อ 5 (error อ่านง่าย บอกที่แก้) และข้อ 4 (คัดลอกให้ AI ใน drawer)</p>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>Callout และ KPI: ผลรวมของ <code>GET /api/jobs?env=prod&amp;from=now-24h</code> → <code>stats[]</code> (<code>failed</code>, <code>retried</code> = retry + redelivered, <code>started</code>) และ <code>GET /api/dependencies</code> → <code>dependencies[].state</code> (ณ <code>to</code>, ย้อนดู 7 วัน)</li>
+              <li>ตาราง queue: <code>stats[]</code> (JobStat: <code>service</code>, <code>role</code> = หัวกลุ่ม, <code>module</code>, <code>queue</code>, <code>type</code>, <code>started</code>, <code>finished</code>, <code>retried</code>, <code>failed</code>, <code>p95Ms</code>, <code>lastRunAt</code>, <code>lastFailedAt</code>); ล้มเหลวล่าสุด = แถวใหม่สุดของ <code>recentFailures[]</code> ต่อ queue + type</li>
+              <li>เหตุการณ์และบรรทัดที่ขยาย: <code>consumerEvents</code> ของ <code>/api/jobs</code> (consumer.rebalancing, consumer.joined, job.redelivered)</li>
+              <li>รายการ report:generate: <code>recentFailures[]</code> (LogRow) ที่ <code>job.queue = report</code>: <code>job.id</code>, <code>job.attempt</code> / <code>maxAttempts</code>, <code>job.final</code>, <code>error.hint</code>, <code>durationMs</code>, <code>traceId</code>; กล่องบนสุดคือ ErrorGroup จาก <code>/api/errors</code> (<code>jobQueue</code>, <code>jobType</code>, <code>fix</code> ของครั้งล่าสุด)</li>
+              <li>Drawer: LogRow แถวนั้นทั้งแถว; Markdown สำหรับ AI ประกอบฝั่ง client ด้วย template เดียวกับทุกหน้า (DESIGN.md §6b)</li>
+              <li>ตาราง dependency: <code>dependencies[]</code> (<code>service</code>, <code>role</code>, <code>type</code>, <code>name</code>, <code>host</code>, <code>port</code>, <code>state</code>, <code>since</code>, <code>lastEventAt</code>, <code>lastOutageMs</code>, <code>affects</code>, <code>attempts</code> = บรรทัดที่ล้มเหลวในช่วงนี้); แถบ 24 ชั่วโมง กราฟขยาย และบรรทัดที่ขยาย: <code>events[]</code> (dependency.down / still_down / up และ http.outbound_failed)</li>
+              <li>ค่าที่ dataset ไม่ได้ให้เป็นตัวอย่างที่ไม่ขัดกับ dataset: เวลาที่ล้มเหลว, job id, trace id ยกเว้น e7c3d2a1…21b6, สาเหตุของ export และ cron, path ไฟล์, เวลา redeliver, retry ของ redis (still_down 6, up 9 ตรงกับหน้า Log); p95 ของ lms.sync และ cron ไม่มีใน dataset จึงแสดง – · ในชั่วโมงล่าสุดมี attempt ที่ล้มเหลว 5 ครั้ง (#88391 × 3, #88412 × 2) จาก 240 = 2.1 % ตรงกับแถว worker ในภาพรวม</li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li>ปุ่ม BullMQ / Kafka / RabbitMQ / cron กรองตาราง queue (ซ่อนกลุ่มอื่น) ของจริงควรเก็บใน URL <code>?source=</code></li>
+              <li>ลูกศรหน้าแถวขยายบรรทัด log ที่อยู่เบื้องหลังตัวเลขนั้น; redis cache เปิดไว้เป็นตัวอย่าง</li>
+              <li>กดเลข job (#88412) เปิด drawer (modal, mockup มีแถวเดียว; <code>?drawer=job</code> เปิดตอนโหลด); trace id เปิด trace-detail.html และมีปุ่มคัดลอก</li>
+              <li>แถบผลลัพธ์ ขีดบนแถบ 24 ชั่วโมง และกราฟขยายมี tooltip ทั้งเมาส์และ Tab; ตัวเลขเดียวกันอยู่ในตารางเสมอ</li>
+              <li>Callout พาไปที่ section ในหน้านี้; ลิงก์ Log เปิด logs.html พร้อมตัวกรอง event · ชื่อ error group เปิดแถวของมันใน errors.html</li>
+              <li>จอแคบกว่า 600 px: แถว queue และแถวที่ล้มเหลวเรียงเป็นหลายบรรทัด ตัวเลขมีป้ายกำกับ ไม่ต้องเลื่อนข้าง</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li>library ไม่ log cron expression: "ทุก 15 นาที" ต้องเพิ่ม field หรือเดาจากระยะห่างของรอบ (<code>lastRunAt</code> บอกได้แค่รอบล่าสุด)</li>
+              <li>ThaID 401 มาจาก <code>http.outbound_failed</code> (อยู่ใน <code>events</code> แล้ว): ควรมี state <code>degraded</code> ใน <code>Dependency</code> ไหม (ตอนนี้มีแค่ down | up)</li>
+              <li>p95 คิดจาก <code>job.finished</code> อย่างเดียว หรือรวม attempt ที่ล้มเหลว (~10 s)</li>
+              <li>Hint ใน library จริงเขียน "Google rate limit hit" และ "Redis "cache" unreachable" แต่ BRIEF ใช้ "Google API rate limited" และ "Redis "cache" refused connection" ใช้ชุดไหน</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+
+      <!-- Drawer: one job.retry line of report:generate (trace C) -->
+      <aside class="drawer" id="drawer-job" role="dialog" aria-modal="true" aria-labelledby="drawer-job-title" aria-hidden="true">
+        <div class="drawer__head">
+          <div class="drawer__heading">
+            <div class="drawer__sub"><span class="lvl lvl--wrn">WRN</span><span class="ts">17 ต.ค. 14:12:41.508</span><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span><span class="env env--prod">prod</span></div>
+            <h2 class="drawer__title" id="drawer-job-title">Google API rate limited</h2>
+          </div>
+          <button class="btn-icon" type="button" data-drawer-close aria-label="ปิด"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        </div>
+        <div class="drawer__body">
+          <div class="stack">
+            <ul class="kv-list" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">job</span><span class="kv__v">report:generate</span></li>
+              <li class="kv"><span class="kv__k">id</span><span class="kv__v">88412</span></li>
+              <li class="kv kv--warn"><span class="kv__k">attempt</span><span class="kv__v">2/3</span></li>
+              <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/report/google-sheets.service.ts</span></li>
+              <li class="kv"><span class="kv__k">target</span><span class="kv__v">sheets.googleapis.com</span></li>
+              <li class="kv"><span class="kv__k">duration</span><span class="kv__v">10,040 ms</span></li>
+            </ul>
+            <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes.</p>
+          </div>
+          <div>
+            <div class="field-group">
+              <h3 class="field-group__title">Job</h3>
+              <dl class="fields">
+                <dt>Queue<span class="fname">job_queue · event_module</span></dt><dd class="mono">report · bullmq</dd>
+                <dt>Job type<span class="fname">job_type</span></dt><dd class="mono">report:generate</dd>
+                <dt>Job id<span class="fname">job_id</span></dt><dd class="mono">88412</dd>
+                <dt>Attempt<span class="fname">job_attempt · job_max_attempts</span></dt><dd class="mono">2 / 3</dd>
+                <dt>ครั้งสุดท้ายไหม<span class="fname">job_final</span></dt><dd>0 · BullMQ ลองอีกครั้ง: attempt 3/3 เริ่ม <span class="ts">14:13:11.520</span> สำเร็จ <span class="ts">14:13:15.164</span></dd>
+                <dt>Event<span class="fname">event_code</span></dt><dd class="mono">job.retry</dd>
+                <dt>เวลาที่ใช้<span class="fname">duration_ms</span></dt><dd>10.0 s · 10,040 ms (เริ่ม <span class="ts">14:12:31.468</span>)</dd>
+              </dl>
+            </div>
+            <div class="field-group">
+              <h3 class="field-group__title">Error</h3>
+              <dl class="fields">
+                <dt>หมวด<span class="fname">error_category</span></dt><dd><span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span></dd>
+  <dt>อธิบายทั่วไป<span class="fname">error_hint_detail</span></dt><dd>Too many requests to the Google API. The rate-limit service retries with backoff; reduce concurrency if frequent.</dd>
+                <dt>ประเภท · code<span class="fname">error_type · error_code</span></dt><dd class="mono">GaxiosError · rateLimitExceeded</dd>
+                <dt>เป้าหมาย<span class="fname">error_target</span></dt><dd class="mono">sheets.googleapis.com</dd>
+                <dt>Function<span class="fname">origin_function</span></dt><dd class="mono">GoogleSheetsService.exportReport</dd>
+                <dt>ไฟล์<span class="fname">origin_file</span></dt><dd class="mono">src/domain/report/google-sheets.service.ts</dd>
+              </dl>
+            </div>
+            <div class="field-group">
+              <h3 class="field-group__title">ที่ไหน และ trace ไหน</h3>
+              <dl class="fields">
+                <dt>Trace<span class="fname">trace_id</span></dt><dd><span class="idchip"><a href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6">e7c3d2a1f09e885ca13e9b0a8d4f21b6</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="e7c3d2a1f09e885ca13e9b0a8d4f21b6" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></dd>
+                <dt>Service<span class="fname">service · role</span></dt><dd><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></dd>
+                <dt>Version<span class="fname">version</span></dt><dd class="mono">31.4.0</dd>
+                <dt>Env<span class="fname">env</span></dt><dd><span class="env env--prod">prod</span></dd>
+              </dl>
+            </div>
+          </div>
+          <details class="disclosure">
+            <summary>error จริง</summary>
+            <div class="disclosure__body"><p class="err-row__actual">GaxiosError [rateLimitExceeded] Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute per user' of service 'sheets.googleapis.com'</p></div>
+          </details>
+          <div class="code-block">
+            <div class="code-block__head"><span class="code-block__title">สรุป Markdown สำหรับ AI</span><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy-target="#ai-md-job"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอก</span></button></div>
+<pre class="code code--wrap" id="ai-md-job"><span class="c-key">### Google API rate limited</span> (rateLimitExceeded, category: dependency)
+- level: warn (job.retry; the group is error because 3 jobs failed after 3/3)
+- service: school-core-api/worker 31.4.0
+- env: prod
+- when: 2026-10-17 14:12:41.508 ICT
+- job: BullMQ queue report · report:generate #88412 · attempt 2/3 → retry in 10,040 ms (attempt 3/3 finished OK at 14:13:15)
+- this_case: sheets.googleapis.com returned 429 rateLimitExceeded on 'Write requests per minute per user'. The job retries with backoff; lower the export concurrency or batch the writes.
+- what: Too many requests to the Google API. The rate-limit service retries with backoff; reduce concurrency if frequent.
+- where: job report:generate (BullMQ queue report)
+- origin: GoogleSheetsService.exportReport · src/domain/report/google-sheets.service.ts
+- target: sheets.googleapis.com
+- error: GaxiosError [rateLimitExceeded] Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute per user' of service 'sheets.googleapis.com'
+- trace_id: e7c3d2a1f09e885ca13e9b0a8d4f21b6
+- counts: group 41 times in 24 h (38 retry · 3 failed after 3/3) · queue report: 380 attempts, 339 finished
+- fields: see docs/DATA-DICTIONARY.md</pre>
+          </div>
+        </div>
+        <div class="drawer__foot">
+          <a class="btn" href="trace-detail.html?traceId=e7c3d2a1f09e885ca13e9b0a8d4f21b6">เปิด trace</a>
+          <a class="btn btn--quiet" href="logs.html?q=88412">log ของ job #88412</a>
+          <button class="btn btn--cta btn-copy ml-auto" type="button" data-copy-target="#ai-md-job"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+        </div>
+      </aside>
+    </main>
+  </div>
+</div>
+<script>
+  /* jobs.html only: the queue-system buttons hide the other row groups (app.js already sets aria-pressed) */
+  (function () {
+    var seg = document.querySelector('[data-jb-filter]');
+    if (!seg) return;
+    seg.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-src]');
+      if (!b) return;
+      var src = b.getAttribute('data-src');
+      Array.prototype.forEach.call(document.querySelectorAll('#jobs-table tbody[data-src]'), function (tb) {
+        tb.hidden = src !== 'all' && tb.getAttribute('data-src') !== src;
+      });
+    });
+  })();
+</script>
+</body>
+</html>

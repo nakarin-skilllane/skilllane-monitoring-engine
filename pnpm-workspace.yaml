@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+
+# pnpm 10 blocks dependency build scripts unless they are listed here.
+onlyBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
+  - protobufjs
+
+ignoredBuiltDependencies:
+  - '@nestjs/core'

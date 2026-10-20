@@ -1,0 +1,107 @@
+/* /traces/[traceId] only (from design/monitoring-ui/trace-detail.html <style>). Tokens and shared components live in design-system.css;
+   page classes are prefixed td- (DESIGN.md §5b: promote a class used by two screens instead of copying it). */
+
+/* Page header: route as title, ids and services in one meta row */
+.td-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
+.td-title__route { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0; overflow-wrap: anywhere; min-width: 0; }
+.td-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-5); min-width: 0; max-width: 100%; }
+.td-meta__group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; max-width: 100%; }
+.td-meta__arrow { color: var(--muted); }
+
+.td-callout-meta { display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-12); }
+.td-kpis .kpi__label .svc { font-size: var(--fs-12); }
+
+/* Waterfall: extends .wf with tree guides, full-height gridlines (--td-grid = one grid step in % of the trace) and log markers */
+.td-wf { --td-step: 14px; }
+.td-wf .wf__row { position: relative; }
+.td-wf .wf__name {
+  align-self: stretch;
+  padding-left: calc(var(--d, 0) * var(--td-step));
+  background: repeating-linear-gradient(to right, transparent 0 3px, var(--line-strong) 3px 4px, transparent 4px var(--td-step)) 0 0 / calc(var(--d, 0) * var(--td-step)) 100% no-repeat;
+}
+.td-wf .wf__name > span:last-child { overflow: visible; }
+/* rows that run outside the root service: the guide under the calling span turns into a 2 px service-coloured rail */
+.td-wf .td-remote .wf__name {
+  background:
+    linear-gradient(var(--td-rail), var(--td-rail)) calc(var(--td-rail-at, 0) * var(--td-step) + 3px) 0 / 2px 100% no-repeat,
+    repeating-linear-gradient(to right, transparent 0 3px, var(--line-strong) 3px 4px, transparent 4px var(--td-step)) 0 0 / calc(var(--d, 0) * var(--td-step)) 100% no-repeat;
+}
+.td-wf .wf__track {
+  align-self: stretch; height: auto;
+  background: linear-gradient(to right, var(--grid) 1px, transparent 1px) 0 0 / var(--td-grid, 25%) 100% repeat-x;
+  box-shadow: inset -1px 0 0 var(--grid);
+}
+.td-wf .wf__track .dur { top: calc(50% - 6px); bottom: auto; height: 12px; }
+.td-r { text-align: right; }
+/* Axis labels near the end give way to the end label on a narrow axis (a phone, or beside the span panel):
+   page.tsx marks each with the axis width it needs (td-tick--N) */
+.td-wf .wf__ticks { container-type: inline-size; }
+@container (max-width: 959px) { .td-tick--960 { visibility: hidden; } }
+@container (max-width: 799px) { .td-tick--800 { visibility: hidden; } }
+@container (max-width: 639px) { .td-tick--640 { visibility: hidden; } }
+@container (max-width: 479px) { .td-tick--480 { visibility: hidden; } }
+@container (max-width: 319px) { .td-tick--320 { visibility: hidden; } }
+
+.td-pick {
+  flex: 0 1 auto; min-width: 0; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.td-pick::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+.td-pick:focus-visible { outline: none; }
+.td-pick:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--r-1); }
+.td-wf .wf__row:hover .td-pick { color: var(--accent); }
+.td-wf .wf__row.is-error:hover .td-pick { color: var(--danger); text-decoration: underline; text-underline-offset: 2px; }
+.td-lib, .td-peer { color: var(--muted); flex: none; }
+.td-hop { display: inline-flex; align-items: center; gap: 3px; flex: none; color: var(--ink-2); font-size: var(--fs-11); }
+/* the span name keeps its room: peer and hop labels only take what is left (basis 0) */
+.td-wf .wf__name > span.td-peer, .td-wf .wf__name > span.td-hop { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-hop .i { width: 12px; height: 12px; color: var(--muted); }
+
+/* Log lane + markers. INF = ring (outline weight), WRN = warn ring, ERR = solid diamond; all carry a 2 px surface ring */
+.td-lane { min-height: 40px; background: var(--surface-2); }
+.td-lane:hover { background: var(--surface-2); }
+.td-lane .wf__name { font-family: var(--font-ui); color: var(--ink-2); font-weight: 500; background: none; }
+.td-lane .wf__name::before { display: none; }
+.td-lane .wf__name .i { color: var(--muted); }
+.td-log {
+  position: absolute; z-index: 2; left: calc(var(--t) * 1%); top: var(--y, 50%);
+  width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--info-solid); box-shadow: 0 0 0 2px var(--surface);
+}
+.td-log::before { content: ""; position: absolute; inset: -9px; }
+.td-log--dbg { border-color: var(--debug-solid); }
+.td-log--wrn { border-color: var(--warn-solid); border-width: 3px; }
+.td-log--err { border: 0; border-radius: 1px; background: var(--danger-solid); transform: rotate(45deg); }
+.td-log:hover, .td-log:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.td-key-log { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--info-solid); background: var(--surface); flex: none; }
+.td-key-log--wrn { border-color: var(--warn-solid); border-width: 3px; }
+.td-key-log--err { border: 0; border-radius: 1px; background: var(--danger-solid); transform: rotate(45deg); width: 8px; height: 8px; }
+.td-key-rail { width: 2px; height: 12px; border-radius: 1px; background: var(--td-rail, var(--svc-2)); flex: none; }
+.td-wf-foot { display: grid; gap: var(--sp-2); }
+/* Motion: each log marker appears at its own time, just after the span bars reach it (styles.css section 5) */
+:root[data-motion="on"] .td-wf:not(.is-in) .td-log { opacity: 0; }
+:root[data-motion="on"] .td-wf.is-in .td-log { animation: mo-pop var(--dur-2) var(--ease-out) calc(var(--t, 0) * 5ms + var(--dur-2)) backwards; }
+.td-wf-foot .legend { margin: 0; }
+
+/* Selected span panel */
+.td-sd-head { align-items: center; }
+.td-sd-title { font: 600 14px/1.4 var(--font-mono); color: var(--ink); overflow-wrap: anywhere; min-width: 0; }
+.td-sd-grid { gap: var(--sp-6); }
+.td-sd-grid .fields pre.code { margin-top: 2px; }
+.td-sd-grid .table-wrap { margin-top: var(--sp-1); }
+.td-sd-grid .table td { overflow-wrap: anywhere; }
+.td-sd-grid .kv-list { margin-top: var(--sp-2); }
+.td-fname-inline { margin: 0; }
+
+/* Narrow (< 720 px): .wf in styles.css stacks name + ms over a full-width bar; the tree guides give way to plain indentation */
+@media (max-width: 719px) {
+  .td-wf { --td-step: 10px; }
+  .td-wf .wf__name, .td-wf .td-remote .wf__name { align-self: center; background: none; }
+  /* keep the name on the same line as its service key (8 px + 6 px gap), and after the ERR badge on the error row */
+  .td-wf .td-pick { white-space: normal; overflow-wrap: anywhere; max-width: calc(100% - 14px); }
+  .td-wf .is-error .td-pick { max-width: calc(100% - 54px); }
+  .td-wf .wf__track { align-self: auto; }
+  .td-wf .td-lane { min-height: 0; }
+  .td-wf .td-lane .wf__track { height: 34px; }
+  .td-sd-grid { gap: var(--sp-5); }
+}

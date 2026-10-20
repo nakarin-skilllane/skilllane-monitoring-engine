@@ -1,0 +1,1306 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Component และ token · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<link rel="stylesheet" href="assets/system-map.css">
+<script src="assets/app.js"></script>
+<!-- three@0.170.0 for the 3D views (assets/system-map.js imports 'three' and 'three/addons/…' by bare specifier) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  /* components.html only: gallery scaffolding (not part of the product UI) */
+  .toc { margin-bottom: var(--sp-2); }
+  .gallery-section { margin-top: var(--sp-10); scroll-margin-top: 72px; }
+  .gallery-section > .section__head { border-bottom: 1px solid var(--line); padding-bottom: var(--sp-2); }
+  .spec { margin-top: var(--sp-2); display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-1h); font-size: var(--fs-12); color: var(--muted); line-height: 1.5; }
+  .spec code { font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-1); padding: 0 4px; }
+  .demo { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-3); padding: var(--sp-4); min-width: 0; }
+  .demo--plane { background: transparent; border-style: dashed; }
+  .demo-row { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); align-items: center; }
+  .demo-row + .demo-row { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line-soft); }
+  .demo-label { font-size: var(--fs-12); color: var(--muted); width: 120px; flex: none; }
+  .legend-list { display: grid; gap: var(--sp-1h); margin: 0; padding: 0; list-style: none; font-size: var(--fs-13); color: var(--ink-2); }
+  .legend-list li { display: flex; align-items: center; gap: var(--sp-2); }
+  .swatch-group + .swatch-group { margin-top: var(--sp-4); }
+  .swatch-group__title { font-size: var(--fs-12); font-weight: 600; color: var(--ink-2); margin-bottom: var(--sp-2); }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: var(--sp-2); }
+  .sw { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1h); border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); min-width: 0; }
+  .sw__chip { width: 30px; height: 30px; border-radius: var(--r-1); flex: none; background: var(--c); box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.28); }
+  .sw__text { min-width: 0; display: grid; }
+  .sw__name { font: 400 12px/1.35 var(--font-mono); color: var(--ink); }
+  .sw__use { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+  .type-rows { display: grid; }
+  .type-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--sp-3); align-items: baseline; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line-soft); }
+  .type-row:last-child { border-bottom: 0; }
+  .type-row__spec { font: 400 11.5px/1.4 var(--font-mono); color: var(--muted); }
+  @media (max-width: 599px) {
+    .demo-label { width: 100%; }
+    .type-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  }
+  .type-row > :last-child { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+  .v3d-map { --smap-h: 460px; --smap-h-narrow: 420px; }
+  .v3d-pipe { --smap-h: 380px; --smap-h-narrow: 560px; }
+  .v3d-bar { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); }
+
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h" selected>1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h">24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">17 ต.ค. 13:20–14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><span>Component</span></nav>
+          <h1 class="page-title">Component และ token</h1>
+          <p class="page-sub">ชิ้นส่วนที่ทุกหน้าจอใช้ร่วมกัน ข้อมูลตัวอย่างมาจาก demo dataset (prod, 17 ต.ค. 14:20 ICT) · คัดลอก markup จาก source ของหน้านี้ได้ตรง ๆ</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn btn--quiet" href="_shell.html">App shell</a>
+          <a class="btn" href="index.html">หน้ารวม</a>
+        </div>
+      </header>
+
+      <nav class="chips toc" aria-label="สารบัญ component">
+        <a class="fchip" href="#tokens">สี</a>
+        <a class="fchip" href="#type">ตัวอักษร</a>
+        <a class="fchip" href="#buttons">ปุ่ม</a>
+        <a class="fchip" href="#controls">env · ช่วงเวลา · ค้นหา</a>
+        <a class="fchip" href="#filters">Filter chip</a>
+        <a class="fchip" href="#tabs">Tab</a>
+        <a class="fchip" href="#kpi">KPI</a>
+        <a class="fchip" href="#table">ตาราง</a>
+        <a class="fchip" href="#badges">Badge</a>
+        <a class="fchip" href="#error-row">Error row</a>
+        <a class="fchip" href="#code">Code · copy</a>
+        <a class="fchip" href="#duration">Duration bar</a>
+        <a class="fchip" href="#chart">กราฟ · tooltip</a>
+        <a class="fchip" href="#callout">Callout</a>
+        <a class="fchip" href="#drawer">Drawer · field</a>
+        <a class="fchip" href="#empty">Empty · details</a>
+        <a class="fchip" href="#patterns">Pattern ร่วม</a>
+        <a class="fchip" href="#motion">Motion</a>
+        <a class="fchip" href="#skeleton">Skeleton</a>
+        <a class="fchip" href="#views3d">ภาพ 3 มิติ</a>
+      </nav>
+
+      <!-- ================= tokens ================= -->
+      <section class="gallery-section" id="tokens" aria-labelledby="h-tokens">
+        <div class="section__head"><h2 class="section__title" id="h-tokens">สี</h2><span class="section__meta">ทุกสีเป็น token บน :root และสลับค่าเองใน dark theme</span></div>
+        <div class="swatch-group">
+          <p class="swatch-group__title">พื้นและตัวอักษร (เทากับขาวแบบ skilllane.com ไม่มีสีเจือ)</p>
+          <div class="swatches">
+            <div class="sw"><span class="sw__chip" style="--c:var(--bg)"></span><span class="sw__text"><span class="sw__name">--bg</span><span class="sw__use">พื้นที่เนื้อหา</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--surface)"></span><span class="sw__text"><span class="sw__name">--surface</span><span class="sw__use">panel, ตาราง, top bar</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--surface-2)"></span><span class="sw__text"><span class="sw__name">--surface-2</span><span class="sw__use">หัวตาราง, code</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--surface-3)"></span><span class="sw__text"><span class="sw__name">--surface-3</span><span class="sw__use">chip, track</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--sidebar-bg)"></span><span class="sw__text"><span class="sw__name">--sidebar-bg</span><span class="sw__use">sidebar</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--line)"></span><span class="sw__text"><span class="sw__name">--line</span><span class="sw__use">เส้นขอบ hairline</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--ink)"></span><span class="sw__text"><span class="sw__name">--ink</span><span class="sw__use">ข้อความหลัก</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--ink-2)"></span><span class="sw__text"><span class="sw__name">--ink-2</span><span class="sw__use">ข้อความรอง</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--muted)"></span><span class="sw__text"><span class="sw__name">--muted</span><span class="sw__use">meta, แกนกราฟ, ชื่อ field</span></span></div>
+          </div>
+        </div>
+        <div class="swatch-group">
+          <p class="swatch-group__title">Accent (เขียว SkillLane): สิ่งที่คลิกได้และสิ่งที่เลือกอยู่เท่านั้น ไม่ใช่สถานะ</p>
+          <div class="swatches">
+            <div class="sw"><span class="sw__chip" style="--c:var(--accent)"></span><span class="sw__text"><span class="sw__name">--accent</span><span class="sw__use">link, ปุ่มหลัก, tab ที่เลือก, focus</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--accent-bg)"></span><span class="sw__text"><span class="sw__name">--accent-bg</span><span class="sw__use">chip ที่กดอยู่</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--sel-bg)"></span><span class="sw__text"><span class="sw__name">--sel-bg</span><span class="sw__use">แถวที่เลือก</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--prod)"></span><span class="sw__text"><span class="sw__name">--prod</span><span class="sw__use">เครื่องหมาย env prod</span></span></div>
+          </div>
+        </div>
+        <div class="swatch-group">
+          <p class="swatch-group__title">Brand: โลโก้ และส้มสำหรับปุ่มที่สำคัญที่สุดของหน้า (ไม่ใช่สถานะ)</p>
+          <div class="swatches">
+            <div class="sw"><span class="sw__chip" style="--c:var(--brand)"></span><span class="sw__text"><span class="sw__name">--brand</span><span class="sw__use">พื้นโลโก้ (#00532a ใน light)</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--brand-2)"></span><span class="sw__text"><span class="sw__name">--brand-2</span><span class="sw__use">เขียวรองของ SkillLane</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--brand-hi)"></span><span class="sw__text"><span class="sw__name">--brand-hi</span><span class="sw__use">แถบส้มในโลโก้ (#f17f23 ใน light อ่านออกบนเขียว)</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--highlight)"></span><span class="sw__text"><span class="sw__name">--highlight</span><span class="sw__use">.btn--cta หนึ่งปุ่มต่อหน้า, queue ในภาพ 3 มิติ</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--flash-bg)"></span><span class="sw__text"><span class="sw__name">--flash-bg</span><span class="sw__use">ค่าหรือบรรทัดที่เพิ่งเปลี่ยน (จางไป)</span></span></div>
+          </div>
+        </div>
+        <div class="swatch-group">
+          <p class="swatch-group__title">สถานะ (fg ข้อความ · bg พื้น · solid กราฟ) ใช้คู่กับไอคอนหรือคำเสมอ</p>
+          <div class="swatches">
+            <div class="sw"><span class="sw__chip" style="--c:var(--danger-solid)"></span><span class="sw__text"><span class="sw__name">--danger-*</span><span class="sw__use">ERR, FTL, 5xx, down</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--warn-solid)"></span><span class="sw__text"><span class="sw__name">--warn-*</span><span class="sw__use">WRN, 4xx, ช้า, retry</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--ok-solid)"></span><span class="sw__text"><span class="sw__name">--ok-*</span><span class="sw__use">up, ปกติ, คัดลอกแล้ว</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--info-solid)"></span><span class="sw__text"><span class="sw__name">--info-*</span><span class="sw__use">INF, ข้อมูลทั่วไป</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--debug-solid)"></span><span class="sw__text"><span class="sw__name">--debug-*</span><span class="sw__use">DBG</span></span></div>
+          </div>
+        </div>
+        <div class="swatch-group">
+          <p class="swatch-group__title">Service: ลำดับคงที่ สีตาม service ไม่ใช่ตามอันดับ</p>
+          <div class="swatches">
+            <div class="sw"><span class="sw__chip" style="--c:var(--svc-1)"></span><span class="sw__text"><span class="sw__name">--svc-1</span><span class="sw__use">school-core-api</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--svc-2)"></span><span class="sw__text"><span class="sw__name">--svc-2</span><span class="sw__use">school-etl-api</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--svc-3)"></span><span class="sw__text"><span class="sw__name">--svc-3</span><span class="sw__use">video-transcoder-api</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--svc-4)"></span><span class="sw__text"><span class="sw__name">--svc-4</span><span class="sw__use">service ที่ 4</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--svc-5)"></span><span class="sw__text"><span class="sw__name">--svc-5</span><span class="sw__use">service ที่ 5</span></span></div>
+            <div class="sw"><span class="sw__chip" style="--c:var(--svc-6)"></span><span class="sw__text"><span class="sw__name">--svc-6</span><span class="sw__use">service ที่ 6</span></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= type ================= -->
+      <section class="gallery-section" id="type" aria-labelledby="h-type">
+        <div class="section__head"><h2 class="section__title" id="h-type">ตัวอักษร</h2><span class="section__meta">IBM Plex Sans Thai สำหรับ UI · IBM Plex Mono สำหรับ id, เวลา, route, code</span></div>
+        <div class="demo type-rows">
+          <div class="type-row"><span class="type-row__spec">26 / 600 KPI</span><span style="font-size:26px;font-weight:600;line-height:1.2">1,180<span class="kpi__unit">req/นาที</span></span></div>
+          <div class="type-row"><span class="type-row__spec">20 / 600 h1</span><span style="font-size:20px;font-weight:600">ภาพรวม prod</span></div>
+          <div class="type-row"><span class="type-row__spec">16 / 600 h2</span><span style="font-size:16px;font-weight:600">Route ที่ช้าที่สุดใน 1 ชั่วโมง</span></div>
+          <div class="type-row"><span class="type-row__spec">15 / 600 error title</span><span style="font-size:15px;font-weight:600">Value too long for column</span></div>
+          <div class="type-row"><span class="type-row__spec">14 / 400 body</span><span style="font-size:14px">ข้อความอธิบายทั่วไป อ่านสบายตอนกลางคืน มีที่ว่างให้วรรณยุกต์</span></div>
+          <div class="type-row"><span class="type-row__spec">13 / 400 table</span><span style="font-size:13px">GET /classes/:id/students · 9,870 request · p95 2.4 s</span></div>
+          <div class="type-row"><span class="type-row__spec">12 / 400 meta</span><span style="font-size:12px;color:var(--ink-2)">ครั้งแรก 16 ต.ค. 09:12 · ล่าสุด 14:18</span></div>
+          <div class="type-row"><span class="type-row__spec">11 / 400 tick</span><span style="font-size:11px;color:var(--muted)">13:20 · 13:30 · 0 · 500 · 1K</span></div>
+          <div class="type-row"><span class="type-row__spec">12.5 mono</span><span class="ts">14:18:07.412 · 4bf92f3577b34da6a3ce929d0e0e4736</span></div>
+        </div>
+      </section>
+
+      <!-- ================= buttons ================= -->
+      <section class="gallery-section" id="buttons" aria-labelledby="h-buttons">
+        <div class="section__head"><h2 class="section__title" id="h-buttons">ปุ่ม</h2><span class="section__meta">ปุ่มหลักหนึ่งปุ่มต่อพื้นที่ ที่เหลือเป็นปุ่มปกติหรือ quiet · กดแล้วยุบลงเล็กน้อย</span></div>
+        <div class="demo">
+          <div class="demo-row">
+            <span class="demo-label">ขนาดปกติ 32 px</span>
+            <button class="btn btn--cta" type="button"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg>คัดลอกให้ AI</button>
+            <button class="btn btn--primary" type="button">ค้นหา</button>
+            <a class="btn" href="trace-detail.html">เปิด trace<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+            <button class="btn btn--quiet" type="button">ล้างตัวกรอง</button>
+            <button class="btn" type="button" disabled>โหลดเพิ่ม</button>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">เล็ก 26 px</span>
+            <button class="btn btn--sm btn--primary" type="button">คัดลอกให้ AI</button>
+            <button class="btn btn--sm" type="button">ดู log ของ trace นี้</button>
+            <button class="btn btn--sm btn--quiet" type="button">ซ่อน</button>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">ไอคอน (ต้องมี aria-label)</span>
+            <button class="btn-icon" type="button" aria-label="ปิด"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+            <button class="btn-icon btn-icon--bordered" type="button" aria-label="ตัวกรอง"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12L9.5 9v4l-3-1.5V9z"/></svg></button>
+            <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด"><svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg><svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg></button>
+            <button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="u_1029" aria-label="คัดลอก user id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button>
+          </div>
+        </div>
+        <p class="spec"><code>.btn</code><code>.btn--primary</code><code>.btn--cta</code><code>.btn--quiet</code><code>.btn--sm</code><code>.btn-icon</code><code>.btn-icon--bordered</code><code>.btn-icon--xs</code><code>[disabled]</code><span><code>.btn--cta</code> (ส้ม SkillLane, ตัวอักษรเข้ม) ได้หนึ่งปุ่มต่อหน้า: ปุ่มที่สำคัญที่สุด เช่น คัดลอกให้ AI บนหัวหน้า · ปุ่มหลักอื่นเป็นเขียว</span></p>
+      </section>
+
+      <!-- ================= controls ================= -->
+      <section class="gallery-section" id="controls" aria-labelledby="h-controls">
+        <div class="section__head"><h2 class="section__title" id="h-controls">Env switcher, ช่วงเวลา, ค้นหา</h2><span class="section__meta">อยู่ใน top bar ทุกหน้า; segmented control ใช้ซ้ำกับตัวเลือก 2–4 ค่า</span></div>
+        <div class="demo">
+          <div class="demo-row">
+            <span class="demo-label">env = prod</span>
+            <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+              <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+              <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+              <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+            </div>
+            <span class="hint">prod มีจุดสีเสมอ เมื่อเลือกอยู่ปุ่มเป็นสี prod และ top bar มีเส้นสีบนสุด</span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">env = staging</span>
+            <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+              <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+              <button class="seg__btn" type="button" aria-pressed="true">staging</button>
+              <button class="seg__btn seg__btn--prod" type="button" aria-pressed="false"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+            </div>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">ตัวเลือกในหน้า</span>
+            <div class="seg" role="group" aria-label="สถานะ trace" data-choice>
+              <button class="seg__btn" type="button" aria-pressed="true">ทั้งหมด</button>
+              <button class="seg__btn" type="button" aria-pressed="false">error</button>
+              <button class="seg__btn" type="button" aria-pressed="false">ช้ากว่า 1 s</button>
+            </div>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">ช่วงเวลา</span>
+            <label class="select select--lead">
+              <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+              <span class="sr-only">ช่วงเวลา</span>
+              <select class="select__control">
+                <option>15 นาทีล่าสุด</option><option>1 ชั่วโมงล่าสุด</option><option>6 ชั่วโมงล่าสุด</option><option selected>24 ชั่วโมงล่าสุด</option><option>7 วันล่าสุด</option><option>กำหนดเอง…</option>
+              </select>
+              <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </label>
+            <span class="range-abs">16 ต.ค. 14:20 – 17 ต.ค. 14:20 ICT</span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">select ทั่วไป</span>
+            <label class="select">
+              <span class="sr-only">Service</span>
+              <select class="select__control">
+                <option>ทุก service</option><option selected>school-core-api</option><option>school-etl-api</option><option>video-transcoder-api</option>
+              </select>
+              <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </label>
+            <label class="select">
+              <span class="sr-only">Role</span>
+              <select class="select__control"><option>ทุก role</option><option selected>api</option><option>worker</option><option>persister</option></select>
+              <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+            </label>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">jump box</span>
+            <form class="jump" role="search" action="logs.html" style="max-width:420px">
+              <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+              <label class="sr-only" for="demo-jump">ค้นหา trace id, user id หรือคำค้น</label>
+              <input class="jump__input" id="demo-jump" type="search" placeholder="trace id, user id หรือคำค้น" value="4bf92f3577b34da6a3ce929d0e0e4736" spellcheck="false">
+              <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+            </form>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">ค้นในหน้า</span>
+            <div class="search" role="search" style="max-width:640px">
+              <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+              <label class="sr-only" for="demo-q">ค้นใน log</label>
+              <input class="search__input" id="demo-q" type="search" placeholder="ค้นใน message, error, route" value="ORA-12899" spellcheck="false">
+            </div>
+          </div>
+        </div>
+        <p class="spec"><code>.seg[data-choice]</code><code>.seg--env</code><code>.seg__btn[aria-pressed]</code><code>.seg__btn--prod</code><code>.seg__dot</code><code>.select</code><code>.select--lead</code><code>.select__control</code><code>.range-abs</code><code>.jump</code><code>.search</code><code>.kbd</code></p>
+      </section>
+
+      <!-- ================= filters ================= -->
+      <section class="gallery-section" id="filters" aria-labelledby="h-filters">
+        <div class="section__head"><h2 class="section__title" id="h-filters">Filter chip</h2><span class="section__meta">แถวเดียวเหนือทุกอย่างที่มันกรอง ตัวเลขคือจำนวนครั้งใน 24 ชั่วโมง</span></div>
+        <div class="demo">
+          <div class="demo-row">
+            <span class="demo-label">level (toggle)</span>
+            <div class="chips" role="group" aria-label="Level">
+              <button class="fchip" type="button" data-toggle aria-pressed="false">DBG</button>
+              <button class="fchip" type="button" data-toggle aria-pressed="false">INF</button>
+              <button class="fchip" type="button" data-toggle aria-pressed="true">WRN</button>
+              <button class="fchip" type="button" data-toggle aria-pressed="true">ERR</button>
+              <button class="fchip" type="button" data-toggle aria-pressed="true">FTL</button>
+            </div>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">category</span>
+            <div class="chips" role="group" aria-label="Category">
+              <button class="fchip" type="button" data-toggle aria-pressed="true">ต้องแก้โค้ด <span class="fchip__n">66</span></button>
+              <button class="fchip" type="button" data-toggle aria-pressed="false">ข้อมูลที่ส่งมาผิด <span class="fchip__n">3,426</span></button>
+              <button class="fchip" type="button" data-toggle aria-pressed="false">ข้อมูลในระบบขัดกัน <span class="fchip__n">218</span></button>
+              <button class="fchip" type="button" data-toggle aria-pressed="false">ระบบที่เรียกใช้มีปัญหา <span class="fchip__n">56</span></button>
+              <button class="fchip" type="button" data-toggle aria-pressed="false">ตั้งค่าผิด <span class="fchip__n">0</span></button>
+            </div>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">ตัวกรองที่ใช้อยู่</span>
+            <div class="chips">
+              <span class="fchip fchip--applied"><span class="fchip__k">service</span><span class="fchip__v">school-core-api</span><button class="fchip__x" type="button" aria-label="เอาตัวกรอง service ออก"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></span>
+              <span class="fchip fchip--applied"><span class="fchip__k">route</span><span class="fchip__v">POST /question-bank/import</span><button class="fchip__x" type="button" aria-label="เอาตัวกรอง route ออก"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></span>
+              <span class="fchip fchip--applied"><span class="fchip__k">user</span><span class="fchip__v">u_1029</span><button class="fchip__x" type="button" aria-label="เอาตัวกรอง user ออก"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></span>
+              <button class="btn btn--sm btn--quiet" type="button">ล้างทั้งหมด</button>
+            </div>
+          </div>
+        </div>
+        <p class="spec"><code>.chips</code><code>.fchip[data-toggle][aria-pressed]</code><code>.fchip__n</code><code>.fchip--applied</code><code>.fchip__k</code><code>.fchip__v</code><code>.fchip__x</code><code>.filterbar</code></p>
+      </section>
+
+      <!-- ================= tabs ================= -->
+      <section class="gallery-section" id="tabs" aria-labelledby="h-tabs">
+        <div class="section__head"><h2 class="section__title" id="h-tabs">Tab</h2><span class="section__meta">ตัวอย่างจาก trace 4bf92f35…: 13 span, 4 log</span></div>
+        <div class="panel">
+          <div class="tabs" role="tablist" aria-label="รายละเอียด trace" style="padding:0 var(--sp-2)">
+            <button class="tab" role="tab" type="button" id="t-logs" aria-selected="true" aria-controls="p-logs">Log ของ trace นี้ <span class="tab__count">4</span></button>
+            <button class="tab" role="tab" type="button" id="t-spans" aria-selected="false" aria-controls="p-spans" tabindex="-1">Span <span class="tab__count">13</span></button>
+            <button class="tab" role="tab" type="button" id="t-req" aria-selected="false" aria-controls="p-req" tabindex="-1">Request</button>
+          </div>
+          <div class="tab-panel" id="p-logs" role="tabpanel" aria-labelledby="t-logs" style="padding-top:0">
+            <div class="table-wrap">
+              <table class="table table--dense">
+                <thead><tr><th scope="col">เวลา</th><th scope="col">ระดับ</th><th scope="col">Service</th><th scope="col">ข้อความ</th></tr></thead>
+                <tbody>
+                  <tr><td class="ts">14:18:07.414</td><td><span class="lvl lvl--inf">INF</span></td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="t-muted mono small">ImportQuestionBankHandler</span> Importing question bank file</td></tr>
+                  <tr><td class="ts">14:18:08.729</td><td><span class="lvl lvl--inf">INF</span></td><td><span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span></td><td>Parsed excel <span class="kv"><span class="kv__k">rows</span><span class="kv__v">120</span></span></td></tr>
+                  <tr><td class="ts">14:18:09.226</td><td><span class="lvl lvl--err">ERR</span></td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><b>Value too long for column</b> <span class="kv"><span class="kv__k">target</span><span class="kv__v">QuestionBankEntity.title</span></span></td></tr>
+                  <tr><td class="ts">14:18:09.254</td><td><span class="lvl lvl--err">ERR</span></td><td><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></td><td><span class="t-muted mono small">http.request</span> <span class="method">POST</span> <span class="mono">/question-bank/import</span> <span class="http http--5xx">500</span> <span class="t-ink2">1,842 ms</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="tab-panel" id="p-spans" role="tabpanel" aria-labelledby="t-spans" hidden>
+            <p class="lead" style="padding:0 var(--sp-4) var(--sp-4)">13 span · 1 error (<code>oracle INSERT QUESTION_BANK</code>) · 2 service · 1,842 ms. Waterfall เต็มอยู่ที่ trace-detail.html</p>
+          </div>
+          <div class="tab-panel" id="p-req" role="tabpanel" aria-labelledby="t-req" hidden>
+            <p class="lead" style="padding:0 var(--sp-4) var(--sp-4)">POST /question-bank/import → 500 · user u_1029 (teacher, school s_118)</p>
+          </div>
+        </div>
+        <p class="spec"><code>.tabs[role=tablist]</code><code>.tab[role=tab][aria-selected][aria-controls]</code><code>.tab__count</code><code>.tab-panel[role=tabpanel][hidden]</code><span>ลูกศรซ้ายขวาเลื่อน tab ได้ · ใช้ <code>a.tab[aria-current=page]</code> เมื่อ tab เป็นลิงก์ไปหน้าอื่น</span></p>
+      </section>
+
+      <!-- ================= KPI ================= -->
+      <section class="gallery-section" id="kpi" aria-labelledby="h-kpi">
+        <div class="section__head"><h2 class="section__title" id="h-kpi">KPI tile</h2><span class="section__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span> · 1 ชั่วโมงล่าสุด · sparkline ช่วงละ 5 นาที</span></div>
+        <div class="kpis kpis--4" id="cmp-kpis">
+          <div class="kpi">
+            <span class="kpi__label">Request ต่อนาที</span>
+            <span class="kpi__value">1,180</span>
+            <div class="kpi__foot"><span class="kpi__delta">รวม 70,800 request</span><svg class="kpi__spark" viewBox="0 0 96 28" aria-hidden="true"><path class="spark__area" d="M0 9.5L8.7 4L17.5 5.6L26.2 10.9L34.9 14.9L43.6 17.9L52.4 24L61.1 18.9L69.8 13L78.5 8.7L87.3 4.1L96 9.9L96 28L0 28Z"/><path class="spark__line" d="M0 9.5L8.7 4L17.5 5.6L26.2 10.9L34.9 14.9L43.6 17.9L52.4 24L61.1 18.9L69.8 13L78.5 8.7L87.3 4.1L96 9.9"/><circle class="spark__dot" cx="96" cy="9.9" r="3"/></svg></div>
+          </div>
+          <div class="kpi">
+            <span class="kpi__label">Error rate (5xx)</span>
+            <span class="kpi__value">0.16<span class="kpi__unit">%</span></span>
+            <div class="kpi__foot"><span class="kpi__delta">112 ครั้ง · สูงสุด 0.20 % ช่วง 14:05–14:10</span><svg class="kpi__spark" viewBox="0 0 96 28" aria-hidden="true"><path class="spark__area" d="M0 11.9L8.7 13.4L17.5 10.7L26.2 9.1L34.9 13L43.6 10.1L52.4 8.4L61.1 8.7L69.8 13.1L78.5 7.9L87.3 16.1L96 13.2L96 28L0 28Z"/><path class="spark__line" d="M0 11.9L8.7 13.4L17.5 10.7L26.2 9.1L34.9 13L43.6 10.1L52.4 8.4L61.1 8.7L69.8 13.1L78.5 7.9L87.3 16.1L96 13.2"/><circle class="spark__dot" cx="96" cy="13.2" r="3"/></svg></div>
+          </div>
+          <div class="kpi">
+            <span class="kpi__label">p95</span>
+            <span class="kpi__value">312<span class="kpi__unit">ms</span></span>
+            <div class="kpi__foot"><span class="kpi__delta">route ช้าสุด 2.4 s</span><svg class="kpi__spark" viewBox="0 0 96 28" aria-hidden="true"><path class="spark__area" d="M0 23.1L8.7 20.1L17.5 13.6L26.2 17.9L34.9 4L43.6 14.4L52.4 21.8L61.1 24L69.8 18.3L78.5 15.7L87.3 12.7L96 17L96 28L0 28Z"/><path class="spark__line" d="M0 23.1L8.7 20.1L17.5 13.6L26.2 17.9L34.9 4L43.6 14.4L52.4 21.8L61.1 24L69.8 18.3L78.5 15.7L87.3 12.7L96 17"/><circle class="spark__dot" cx="96" cy="17" r="3"/></svg></div>
+          </div>
+          <div class="kpi kpi--alert">
+            <span class="kpi__label"><svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true" style="color:var(--danger)"><path d="M5.5 1.75h5l3.75 3.75v5l-3.75 3.75h-5L1.75 10.5v-5z"/><path d="M8 5v3.5M8 10.9v.1"/></svg>Error group ใหม่หลัง deploy</span>
+            <span class="kpi__value">1</span>
+            <div class="kpi__foot"><span class="kpi__delta kpi__delta--bad">Read from undefined value · <span class="badge-new">NEW</span> ตั้งแต่ 31.4.0</span></div>
+            <a class="kpi__link sr-only" href="error-detail-null-read.html">เปิด error group ใหม่</a>
+          </div>
+        </div>
+        <p class="spec"><code>.kpis</code><code>.kpi</code><code>.kpi__label</code><code>.kpi__value</code><code>.kpi__unit</code><code>.kpi__foot</code><code>.kpi__delta(--bad|--good)</code><code>svg.kpi__spark</code><code>.spark__line</code><code>.spark__area</code><code>.spark__dot</code><code>.spark--bad</code><code>.kpi--alert</code><code>.kpi--warn</code><code>a.kpi__link</code><code>.kpis--3 / --4 / --5</code><span>ตัวเลขใหญ่ใช้ proportional figures; ไม่มีลูกศรขึ้นลงถ้าไม่มีช่วงเทียบที่บอกชื่อได้</span></p>
+      </section>
+
+      <!-- ================= table ================= -->
+      <section class="gallery-section" id="table" aria-labelledby="h-table">
+        <div class="section__head"><h2 class="section__title" id="h-table">ตาราง</h2><span class="section__meta">หัวตาราง sticky ใน .table-wrap--scroll · ตัวเลขชิดขวา · แถวที่เลือกมีแถบ accent · กดลูกศรเพื่อขยายแถว</span></div>
+        <div class="panel">
+          <div class="panel__head">
+            <h3 class="panel__title">Route ของ <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></h3>
+            <span class="panel__meta">1 ชั่วโมงล่าสุด · เรียงตาม request</span>
+            <div class="panel__actions"><a class="btn btn--sm btn--quiet" href="traces.html">ดู trace ทั้งหมด</a></div>
+          </div>
+          <div class="table-wrap table-wrap--scroll">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th scope="col" class="col-tight"><span class="sr-only">ขยาย</span></th>
+                  <th scope="col">Route</th>
+                  <th scope="col" class="num" aria-sort="descending">Request</th>
+                  <th scope="col" class="num">Error rate</th>
+                  <th scope="col" class="num">4xx</th>
+                  <th scope="col" class="num">p95</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td></td><td class="mono nowrap"><span class="method">GET</span> /question-bank/my</td><td class="num">14,210</td><td class="num t-muted">0 %</td><td class="num t-muted">–</td><td class="num"><span class="dur-cell">140 ms<span class="dur"><i style="--w:5.8"></i></span></span></td></tr>
+                <tr><td></td><td class="mono nowrap"><span class="method">GET</span> /me</td><td class="num">12,800</td><td class="num t-muted">0 %</td><td class="num t-muted">–</td><td class="num"><span class="dur-cell">22 ms<span class="dur"><i style="--w:0.9"></i></span></span></td></tr>
+                <tr class="is-slow"><td></td><td class="mono nowrap"><span class="method">GET</span> /classes/:id/students</td><td class="num">9,870</td><td class="num t-muted">0 %</td><td class="num t-muted">–</td><td class="num"><span class="dur-cell"><span class="t-warn">2.4 s · ช้า</span><span class="dur dur--warn"><i style="--w:100"></i></span></span></td></tr>
+                <tr><td></td><td class="mono nowrap"><span class="method">GET</span> /exams/:id</td><td class="num">8,940</td><td class="num t-muted">0 %</td><td class="num">3.1 %</td><td class="num"><span class="dur-cell">96 ms<span class="dur"><i style="--w:4"></i></span></span></td></tr>
+                <tr><td></td><td class="mono nowrap"><span class="method">POST</span> /exams/:id/submit</td><td class="num">6,120</td><td class="num t-muted">0 %</td><td class="num">1.1 %</td><td class="num"><span class="dur-cell">180 ms<span class="dur"><i style="--w:7.5"></i></span></span></td></tr>
+                <tr class="is-bad" aria-current="true"><td></td><td class="mono nowrap"><span class="method">GET</span> /classes/:id/report</td><td class="num">3,480</td><td class="num t-danger">1.9 %</td><td class="num t-muted">–</td><td class="num"><span class="dur-cell">420 ms<span class="dur"><i style="--w:17.5"></i></span></span></td></tr>
+                <tr>
+                  <td><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="route-import-detail" aria-label="ขยาย POST /question-bank/import"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                  <td class="mono nowrap"><span class="method">POST</span> /question-bank/import</td><td class="num">412</td><td class="num t-danger">11.4 %</td><td class="num t-muted">–</td><td class="num"><span class="dur-cell"><span class="t-warn">2.1 s</span><span class="dur dur--warn"><i style="--w:87.5"></i></span></span></td>
+                </tr>
+                <tr class="row-detail" id="route-import-detail" hidden>
+                  <td></td>
+                  <td colspan="5">
+                    <div class="row" style="gap:var(--sp-2) var(--sp-3)"><span class="lvl lvl--err">ERR</span><b>Value too long for column</b><span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span><span class="hint">error หลักของ route นี้ · 214 ครั้งใน 24 ชั่วโมง</span><a class="btn btn--sm" href="error-detail.html">เปิด error</a></div>
+                  </td>
+                </tr>
+                <tr><td></td><td class="mono nowrap"><span class="method">POST</span> /reports/:id/generate</td><td class="num">380</td><td class="num t-muted">0 %</td><td class="num t-muted">–</td><td class="num"><span class="dur-cell">60 ms<span class="dur"><i style="--w:2.5"></i></span></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="spec"><code>.table-wrap(--scroll)</code><code>table.table(.table--dense)</code><code>th.num / td.num</code><code>th[aria-sort]</code><code>tr[aria-current=true]</code><code>tr.is-bad / tr.is-slow</code><code>.table--reflow</code><code>.row-toggle[data-expand][aria-controls]</code><code>tr.row-detail[hidden]</code><code>.col-tight</code><code>.t-danger .t-warn .t-muted</code><code>.dur-cell</code></p>
+      </section>
+
+      <!-- ================= badges ================= -->
+      <section class="gallery-section" id="badges" aria-labelledby="h-badges">
+        <div class="section__head"><h2 class="section__title" id="h-badges">Badge, pill, chip</h2><span class="section__meta">สีบอกความรุนแรงเท่านั้น และมีตัวอักษรกำกับเสมอ</span></div>
+        <div class="demo">
+          <div class="demo-row">
+            <span class="demo-label">level</span>
+            <span class="lvl lvl--dbg">DBG</span><span class="lvl lvl--inf">INF</span><span class="lvl lvl--wrn">WRN</span><span class="lvl lvl--err">ERR</span><span class="lvl lvl--ftl">FTL</span>
+            <span class="hint">น้ำหนักภาพเพิ่มตามความรุนแรง: เส้นขอบ → พื้นอ่อน → พื้นทึบ</span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">HTTP</span>
+            <span class="method">GET</span><span class="http http--2xx">200</span>
+            <span class="method">POST</span><span class="http http--4xx">400</span>
+            <span class="method">GET</span><span class="http http--4xx">401</span>
+            <span class="method">GET</span><span class="http http--4xx">404</span>
+            <span class="method">POST</span><span class="http http--5xx">500</span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">category</span>
+            <span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span>
+            <span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span>
+            <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+            <span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span>
+            <span class="cat cat--config"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h6.5M11.5 4.5H14M2 11.5h2M7 11.5h7"/><circle cx="10" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/></svg>ตั้งค่าผิด</span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">NEW</span>
+            <span class="badge-new" id="cmp-new">NEW</span><span class="badge-new__since">ตั้งแต่ 31.4.0 (deploy 08:00)</span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">state</span>
+            <span class="state state--ok">up ตั้งแต่ 13:43:20</span>
+            <span class="state state--warn">401 จาก ThaID 4 ครั้ง</span>
+            <span class="state state--down">down 45.2 s (13:42:35)</span>
+            <span class="state">ไม่มีข้อมูล</span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">service / role</span>
+            <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span>
+            <span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span>
+            <span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span>
+            <span class="svc svc-3">video-transcoder-api<span class="svc__role">/api</span></span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">env, tag</span>
+            <span class="env env--prod">prod</span><span class="env">staging</span><span class="env">dev</span>
+            <span class="tag">BullMQ</span><span class="tag">Kafka</span><span class="tag">RabbitMQ</span><span class="tag">cron</span><span class="tag">31.4.0</span><span class="tag">ORA-12899</span>
+          </div>
+        </div>
+        <p class="spec"><code>.lvl--dbg|inf|wrn|err|ftl</code><code>.method</code><code>.http--2xx|3xx|4xx|5xx</code><code>.cat--bug|input|data|dependency|config</code><code>.badge-new</code><code>.badge-new__since</code><code>.state--ok|warn|down</code><code>.svc.svc-1…6 + .svc__role</code><code>.env(--prod)</code><code>.tag</code></p>
+      </section>
+
+      <!-- ================= error row ================= -->
+      <section class="gallery-section" id="error-row" aria-labelledby="h-error-row">
+        <div class="section__head"><h2 class="section__title" id="h-error-row">Readable error row</h2><span class="section__meta">หัวข้อ = error_hint · chip ตามลำดับ method, route, status, source/job, file, target, duration · รายละเอียด = error_fix · error จริง = Type [CODE] message · trace และ user</span></div>
+        <div class="err-list">
+          <!-- one occurrence (a log line): Logs, trace-detail, error-detail "recent" -->
+          <article class="err-row">
+            <div class="err-row__head">
+              <span class="lvl lvl--err">ERR</span>
+              <h3 class="err-row__title"><a href="error-detail.html">Value too long for column</a></h3>
+              <span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span>
+              <span class="err-row__count"><span class="ts">17 ต.ค. 14:18:09.226</span></span>
+            </div>
+            <ul class="kv-list" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">method</span><span class="kv__v">POST</span></li>
+              <li class="kv"><span class="kv__k">route</span><span class="kv__v">/question-bank/import</span></li>
+              <li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li>
+              <li class="kv"><span class="kv__k">source</span><span class="kv__v">ImportQuestionBankHandler.execute</span></li>
+              <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/question-bank/import-question-bank.handler.ts</span></li>
+              <li class="kv"><span class="kv__k">target</span><span class="kv__v">QuestionBankEntity.title</span></li>
+              <li class="kv"><span class="kv__k">duration</span><span class="kv__v">1,842 ms</span></li>
+            </ul>
+            <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.</p>
+            <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>QueryFailedError [ORA-12899] ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)</p>
+            <div class="err-row__meta">
+              <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span>
+              <span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html">4bf92f3577b34da6a3ce929d0e0e4736</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4bf92f3577b34da6a3ce929d0e0e4736" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span>
+              <span class="idchip"><span class="idchip__k">user</span><a href="logs.html?userId=u_1029">u_1029</a></span>
+              <span>teacher · s_118</span>
+            </div>
+          </article>
+          <!-- error group (Errors list): counts and first/last seen replace time and duration -->
+          <article class="err-row">
+            <div class="err-row__head">
+              <span class="lvl lvl--err">ERR</span>
+              <h3 class="err-row__title"><a href="error-detail-null-read.html">Read from undefined value</a></h3>
+              <span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span>
+              <span class="badge-new">NEW</span><span class="badge-new__since">ตั้งแต่ 31.4.0</span>
+              <span class="err-row__count"><span><b>66</b> ครั้ง</span><span><b>21</b> users</span></span>
+            </div>
+            <ul class="kv-list" aria-label="บริบท">
+              <li class="kv"><span class="kv__k">method</span><span class="kv__v">GET</span></li>
+              <li class="kv"><span class="kv__k">route</span><span class="kv__v">/classes/:id/report</span></li>
+              <li class="kv kv--bad"><span class="kv__k">status</span><span class="kv__v">500</span></li>
+              <li class="kv"><span class="kv__k">source</span><span class="kv__v">GetClassReportHandler.execute</span></li>
+              <li class="kv"><span class="kv__k">file</span><span class="kv__v">src/domain/class-report/get-class-report.handler.ts</span></li>
+              <li class="kv"><span class="kv__k">target</span><span class="kv__v">school</span></li>
+            </ul>
+            <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>"school" is a relation of ClassroomEntity, StudentEntity: the parent object was undefined, or school was not loaded. Check relations / leftJoinAndSelect.</p>
+            <p class="err-row__actual"><span class="err-row__actual-label">error จริง</span>TypeError [NULL_READ] Cannot read properties of undefined (reading 'school')</p>
+            <div class="err-row__meta">
+              <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span>
+              <span>ครั้งแรก <span class="ts">17 ต.ค. 08:03</span> (3 นาทีหลัง deploy)</span>
+              <span>ล่าสุด <span class="ts">14:16</span></span>
+              <span>usecase <span class="mono">GetClassReportQuery</span></span>
+            </div>
+          </article>
+        </div>
+        <p class="spec"><code>.err-list</code><code>article.err-row</code><code>.err-row__head</code><code>.err-row__title</code><code>.err-row__count</code><code>.kv-list > .kv(.kv--bad) > .kv__k + .kv__v</code><code>.err-row__detail</code><code>.err-row__actual</code><code>.err-row__meta</code><code>.idchip</code></p>
+      </section>
+
+      <!-- ================= code ================= -->
+      <section class="gallery-section" id="code" aria-labelledby="h-code">
+        <div class="section__head"><h2 class="section__title" id="h-code">Code, stack, copy</h2><span class="section__meta">กล่องเลื่อนในตัวเอง ไม่ดันหน้าให้กว้าง · ปุ่มคัดลอกมุมขวาบน</span></div>
+        <div class="grid grid--2">
+          <div class="stack">
+            <p class="small t-ink2">Stack: frame ในโค้ดของแอปเป็นสีเข้ม, node_modules จาง</p>
+            <div class="code-block">
+              <div class="code-block__head"><span class="code-block__title">Stack trace · <span class="mono">error_stack</span></span><button class="btn btn--sm btn--quiet btn-copy" type="button" data-copy-target="#stack-null-read"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอก</span></button></div>
+<pre class="code stacktrace" id="stack-null-read"><span class="fr fr--head">TypeError: Cannot read properties of undefined (reading 'school')</span>
+<span class="fr fr--app">    at GetClassReportHandler.execute (<span class="fr__loc">src/domain/class-report/get-class-report.handler.ts:42:38</span>)</span>
+<span class="fr">    at QueryBus.execute (node_modules/@nestjs/cqrs/dist/query-bus.js:39:28)</span>
+<span class="fr fr--app">    at ClassReportController.getReport (<span class="fr__loc">src/domain/class-report/class-report.controller.ts:27:28</span>)</span>
+<span class="fr">    at node_modules/@nestjs/core/router/router-execution-context.js:46:28</span></pre>
+            </div>
+          </div>
+          <div class="stack">
+            <p class="small t-ink2">สรุป Markdown สำหรับ AI: template เดียวทุกหน้า (DESIGN.md §6b) · ลำดับ key คงที่ ข้าม key ที่ไม่มีค่า · ไม่มี user_id, organization_id, role</p>
+            <div class="code-block">
+              <div class="code-block__head"><span class="code-block__title">Markdown</span><button class="btn btn--sm btn--primary btn-copy" type="button" data-copy-target="#ai-md-1"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button></div>
+<pre class="code code--wrap" id="ai-md-1"><span class="c-key">### Value too long for column</span> (ORA-12899, category: data)
+- level: error
+- service: school-core-api/api 31.4.0
+- env: prod
+- when: 2026-10-17 14:18:09.226 ICT
+- request: POST /question-bank/import → 500 in 1,842 ms
+- this_case: QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.
+- what: A text value exceeds the column size. Common in Excel imports; validate length before saving.
+- where: POST /question-bank/import · usecase ImportQuestionBankCommand
+- origin: ImportQuestionBankHandler.execute · src/domain/question-bank/import-question-bank.handler.ts
+- target: QuestionBankEntity.title
+- failed_step: oracle INSERT QUESTION_BANK
+- error: QueryFailedError [ORA-12899] ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)
+- stack:
+  - at ImportQuestionBankHandler.execute (src/domain/question-bank/import-question-bank.handler.ts:88:7)
+  - at QuestionBankController.import (src/domain/question-bank/question-bank.controller.ts:54:12)
+  - at OracleQueryRunner.query (node_modules/typeorm/driver/oracle/OracleQueryRunner.js:178:19)
+- trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+- counts: group 214 times · 37 users in 24 h
+- fields: see docs/DATA-DICTIONARY.md</pre>
+            </div>
+          </div>
+        </div>
+        <div class="demo mt-4">
+          <div class="demo-row">
+            <span class="demo-label">id + copy</span>
+            <span class="idchip"><span class="idchip__k">trace</span><a href="trace-detail.html">4bf92f3577b34da6a3ce929d0e0e4736</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4bf92f3577b34da6a3ce929d0e0e4736" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span>
+            <span class="idchip" style="max-width:200px"><span class="idchip__k">trace</span><a href="trace-detail.html" title="9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a">9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a</a></span>
+            <span class="hint">ในตารางแคบ ตัดท้ายด้วย … และใส่ id เต็มใน title</span>
+          </div>
+        </div>
+        <p class="spec"><code>pre.code</code><code>.code-block > .code-block__head(.code-block__title + .btn-copy) + pre.code</code><code>.code--wrap</code><code>.code--tall</code><code>pre.code.stacktrace > .fr(.fr--app|.fr--head) > .fr__loc</code><code>.btn-copy[data-copy|data-copy-target] > .btn-copy__label</code><code>.i--copy + .i--check</code></p>
+      </section>
+
+      <!-- ================= duration ================= -->
+      <section class="gallery-section" id="duration" aria-labelledby="h-duration">
+        <div class="section__head"><h2 class="section__title" id="h-duration">Duration bar และ waterfall</h2><span class="section__meta">ตำแหน่งและความยาวเป็น % ของ trace (--s, --w) วาดตามสัดส่วนจริง · trace 4bf92f35… 1,842 ms (5 จาก 13 span)</span></div>
+        <div class="panel">
+          <div class="table-wrap" style="border:0">
+            <div class="wf" id="cmp-wf" role="table" aria-label="Waterfall ตัวอย่าง">
+              <div class="wf__scale" role="row"><span role="columnheader">Span</span><span class="wf__ticks" role="columnheader"><span style="--t:0">0 ms</span><span style="--t:27.1444">500</span><span style="--t:54.2888">1,000</span><span style="--t:81.4332">1,500</span><span class="wf__tick-end">1,842</span></span><span role="columnheader" style="text-align:right">เวลา</span></div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)"><span class="wf__name" role="cell" style="--d:0"><span>POST /question-bank/import</span></span><span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:0;--w:100"></i></span></span><span class="wf__ms" role="cell">1,842 ms</span></div>
+              <div class="wf__row" role="row" style="--c:var(--svc-1)"><span class="wf__name" role="cell" style="--d:1"><span>POST (http client)</span></span><span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-1)"><i style="--s:0.65;--w:71.12"></i></span></span><span class="wf__ms" role="cell">1,310 ms</span></div>
+              <div class="wf__row" role="row" style="--c:var(--svc-2)"><span class="wf__name" role="cell" style="--d:2"><span>POST /etl/parse-excel</span></span><span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-2)"><i style="--s:0.87;--w:70.68"></i></span></span><span class="wf__ms" role="cell">1,302 ms</span></div>
+              <div class="wf__row" role="row" style="--c:var(--svc-2)"><span class="wf__name" role="cell" style="--d:3"><span>parse-excel</span></span><span class="wf__track" role="cell"><span class="dur" style="--c:var(--svc-2)"><i style="--s:16.72;--w:53.96"></i></span></span><span class="wf__ms" role="cell">994 ms</span></div>
+              <div class="wf__row is-error is-selected" role="row" style="--c:var(--svc-1)"><span class="wf__name" role="cell" style="--d:1"><span class="lvl lvl--err">ERR</span><span>oracle INSERT QUESTION_BANK</span></span><span class="wf__track" role="cell"><span class="dur is-error"><i style="--s:75.46;--w:22.91"></i></span></span><span class="wf__ms" role="cell">422 ms</span></div>
+            </div>
+          </div>
+          <div class="panel__foot">
+            <ul class="legend" style="margin:0">
+              <li class="legend__item"><span class="legend__key" style="--c:var(--svc-1)"></span>school-core-api</li>
+              <li class="legend__item"><span class="legend__key" style="--c:var(--svc-2)"></span>school-etl-api</li>
+              <li class="legend__item"><span class="legend__key" style="--c:var(--danger-solid)"></span>span ที่ error (มี ERR กำกับ)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="demo mt-4">
+          <div class="demo-row">
+            <span class="demo-label">ในเซลล์ตาราง</span>
+            <span class="dur-cell">1,842 ms<span class="dur"><i style="--w:67.9"></i></span></span>
+            <span class="dur-cell"><span class="t-warn">2,712 ms</span><span class="dur dur--warn"><i style="--w:100"></i></span></span>
+            <span class="dur-cell">10,040 ms<span class="dur dur--bad"><i style="--w:100"></i></span></span>
+            <span class="hint">ความยาวเทียบกับค่ามากสุดของคอลัมน์ · สีเตือนต้องมีตัวเลขหรือคำกำกับ</span>
+          </div>
+        </div>
+        <p class="spec"><code>.dur > i[style=--s;--w]</code><code>--c: var(--svc-n)</code><code>.dur--warn</code><code>.dur--bad / .dur.is-error</code><code>.dur-cell</code><code>.wf > .wf__scale + .wf__row(.is-error|.is-selected)</code><code>.wf__name[style=--d]</code><code>.wf__track</code><code>.wf__ms</code><code>.wf__ticks > span[style=--t] + .wf__tick-end</code><span>ต่ำกว่า 720 px แต่ละ span เป็น 2 บรรทัด (ชื่อ + เวลา / แถบเต็มความกว้าง) ไม่เลื่อนข้าง</span></p>
+      </section>
+
+      <!-- ================= chart ================= -->
+      <section class="gallery-section" id="chart" aria-labelledby="h-chart">
+        <div class="section__head"><h2 class="section__title" id="h-chart">กราฟและ tooltip</h2><span class="section__meta">SVG วาดมือ แกนเดียว เส้น 2 px grid hairline · ชี้เมาส์บนกราฟเพื่อดู tooltip</span></div>
+        <div class="grid grid--main-side">
+          <figure class="chart">
+            <div class="chart__head">
+              <h3 class="chart__title" id="chart-req-title">Request ต่อนาที</h3>
+              <span class="chart__sub">prod · 13:20–14:20 ICT · step 1 นาที</span>
+              <ul class="legend">
+                <li class="legend__item"><span class="legend__key legend__key--line" style="--c:var(--svc-1)"></span>school-core-api/api</li>
+                <li class="legend__item"><span class="legend__key legend__key--line" style="--c:var(--svc-3)"></span>video-transcoder-api/api</li>
+              </ul>
+            </div>
+            <div class="chart__plot" data-time-axis>
+<svg viewBox="0 0 720 224" role="img" aria-labelledby="chart-req-title" style="--chart-min:650px">
+  <line class="c-axis" x1="44" x2="660" y1="192" y2="192"/>
+  <text class="c-tick c-tick--end" x="36" y="196">0</text>
+  <line class="c-grid" x1="44" x2="660" y1="132" y2="132"/>
+  <text class="c-tick c-tick--end" x="36" y="136">500</text>
+  <line class="c-grid" x1="44" x2="660" y1="72" y2="72"/>
+  <text class="c-tick c-tick--end" x="36" y="76">1K</text>
+  <line class="c-grid" x1="44" x2="660" y1="12" y2="12"/>
+  <text class="c-tick c-tick--end" x="36" y="16">1.5K</text>
+  <text class="c-tick c-tick--mid" x="44" y="210">13:20</text>
+  <text class="c-tick c-tick--mid" x="148.4" y="210">13:30</text>
+  <text class="c-tick c-tick--mid" x="252.8" y="210">13:40</text>
+  <text class="c-tick c-tick--mid" x="357.2" y="210">13:50</text>
+  <text class="c-tick c-tick--mid" x="461.6" y="210">14:00</text>
+  <text class="c-tick c-tick--mid" x="566" y="210">14:10</text>
+  <rect class="c-band" x="279.8" y="12" width="7.8" height="180"/>
+  <line class="c-event" x1="279.8" x2="279.8" y1="12" y2="192"/>
+  <text class="c-event-label" x="293.6" y="22">Redis cache down 45.2 s</text>
+  <path class="c-area svc-1" d="M44 53.8L54.4 45.7L64.9 50.3L75.3 50.5L85.8 45.8L96.2 47.2L106.6 48.6L117.1 45L127.5 44.9L138 46.7L148.4 45.6L158.8 46.2L169.3 45L179.7 50L190.2 49.4L200.6 47.3L211.1 47.9L221.5 53.8L231.9 49.2L242.4 51.6L252.8 48.6L263.3 50.2L273.7 56.4L284.1 53.8L294.6 51L305 53.3L315.5 54.1L325.9 55L336.3 52.4L346.8 52.7L357.2 57.1L367.7 57.4L378.1 53.2L388.5 57.1L399 58.2L409.4 56.6L419.9 55.2L430.3 55.8L440.7 49.9L451.2 52.4L461.6 50.4L472.1 48.6L482.5 54.6L492.9 52.2L503.4 49.2L513.8 49.1L524.3 49.2L534.7 50.6L545.2 44.4L555.6 51L566 48.2L576.5 48.2L586.9 45.6L597.4 43.6L607.8 46.9L618.2 50L628.7 48.4L639.1 49.8L649.6 49.6L660 49.6L660 192L44 192Z"/>
+  <path class="c-line svc-1" d="M44 53.8L54.4 45.7L64.9 50.3L75.3 50.5L85.8 45.8L96.2 47.2L106.6 48.6L117.1 45L127.5 44.9L138 46.7L148.4 45.6L158.8 46.2L169.3 45L179.7 50L190.2 49.4L200.6 47.3L211.1 47.9L221.5 53.8L231.9 49.2L242.4 51.6L252.8 48.6L263.3 50.2L273.7 56.4L284.1 53.8L294.6 51L305 53.3L315.5 54.1L325.9 55L336.3 52.4L346.8 52.7L357.2 57.1L367.7 57.4L378.1 53.2L388.5 57.1L399 58.2L409.4 56.6L419.9 55.2L430.3 55.8L440.7 49.9L451.2 52.4L461.6 50.4L472.1 48.6L482.5 54.6L492.9 52.2L503.4 49.2L513.8 49.1L524.3 49.2L534.7 50.6L545.2 44.4L555.6 51L566 48.2L576.5 48.2L586.9 45.6L597.4 43.6L607.8 46.9L618.2 50L628.7 48.4L639.1 49.8L649.6 49.6L660 49.6"/>
+  <path class="c-line svc-3" d="M44 153.8L54.4 153.4L64.9 153.2L75.3 154.1L85.8 152.8L96.2 153.8L106.6 153.2L117.1 154L127.5 154.2L138 154.7L148.4 154.9L158.8 154.8L169.3 154.6L179.7 155.9L190.2 155.4L200.6 156.5L211.1 155.9L221.5 156.4L231.9 156.4L242.4 156.2L252.8 155.2L263.3 154.9L273.7 156.4L284.1 154.6L294.6 155.9L305 154.9L315.5 155.3L325.9 155.2L336.3 152.9L346.8 154.4L357.2 153.4L367.7 154.3L378.1 153.6L388.5 153.2L399 154.2L409.4 152.6L419.9 152.9L430.3 153L440.7 153.2L451.2 153.5L461.6 154.1L472.1 155.4L482.5 156.1L492.9 155.9L503.4 156.5L513.8 156.8L524.3 155.6L534.7 156.6L545.2 155.5L555.6 156.1L566 155.6L576.5 156.5L586.9 154.9L597.4 156.1L607.8 155.6L618.2 154.2L628.7 155.6L639.1 154.6L649.6 155.4L660 153.2"/>
+  <circle class="c-dot svc-1" cx="660" cy="49.6" r="4"/>
+  <circle class="c-dot svc-3" cx="660" cy="153.2" r="4"/>
+  <text class="c-label" x="669" y="53.6">1,187</text>
+  <text class="c-label" x="669" y="157.2">323</text>
+  <g>
+    <rect class="c-hit" x="44" y="12" width="5.2" height="180" data-tip="17 ต.ค. 13:20|1,152::school-core-api/api|318::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="49.2" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:21|1,219::school-core-api/api|322::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="59.7" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:22|1,181::school-core-api/api|323::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="70.1" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:23|1,179::school-core-api/api|316::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="80.5" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:24|1,218::school-core-api/api|327::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="91" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:25|1,207::school-core-api/api|318::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="101.4" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:26|1,195::school-core-api/api|323::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="111.9" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:27|1,225::school-core-api/api|317::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="122.3" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:28|1,226::school-core-api/api|315::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="132.7" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:29|1,211::school-core-api/api|311::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="143.2" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:30|1,220::school-core-api/api|309::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="153.6" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:31|1,215::school-core-api/api|310::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="164.1" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:32|1,225::school-core-api/api|312::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="174.5" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:33|1,183::school-core-api/api|301::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="184.9" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:34|1,188::school-core-api/api|305::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="195.4" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:35|1,206::school-core-api/api|296::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="205.8" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:36|1,201::school-core-api/api|301::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="216.3" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:37|1,152::school-core-api/api|297::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="226.7" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:38|1,190::school-core-api/api|297::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="237.2" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:39|1,170::school-core-api/api|298::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="247.6" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:40|1,195::school-core-api/api|307::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="258" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:41|1,182::school-core-api/api|309::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="268.5" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:42|1,130::school-core-api/api|297::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="278.9" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:43|1,152::school-core-api/api|312::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="289.4" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:44|1,175::school-core-api/api|301::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="299.8" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:45|1,156::school-core-api/api|309::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="310.2" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:46|1,149::school-core-api/api|306::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="320.7" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:47|1,142::school-core-api/api|307::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="331.1" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:48|1,163::school-core-api/api|326::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="341.6" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:49|1,161::school-core-api/api|313::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="352" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:50|1,124::school-core-api/api|322::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="362.4" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:51|1,122::school-core-api/api|314::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="372.9" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:52|1,157::school-core-api/api|320::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="383.3" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:53|1,124::school-core-api/api|323::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="393.8" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:54|1,115::school-core-api/api|315::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="404.2" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:55|1,128::school-core-api/api|328::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="414.6" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:56|1,140::school-core-api/api|326::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="425.1" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:57|1,135::school-core-api/api|325::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="435.5" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:58|1,184::school-core-api/api|323::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="446" y="12" width="10.4" height="180" data-tip="17 ต.ค. 13:59|1,163::school-core-api/api|321::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="456.4" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:00|1,180::school-core-api/api|316::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="466.8" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:01|1,195::school-core-api/api|305::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="477.3" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:02|1,145::school-core-api/api|299::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="487.7" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:03|1,165::school-core-api/api|301::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="498.2" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:04|1,190::school-core-api/api|296::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="508.6" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:05|1,191::school-core-api/api|293::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="519.1" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:06|1,190::school-core-api/api|303::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="529.5" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:07|1,178::school-core-api/api|295::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="539.9" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:08|1,230::school-core-api/api|304::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="550.4" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:09|1,175::school-core-api/api|299::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="560.8" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:10|1,198::school-core-api/api|303::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="571.3" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:11|1,198::school-core-api/api|296::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="581.7" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:12|1,220::school-core-api/api|309::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="592.1" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:13|1,237::school-core-api/api|299::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="602.6" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:14|1,209::school-core-api/api|303::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="613" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:15|1,183::school-core-api/api|315::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="623.5" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:16|1,197::school-core-api/api|303::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="633.9" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:17|1,185::school-core-api/api|312::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="644.3" y="12" width="10.4" height="180" data-tip="17 ต.ค. 14:18|1,187::school-core-api/api|305::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+    <rect class="c-hit" x="654.8" y="12" width="5.2" height="180" data-tip="17 ต.ค. 14:19|1,187::school-core-api/api|323::video-transcoder-api/api" data-tip-keys="svc-1,svc-3"/>
+  </g>
+</svg>
+            </div>
+            <div class="chart__foot">
+              <span>เฉลี่ย 1,180 และ 310 request/นาที · แถบแดงจาง = Redis "cache" down</span>
+              <details class="chart__table">
+                <summary class="summary-line">ดูเป็นตาราง</summary>
+                <div class="table-wrap"><table class="table table--dense"><thead><tr><th scope="col">นาที</th><th scope="col" class="num">school-core-api/api</th><th scope="col" class="num">video-transcoder-api/api</th></tr></thead><tbody><tr><td class="ts">14:19</td><td class="num">1,187</td><td class="num">323</td></tr><tr><td class="ts">14:18</td><td class="num">1,187</td><td class="num">305</td></tr><tr><td class="ts">14:17</td><td class="num">1,185</td><td class="num">312</td></tr><tr><td class="ts">14:16</td><td class="num">1,197</td><td class="num">303</td></tr><tr><td class="ts">14:15</td><td class="num">1,183</td><td class="num">315</td></tr><tr><td class="ts">14:14</td><td class="num">1,209</td><td class="num">303</td></tr><tr><td class="ts">14:13</td><td class="num">1,237</td><td class="num">299</td></tr><tr><td class="ts">14:12</td><td class="num">1,220</td><td class="num">309</td></tr><tr><td class="ts">14:11</td><td class="num">1,198</td><td class="num">296</td></tr><tr><td class="ts">14:10</td><td class="num">1,198</td><td class="num">303</td></tr><tr><td class="ts">14:09</td><td class="num">1,175</td><td class="num">299</td></tr><tr><td class="ts">14:08</td><td class="num">1,230</td><td class="num">304</td></tr><tr><td class="ts">14:07</td><td class="num">1,178</td><td class="num">295</td></tr><tr><td class="ts">14:06</td><td class="num">1,190</td><td class="num">303</td></tr><tr><td class="ts">14:05</td><td class="num">1,191</td><td class="num">293</td></tr><tr><td class="ts">14:04</td><td class="num">1,190</td><td class="num">296</td></tr><tr><td class="ts">14:03</td><td class="num">1,165</td><td class="num">301</td></tr><tr><td class="ts">14:02</td><td class="num">1,145</td><td class="num">299</td></tr><tr><td class="ts">14:01</td><td class="num">1,195</td><td class="num">305</td></tr><tr><td class="ts">14:00</td><td class="num">1,180</td><td class="num">316</td></tr><tr><td class="ts">13:59</td><td class="num">1,163</td><td class="num">321</td></tr><tr><td class="ts">13:58</td><td class="num">1,184</td><td class="num">323</td></tr><tr><td class="ts">13:57</td><td class="num">1,135</td><td class="num">325</td></tr><tr><td class="ts">13:56</td><td class="num">1,140</td><td class="num">326</td></tr><tr><td class="ts">13:55</td><td class="num">1,128</td><td class="num">328</td></tr><tr><td class="ts">13:54</td><td class="num">1,115</td><td class="num">315</td></tr><tr><td class="ts">13:53</td><td class="num">1,124</td><td class="num">323</td></tr><tr><td class="ts">13:52</td><td class="num">1,157</td><td class="num">320</td></tr><tr><td class="ts">13:51</td><td class="num">1,122</td><td class="num">314</td></tr><tr><td class="ts">13:50</td><td class="num">1,124</td><td class="num">322</td></tr><tr><td class="ts">13:49</td><td class="num">1,161</td><td class="num">313</td></tr><tr><td class="ts">13:48</td><td class="num">1,163</td><td class="num">326</td></tr><tr><td class="ts">13:47</td><td class="num">1,142</td><td class="num">307</td></tr><tr><td class="ts">13:46</td><td class="num">1,149</td><td class="num">306</td></tr><tr><td class="ts">13:45</td><td class="num">1,156</td><td class="num">309</td></tr><tr><td class="ts">13:44</td><td class="num">1,175</td><td class="num">301</td></tr><tr><td class="ts">13:43</td><td class="num">1,152</td><td class="num">312</td></tr><tr><td class="ts">13:42</td><td class="num">1,130</td><td class="num">297</td></tr><tr><td class="ts">13:41</td><td class="num">1,182</td><td class="num">309</td></tr><tr><td class="ts">13:40</td><td class="num">1,195</td><td class="num">307</td></tr><tr><td class="ts">13:39</td><td class="num">1,170</td><td class="num">298</td></tr><tr><td class="ts">13:38</td><td class="num">1,190</td><td class="num">297</td></tr><tr><td class="ts">13:37</td><td class="num">1,152</td><td class="num">297</td></tr><tr><td class="ts">13:36</td><td class="num">1,201</td><td class="num">301</td></tr><tr><td class="ts">13:35</td><td class="num">1,206</td><td class="num">296</td></tr><tr><td class="ts">13:34</td><td class="num">1,188</td><td class="num">305</td></tr><tr><td class="ts">13:33</td><td class="num">1,183</td><td class="num">301</td></tr><tr><td class="ts">13:32</td><td class="num">1,225</td><td class="num">312</td></tr><tr><td class="ts">13:31</td><td class="num">1,215</td><td class="num">310</td></tr><tr><td class="ts">13:30</td><td class="num">1,220</td><td class="num">309</td></tr><tr><td class="ts">13:29</td><td class="num">1,211</td><td class="num">311</td></tr><tr><td class="ts">13:28</td><td class="num">1,226</td><td class="num">315</td></tr><tr><td class="ts">13:27</td><td class="num">1,225</td><td class="num">317</td></tr><tr><td class="ts">13:26</td><td class="num">1,195</td><td class="num">323</td></tr><tr><td class="ts">13:25</td><td class="num">1,207</td><td class="num">318</td></tr><tr><td class="ts">13:24</td><td class="num">1,218</td><td class="num">327</td></tr><tr><td class="ts">13:23</td><td class="num">1,179</td><td class="num">316</td></tr><tr><td class="ts">13:22</td><td class="num">1,181</td><td class="num">323</td></tr><tr><td class="ts">13:21</td><td class="num">1,219</td><td class="num">322</td></tr><tr><td class="ts">13:20</td><td class="num">1,152</td><td class="num">318</td></tr></tbody></table></div>
+              </details>
+            </div>
+          </figure>
+          <div class="stack">
+            <div class="demo">
+              <p class="small t-ink2" style="margin-bottom:var(--sp-2)">Tooltip (static): ค่าก่อนชื่อ, เส้นสีสั้นแทนกล่อง</p>
+              <div class="tip" role="presentation" style="box-shadow:none">
+                <div class="tip__title">17 ต.ค. 13:43</div>
+                <div class="tip__line"><span class="tip__key" style="--c:var(--svc-1)"></span><span class="tip__val">1,152</span><span class="tip__name">school-core-api/api</span></div>
+                <div class="tip__line"><span class="tip__key" style="--c:var(--svc-3)"></span><span class="tip__val">312</span><span class="tip__name">video-transcoder-api/api</span></div>
+              </div>
+            </div>
+            <div class="demo">
+              <p class="small t-ink2" style="margin-bottom:var(--sp-2)">Legend</p>
+              <ul class="legend" style="margin:0;display:grid;gap:6px">
+                <li class="legend__item"><span class="legend__key legend__key--line" style="--c:var(--svc-1)"></span>เส้น: series ต่อเวลา</li>
+                <li class="legend__item"><span class="legend__key" style="--c:var(--info-solid)"></span>สี่เหลี่ยม: แท่ง / พื้นที่</li>
+                <li class="legend__item"><span class="legend__key legend__key--dot" style="--c:var(--danger-solid)"></span>จุด: scatter (trace ที่ error)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p class="spec"><code>figure.chart</code><code>.chart__head > .chart__title + .chart__sub + ul.legend</code><code>.legend__key(--line|--dot)</code><code>.chart__plot > svg[style=--chart-min]</code><code>.c-grid .c-axis .c-tick(--end|--mid) .c-axis-title</code><code>.c-line .c-area .c-bar .c-dot .c-label</code><code>.c-event .c-event-label .c-band</code><code>.c-hit[data-tip][data-tip-keys]</code><code>.c-lvl-dbg…ftl</code><code>details.chart__table</code><code>.chart__plot[data-time-axis]</code><code>.c-halo</code><code>.tip > .tip__title + .tip__line</code></p>
+      </section>
+
+      <!-- ================= callout ================= -->
+      <section class="gallery-section" id="callout" aria-labelledby="h-callout">
+        <div class="section__head"><h2 class="section__title" id="h-callout">Callout (แถบเรื่องที่ต้องดู)</h2><span class="section__meta">วางบนสุดของเนื้อหา เรียงจากรุนแรงไปเบา ไม่เกิน 3 แถบ</span></div>
+        <div class="callouts">
+          <div class="callout callout--error" role="status">
+            <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l3.75 3.75v5l-3.75 3.75h-5L1.75 10.5v-5z"/><path d="M8 5v3.5M8 10.9v.1"/></svg>
+            <p class="callout__title">Error ใหม่หลัง deploy 31.4.0: Read from undefined value</p>
+            <p class="callout__text">66 ครั้งตั้งแต่ 08:03 · 21 users · GET /classes/:id/report · ครั้งแรก 08:03 หลัง deploy 08:00</p>
+            <div class="callout__actions"><a class="btn btn--sm" href="error-detail-null-read.html">เปิด error</a></div>
+          </div>
+          <div class="callout callout--warn" role="status">
+            <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>
+            <p class="callout__title">Google API rate limited ใน job report:generate</p>
+            <p class="callout__text">24 ชั่วโมง: retry 38 ครั้ง ล้มเหลวจริง 3 ครั้ง · sheets.googleapis.com</p>
+            <div class="callout__actions"><a class="btn btn--sm" href="jobs.html#failures">ดูงานเบื้องหลัง</a></div>
+          </div>
+          <div class="callout" role="status">
+            <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 7.25v3.5M8 5.2v.1"/></svg>
+            <p class="callout__title">Redis "cache" กลับมาแล้วตั้งแต่ 13:43:20</p>
+            <p class="callout__text">down 45.2 วินาที (13:42:35–13:43:20) · 10.0.3.21:6379 · ECONNREFUSED 3 ครั้ง</p>
+          </div>
+          <div class="callout callout--ok" role="status">
+            <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M5.5 8.25 7.25 10l3.25-3.75"/></svg>
+            <p class="callout__title">Kafka consumer school.events.score ปกติ</p>
+            <p class="callout__text">345,600 message ใน 24 ชั่วโมง ไม่มีที่ล้มเหลว · consumer group rebalance เมื่อ 13:05</p>
+          </div>
+        </div>
+        <p class="spec"><code>.callouts</code><code>.callout(--error|--warn|--ok) (ไม่มี modifier = info)</code><code>.callout__icon</code><code>.callout__title</code><code>.callout__text</code><code>.callout__actions</code><span>ปุ่มใน callout เป็น <code>.btn.btn--sm</code> (มีกรอบ) ทุกปุ่ม</span></p>
+      </section>
+
+      <!-- ================= drawer + fields ================= -->
+      <section class="gallery-section" id="drawer" aria-labelledby="h-drawer">
+        <div class="section__head"><h2 class="section__title" id="h-drawer">Drawer และ field group</h2><span class="section__meta">Drawer ขวาสำหรับรายละเอียดหนึ่งแถว (log, span) · modal: Tab วนอยู่ใน drawer ส่วนอื่นของหน้าเป็น inert · ปิดด้วย Esc, ปุ่มปิด หรือแตะพื้นหลัง</span></div>
+        <div class="grid grid--2">
+          <div class="demo">
+            <p class="small t-ink2" style="margin-bottom:var(--sp-3)">กดเพื่อเปิด drawer ของ log บรรทัด 14:18:09.226</p>
+            <button class="btn" type="button" data-drawer-open="drawer-log" aria-controls="drawer-log" aria-expanded="false"><span class="lvl lvl--err">ERR</span>Value too long for column</button>
+          </div>
+          <div class="demo">
+            <div class="field-group">
+              <h3 class="field-group__title">Request</h3>
+              <dl class="fields">
+                <dt>Method<span class="fname">http_method</span></dt><dd class="mono">POST</dd>
+                <dt>Route<span class="fname">http_route</span></dt><dd class="mono">/question-bank/import</dd>
+                <dt>Status<span class="fname">http_status</span></dt><dd><span class="http http--5xx">500</span></dd>
+                <dt>เวลาที่ใช้<span class="fname">duration_ms</span></dt><dd>1,842 ms</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+        <p class="spec"><code>aside.drawer[role=dialog][aria-modal=true][aria-hidden]</code><code>[data-drawer-param]</code><code>[data-drawer-open=id]</code><code>[data-drawer-close]</code><code>.drawer__head .drawer__heading .drawer__title .drawer__sub</code><code>.drawer__body</code><code>.drawer__foot</code><code>.drawer--wide</code><code>.field-group > .field-group__title + dl.fields > dt(.fname) + dd</code></p>
+      </section>
+
+      <!-- ================= empty + details ================= -->
+      <section class="gallery-section" id="empty" aria-labelledby="h-empty">
+        <div class="section__head"><h2 class="section__title" id="h-empty">Empty state และ details</h2></div>
+        <div class="grid grid--2">
+          <div class="panel">
+            <div class="empty">
+              <svg class="i empty__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25M5.5 5.5l3 3M8.5 5.5l-3 3"/></svg>
+              <p class="empty__title">ไม่พบ log ที่ตรงกับตัวกรอง</p>
+              <p class="empty__text">ไม่มี log ระดับ FTL จาก school-etl-api ใน 1 ชั่วโมงล่าสุดของ prod ลองขยายช่วงเวลาหรือเอาตัวกรองออก</p>
+              <div class="empty__actions"><button class="btn btn--sm" type="button">ขยายเป็น 24 ชั่วโมง</button><button class="btn btn--sm btn--quiet" type="button">ล้างตัวกรอง</button></div>
+            </div>
+          </div>
+          <div class="stack">
+            <details class="disclosure" open>
+              <summary>Stack trace<span class="disclosure__meta">4 บรรทัด</span></summary>
+              <div class="disclosure__body">frame แรกในโค้ดแอป: <span class="mono">get-class-report.handler.ts:42</span></div>
+            </details>
+            <details class="disclosure">
+              <summary>Attribute ทั้งหมดของ span<span class="disclosure__meta">ซ่อนอยู่</span></summary>
+              <div class="disclosure__body">db.system = oracle · peer = oracle-db</div>
+            </details>
+            <details>
+              <summary class="summary-line">แบบไม่มีกรอบ (ใช้ในตารางหรือ chart__foot)</summary>
+              <p class="hint" style="padding:0 var(--sp-3) var(--sp-2) 30px">เนื้อหาที่ซ่อนได้</p>
+            </details>
+          </div>
+        </div>
+        <p class="spec"><code>.empty > .empty__icon + .empty__title + .empty__text + .empty__actions</code><code>details.disclosure > summary + .disclosure__body</code><code>.disclosure__meta</code><code>summary.summary-line</code><code>details.design-notes</code></p>
+      </section>
+
+      <!-- ================= shared patterns (promoted from screens) ================= -->
+      <section class="gallery-section" id="patterns" aria-labelledby="h-patterns">
+        <div class="section__head"><h2 class="section__title" id="h-patterns">Pattern ที่ใช้ร่วมกันหลายหน้า</h2><span class="section__meta">ย้ายมาจาก CSS ของแต่ละหน้าเข้า styles.css · ใช้ซ้ำแทนการสร้าง class ใหม่</span></div>
+        <div class="grid grid--3">
+          <div class="panel">
+            <div class="panel__head"><h3 class="panel__title">Error group แบบย่อ</h3><span class="panel__meta">24 ชั่วโมงล่าสุด</span></div>
+            <div class="err-list">
+              <article class="err-row err-row--compact">
+                <div class="err-row__main">
+                  <div class="err-row__head"><span class="lvl lvl--err">ERR</span><h4 class="err-row__title"><a href="error-detail-null-read.html">Read from undefined value</a></h4><span class="badge-new">NEW</span></div>
+                  <p class="err-row__ctx"><span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span><span class="mono">GET /classes/:id/report</span></p>
+                </div>
+                <p class="err-row__n"><b>66</b><span>21 users</span></p>
+              </article>
+              <article class="err-row err-row--compact">
+                <div class="err-row__main">
+                  <div class="err-row__head"><span class="lvl lvl--err">ERR</span><h4 class="err-row__title"><a href="errors.html#g3">Google API rate limited</a></h4></div>
+                  <p class="err-row__ctx"><span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span><span class="mono">job report:generate</span></p>
+                </div>
+                <p class="err-row__n"><b>41</b><span>38 retry · 3 ล้มเหลวจริง</span></p>
+              </article>
+            </div>
+            <p class="spec" style="padding:0 var(--sp-4) var(--sp-3)"><code>.err-row--compact</code><code>.err-row__main</code><code>.err-row__ctx</code><code>.err-row__n</code><code>.panel > .err-list</code></p>
+          </div>
+          <div class="panel">
+            <div class="panel__head"><h3 class="panel__title">Dependency</h3><span class="panel__meta">สถานะล่าสุด</span></div>
+            <ul class="dep-list">
+              <li>
+                <span class="dep"><span class="dep__top"><span class="tag">redis</span><a class="dep__name" href="jobs.html#dep-cache">cache</a></span><span class="dep__host">10.0.3.21:6379</span></span>
+                <span class="state state--ok">up ตั้งแต่ 13:43:20</span>
+                <p class="dep__sub">down 45.2 s เมื่อ 13:42:35</p>
+                <div class="dep__strip" role="img" aria-label="ช่วง down 13:42:35–13:43:20 ในช่วง 13:20–14:20"><span class="dur dur--bad"><i style="--s:37.6;--w:1.3"></i></span><span class="mini-axis" aria-hidden="true"><span class="mini-axis__start">13:20</span><span style="--x:50">13:50</span><span class="mini-axis__end">14:20</span></span></div>
+              </li>
+            </ul>
+            <p class="spec" style="padding:0 var(--sp-4) var(--sp-3)"><code>ul.dep-list > li</code><code>.dep .dep__top .dep__name .dep__host</code><code>.dep__sub</code><code>.dep__strip</code><code>.mini-axis > span[style=--x]</code></p>
+          </div>
+          <div class="panel">
+            <div class="panel__head"><h3 class="panel__title">Queue และ cron</h3><span class="panel__meta">24 ชั่วโมงล่าสุด</span></div>
+            <div class="panel__body">
+              <a class="queue-name" href="jobs.html#queues">report</a><span class="queue-sub"><span class="tag">BullMQ</span><span class="mono">report:generate</span><span>retry 38 ครั้ง</span></span>
+            </div>
+            <ul class="cron-list">
+              <li class="cron-line"><span class="state state--warn"><span class="tag">cron</span></span><span class="cron-line__name">AttendanceSyncService.sync</span><span class="cron-line__when">ทุก 15 นาที · <span class="t-warn">ล้มเหลว 1 ครั้ง</span> <span class="ts">11:45</span></span></li>
+            </ul>
+            <p class="spec" style="padding:0 var(--sp-4) var(--sp-3)"><code>.queue-name</code><code>.queue-sub</code><code>ul.cron-list > li.cron-line</code><code>.cron-line__name / __when</code></p>
+          </div>
+        </div>
+        <div class="demo mt-4">
+          <div class="demo-row">
+            <span class="demo-label">Flow</span>
+            <ol class="flow" style="flex:1;min-width:0" aria-label="ตัวอย่าง flow">
+              <li class="flow__node flow__node--lead"><span class="lvl lvl--err">ERR</span><code>dependency.down</code><span class="flow__text">ต่อไม่ได้ครั้งแรก</span></li>
+              <li class="flow__node flow__node--lead"><span class="lvl lvl--wrn">WRN</span><code>dependency.still_down</code><span class="flow__text">ทุก 30 s</span></li>
+              <li class="flow__node flow__node--lead"><span class="lvl lvl--inf">INF</span><code>dependency.up</code><span class="flow__text">กลับมาแล้ว</span></li>
+            </ol>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">Sparkline ในแถว</span>
+            <span class="spark-inline" tabindex="0" data-tip="ตัวอย่าง|47::ชั่วโมงล่าสุด"><svg width="144" height="28" viewBox="0 0 144 28" role="img" aria-label="ตัวอย่าง 24 แท่ง"><line class="c-axis" x1="0" x2="144" y1="27.5" y2="27.5"/><rect class="c-bar" x="1" y="19.6" width="4" height="7.4" style="--c:var(--spark)"/><rect class="c-bar" x="7" y="18.5" width="4" height="8.5" style="--c:var(--spark)"/><rect class="c-bar" x="109" y="20.1" width="4" height="6.9" style="--c:var(--spark)"/><rect class="c-bar" x="115" y="16.4" width="4" height="10.6" style="--c:var(--spark)"/><rect class="c-bar" x="121" y="14.2" width="4" height="12.8" style="--c:var(--spark)"/><rect class="c-bar" x="127" y="15.8" width="4" height="11.2" style="--c:var(--spark)"/><rect class="c-bar" x="133" y="19" width="4" height="8" style="--c:var(--spark)"/><rect class="c-bar" x="139" y="2" width="4" height="25" style="--c:var(--spark)"/></svg><span class="spark-inline__max">สูงสุด 47/ชม.</span></span>
+            <span class="hint">ขนาดมาจาก width/height ของ svg · <code>.spark-inline</code> + <code>.spark-inline__max</code></span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">ป้ายแถว</span>
+            <span class="hint"><span class="legend__key--bar" style="--c:var(--danger-solid)" aria-hidden="true"></span>error rate ≥ 1 % (<code>tr.is-bad</code>) · <span class="legend__key--bar" style="--c:var(--warn-solid)" aria-hidden="true"></span>ช้า (<code>tr.is-slow</code>) · <span class="svc-dots"><i style="--c:var(--svc-1)"></i><i style="--c:var(--svc-2)"></i><span class="svc-dots__n">2</span></span> service ที่ trace ผ่าน (<code>.svc-dots</code>)</span>
+          </div>
+          <div class="demo-row">
+            <span class="demo-label">ท้ายรายการ</span>
+            <div class="list-foot" style="flex:1;min-width:0"><span class="list-foot__count">แสดง <b>25</b> แถว · ในช่วงเวลานี้มี <b>102,901</b> แถว</span><span class="list-foot__cursor">before=2026-10-17T06:42:35.118Z</span><button class="btn btn--sm" type="button">โหลดเพิ่ม 100 แถว</button></div>
+          </div>
+        </div>
+        <p class="spec"><code>.flow > .flow__node(--lead)</code><code>.flow--stack-lg</code><code>.flow__text</code><code>.spark-inline</code><code>.legend__key--bar</code><code>.svc-dots</code><code>.svc-list</code><code>.list-foot</code><code>.row-detail__body</code><code>.filterbar__group / __end</code><code>.filter-label</code><code>.search--sm</code><code>.page-head__meta</code><code>.unit</code><code>.t-strong</code><code>.code-inline</code><code>.ai-box(.ai-box__notes)</code><code>.table--reflow + [data-label] + .rf-hide</code><span>รายละเอียดและหน้าที่ใช้อยู่ใน DESIGN.md §5</span></p>
+      </section>
+
+      <!-- ================= motion ================= -->
+      <section class="gallery-section" id="motion" aria-labelledby="h-motion">
+        <div class="section__head"><h2 class="section__title" id="h-motion">Motion</h2><span class="section__meta">ขยับเพื่อบอกว่าอะไรเพิ่งเข้ามา อะไรเปลี่ยน และอะไรเกิดก่อนหลัง · จบใน 0.7 วินาที · ปิดด้วย <span class="mono">?motion=off</span> หรือ reduced motion ของเครื่อง</span></div>
+        <div class="grid grid--2">
+          <figure class="chart" id="mo-chart">
+            <div class="chart__head">
+              <h3 class="chart__title" id="mo-c-t">บรรทัด ERR และ WRN ต่อนาที</h3>
+              <span class="chart__sub"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span> · 14:00–14:19</span>
+              <ul class="legend"><li class="legend__item"><span class="legend__key" style="--c:var(--danger-solid)"></span>ERR</li><li class="legend__item"><span class="legend__key legend__key--line" style="--c:var(--warn-solid)"></span>WRN</li></ul>
+            </div>
+            <div class="chart__plot">
+<svg viewBox="0 0 560 140" role="img" aria-labelledby="mo-c-t" style="--chart-min:500px">
+  <line class="c-axis" x1="40" x2="520" y1="120.0" y2="120.0"/>
+  <text class="c-tick c-tick--end" x="32" y="124.0">0</text>
+  <line class="c-grid" x1="40" x2="520" y1="66.0" y2="66.0"/>
+  <text class="c-tick c-tick--end" x="32" y="70.0">10</text>
+  <line class="c-grid" x1="40" x2="520" y1="12.0" y2="12.0"/>
+  <text class="c-tick c-tick--end" x="32" y="16.0">20</text>
+  <text class="c-tick c-tick--mid" x="52.0" y="136">14:00</text>
+  <text class="c-tick c-tick--mid" x="172.0" y="136">14:05</text>
+  <text class="c-tick c-tick--mid" x="292.0" y="136">14:10</text>
+  <text class="c-tick c-tick--mid" x="412.0" y="136">14:15</text>
+  <path class="c-bar c-lvl-err" d="M45.0 120V111.2Q45.0 109.2 47.0 109.2H57.0Q59.0 109.2 59.0 111.2V120Z"/>
+  <path class="c-bar c-lvl-err" d="M69.0 120V89.6Q69.0 87.6 71.0 87.6H81.0Q83.0 87.6 83.0 89.6V120Z"/>
+  <path class="c-bar c-lvl-err" d="M93.0 120V100.4Q93.0 98.4 95.0 98.4H105.0Q107.0 98.4 107.0 100.4V120Z"/>
+  <path class="c-bar c-lvl-err" d="M141.0 120V100.4Q141.0 98.4 143.0 98.4H153.0Q155.0 98.4 155.0 100.4V120Z"/>
+  <path class="c-bar c-lvl-err" d="M165.0 120V100.4Q165.0 98.4 167.0 98.4H177.0Q179.0 98.4 179.0 100.4V120Z"/>
+  <path class="c-bar c-lvl-err" d="M189.0 120V78.8Q189.0 76.8 191.0 76.8H201.0Q203.0 76.8 203.0 78.8V120Z"/>
+  <path class="c-bar c-lvl-err" d="M213.0 120V89.6Q213.0 87.6 215.0 87.6H225.0Q227.0 87.6 227.0 89.6V120Z"/>
+  <path class="c-bar c-lvl-err" d="M261.0 120V89.6Q261.0 87.6 263.0 87.6H273.0Q275.0 87.6 275.0 89.6V120Z"/>
+  <path class="c-bar c-lvl-err" d="M285.0 120V111.2Q285.0 109.2 287.0 109.2H297.0Q299.0 109.2 299.0 111.2V120Z"/>
+  <path class="c-bar c-lvl-err" d="M309.0 120V100.4Q309.0 98.4 311.0 98.4H321.0Q323.0 98.4 323.0 100.4V120Z"/>
+  <path class="c-bar c-lvl-err" d="M333.0 120V100.4Q333.0 98.4 335.0 98.4H345.0Q347.0 98.4 347.0 100.4V120Z"/>
+  <path class="c-bar c-lvl-err" d="M381.0 120V111.2Q381.0 109.2 383.0 109.2H393.0Q395.0 109.2 395.0 111.2V120Z"/>
+  <path class="c-bar c-lvl-err" d="M405.0 120V100.4Q405.0 98.4 407.0 98.4H417.0Q419.0 98.4 419.0 100.4V120Z"/>
+  <path class="c-bar c-lvl-err" d="M429.0 120V78.8Q429.0 76.8 431.0 76.8H441.0Q443.0 76.8 443.0 78.8V120Z"/>
+  <path class="c-bar c-lvl-err" d="M477.0 120V100.4Q477.0 98.4 479.0 98.4H489.0Q491.0 98.4 491.0 100.4V120Z"/>
+  <path class="c-line c-lvl-wrn" d="M52.0 66.0L76.0 55.2L100.0 55.2L124.0 44.4L148.0 44.4L172.0 66.0L196.0 71.4L220.0 66.0L244.0 55.2L268.0 55.2L292.0 66.0L316.0 66.0L340.0 55.2L364.0 66.0L388.0 49.8L412.0 55.2L436.0 66.0L460.0 66.0L484.0 44.4L508.0 33.6"/>
+  <circle class="c-dot c-lvl-wrn" cx="508.0" cy="33.6" r="4"/>
+  <text class="c-label" x="516.0" y="37.6">16</text>
+  <g>
+    <rect class="c-hit" x="40.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:00|2::ERR|10::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="64.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:01|6::ERR|12::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="88.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:02|4::ERR|12::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="112.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:03|0::ERR|14::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="136.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:04|4::ERR|14::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="160.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:05|4::ERR|10::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="184.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:06|8::ERR|9::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="208.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:07|6::ERR|10::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="232.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:08|0::ERR|12::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="256.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:09|6::ERR|12::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="280.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:10|2::ERR|10::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="304.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:11|4::ERR|10::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="328.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:12|4::ERR|12::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="352.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:13|0::ERR|10::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="376.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:14|2::ERR|13::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="400.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:15|4::ERR|12::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="424.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:16|8::ERR|10::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="448.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:17|0::ERR|10::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="472.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:18|4::ERR|14::WRN" data-tip-keys="danger-solid,warn-solid"/>
+    <rect class="c-hit" x="496.0" y="12" width="24.0" height="108" data-tip="17 ต.ค. 14:19|0::ERR|16::WRN" data-tip-keys="danger-solid,warn-solid"/>
+  </g>
+</svg>
+            </div>
+            <div class="chart__foot">
+              <span>แท่งโตจากแกนไล่ซ้ายไปขวา 0.5 s · เส้นวาดตามเวลา 0.4 s · จุดค่าล่าสุดมีวงกระเพื่อม 3 ครั้งแล้วหยุด = นาทีปัจจุบัน</span>
+              <button class="btn btn--sm ml-auto" type="button" data-mo-replay="#mo-chart"><svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.75 8a5.25 5.25 0 1 0 1.6-3.77M2.5 2.5v3h3"/></svg>เล่นอีกครั้ง</button>
+              <details class="chart__table"><summary class="summary-line">ดูเป็นตาราง</summary><div class="table-wrap"><table class="table table--dense"><thead><tr><th scope="col">นาที</th><th scope="col" class="num">ERR</th><th scope="col" class="num">WRN</th></tr></thead><tbody><tr><td class="ts">14:19</td><td class="num">0</td><td class="num">16</td></tr><tr><td class="ts">14:18</td><td class="num">4</td><td class="num">14</td></tr><tr><td class="ts">14:17</td><td class="num">0</td><td class="num">10</td></tr><tr><td class="ts">14:16</td><td class="num">8</td><td class="num">10</td></tr><tr><td class="ts">14:15</td><td class="num">4</td><td class="num">12</td></tr><tr><td class="ts">14:14</td><td class="num">2</td><td class="num">13</td></tr><tr><td class="ts">14:13</td><td class="num">0</td><td class="num">10</td></tr><tr><td class="ts">14:12</td><td class="num">4</td><td class="num">12</td></tr><tr><td class="ts">14:11</td><td class="num">4</td><td class="num">10</td></tr><tr><td class="ts">14:10</td><td class="num">2</td><td class="num">10</td></tr><tr><td class="ts">14:09</td><td class="num">6</td><td class="num">12</td></tr><tr><td class="ts">14:08</td><td class="num">0</td><td class="num">12</td></tr><tr><td class="ts">14:07</td><td class="num">6</td><td class="num">10</td></tr><tr><td class="ts">14:06</td><td class="num">8</td><td class="num">9</td></tr><tr><td class="ts">14:05</td><td class="num">4</td><td class="num">10</td></tr><tr><td class="ts">14:04</td><td class="num">4</td><td class="num">14</td></tr><tr><td class="ts">14:03</td><td class="num">0</td><td class="num">14</td></tr><tr><td class="ts">14:02</td><td class="num">4</td><td class="num">12</td></tr><tr><td class="ts">14:01</td><td class="num">6</td><td class="num">12</td></tr><tr><td class="ts">14:00</td><td class="num">2</td><td class="num">10</td></tr></tbody></table></div></details>
+            </div>
+          </figure>
+          <div class="stack">
+            <div class="panel" id="mo-kpi-demo">
+              <div class="panel__head"><h3 class="panel__title">ตัวเลขนับขึ้นครั้งแรก แล้วกระพริบเมื่อเปลี่ยน</h3><div class="panel__actions"><button class="btn btn--sm" type="button" data-demo="next-minute">นาทีถัดไป</button></div></div>
+              <div class="kpis kpis--3" style="border:0;border-radius:0">
+                <div class="kpi"><span class="kpi__label">Request นาทีล่าสุด</span><span class="kpi__value" data-demo-v="req">1,185</span><div class="kpi__foot"><span class="kpi__delta" data-demo-v="minute">นาที 14:17</span></div></div>
+                <div class="kpi"><span class="kpi__label">5xx นาทีล่าสุด</span><span class="kpi__value" data-demo-v="err">0</span><div class="kpi__foot"><span class="kpi__delta">report · import</span></div></div>
+                <div class="kpi"><span class="kpi__label">p95 นาทีล่าสุด</span><span class="kpi__value" data-demo-v="p95">310<span class="kpi__unit">ms</span></span><div class="kpi__foot"><span class="kpi__delta">ทั้งชั่วโมง 312 ms</span></div></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel__head"><h3 class="panel__title">บรรทัดใหม่เข้าด้านบน</h3><span class="live">สด</span><div class="panel__actions"><button class="btn btn--sm" type="button" data-demo="new-row">จำลองบรรทัดใหม่</button></div></div>
+              <div class="table-wrap">
+                <table class="table table--dense"><caption class="sr-only">log ตัวอย่าง ใหม่สุดก่อน</caption>
+                  <thead><tr><th scope="col" class="col-tight">เวลา</th><th scope="col" class="col-tight">Level</th><th scope="col">ข้อความ</th><th scope="col" class="num">เวลาที่ใช้</th></tr></thead>
+                  <tbody id="mo-rows">
+                    <tr><td class="ts">14:19:59.301</td><td><span class="lvl lvl--wrn">WRN</span></td><td>request completed · <span class="mono">GET /exams/:id</span> <span class="http http--4xx">404</span></td><td class="num">37 ms</td></tr>
+                    <tr><td class="ts">14:19:59.296</td><td><span class="lvl lvl--wrn">WRN</span></td><td>Not found · <span class="mono">GET /exams/:id</span></td><td class="num">37 ms</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap mt-4">
+          <table class="table table--dense">
+            <caption>อะไรขยับ ทำไม และนานเท่าไร (ทุกตัวใช้ token <span class="mono">--dur-*</span> และหยุดหมดเมื่อ motion ปิด)</caption>
+            <thead><tr><th scope="col">อะไร</th><th scope="col">ช่วยให้อ่านอะไรง่ายขึ้น</th><th scope="col">hook</th><th scope="col" class="num">เวลา</th><th scope="col"><span class="sr-only">ตัวอย่าง</span></th></tr></thead>
+            <tbody>
+              <tr><td>แท่ง · เส้น · จุดในกราฟ</td><td>เห็นทิศทางของเวลา ซ้าย = เก่า ขวา = ใหม่</td><td class="mono">.chart.is-in .c-bar / .mo-draw / .c-dot</td><td class="num">≤ 500 ms</td><td><button class="btn btn--sm btn--quiet" type="button" data-mo-replay="#mo-chart">เล่น</button></td></tr>
+              <tr><td>จุด "ตอนนี้"</td><td>บอกว่าค่าไหนคือนาทีล่าสุด: วงกระเพื่อม 3 ครั้งเมื่อค่ามาถึงแล้วหยุด (ไม่วนตลอด) · จุดท้าย sparkline เป็นสีเทาเข้ม ไม่ใช่สีเขียว</td><td class="mono">.mo-now + .mo-ring</td><td class="num">2.4 s × 3</td><td><button class="btn btn--sm btn--quiet" type="button" data-mo-replay="#mo-chart">เล่น</button></td></tr>
+              <tr><td>KPI นับขึ้น · กระพริบ</td><td>สายตาไปที่ตัวเลขที่เพิ่งได้ค่าใหม่</td><td class="mono">.kpi.is-in · .is-changed</td><td class="num">600 · 1,600 ms</td><td><button class="btn btn--sm btn--quiet" type="button" data-mo-replay="#cmp-kpis">เล่น</button></td></tr>
+              <tr><td>Waterfall</td><td>span โตตามลำดับเวลาเริ่ม เห็นว่าใครเรียกใครก่อน · span ที่พังมีวงแดงหนึ่งครั้ง</td><td class="mono">.wf.is-in .dur &gt; i (--s)</td><td class="num">≤ 700 ms</td><td><button class="btn btn--sm btn--quiet" type="button" data-mo-replay="#cmp-wf">เล่น</button></td></tr>
+              <tr><td>บรรทัดใหม่ · จุดสด</td><td>รู้ว่าข้อมูลยังไหลเข้า และบรรทัดไหนเพิ่งมา</td><td class="mono">tr.is-new · .live</td><td class="num">200 + 1,600 ms</td><td><button class="btn btn--sm btn--quiet" type="button" data-demo="new-row">เล่น</button></td></tr>
+              <tr><td>ป้าย NEW</td><td>แสงวิ่งผ่านหนึ่งครั้ง ดึงสายตาไปที่ error ใหม่หลัง deploy</td><td class="mono">.badge-new.is-in</td><td class="num">900 ms</td><td><button class="btn btn--sm btn--quiet" type="button" data-mo-replay="#cmp-new">เล่น</button></td></tr>
+              <tr><td>Drawer · scrim · tab · details</td><td>รู้ว่าแผงมาจากไหนและกลับไปที่ไหน</td><td class="mono">.drawer.is-open · .tabs__ink · details</td><td class="num">200–400 ms</td><td></td></tr>
+              <tr><td>ปุ่มคัดลอก</td><td>ไอคอนกลายเป็นเครื่องหมายถูก ยืนยันว่าคัดลอกแล้ว</td><td class="mono">.btn-copy.is-copied</td><td class="num">400 ms</td><td></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="spec"><code>:root[data-motion="on|off"]</code><code>?motion=off</code><code>?motion=on</code><code>.is-in</code><code>[data-mo]</code><code>event mo:in</code><code>[data-mo-count]</code><code>[data-mo-replay="#id"]</code><code>skMonitor.reveal(el)</code><code>skMonitor.replay(el)</code><code>skMonitor.setValue(el, text)</code><code>skMonitor.addRow(tbody, tr)</code><code>--dur-1…4</code><code>--ease-out / --ease-in / --ease-in-out</code><code>--stagger</code><span>สิ่งที่ซ่อนก่อนเห็นจะซ่อนเฉพาะเมื่อ <code>data-motion="on"</code> หน้าที่ไม่มี app.js หรือปิด motion แสดงสถานะสุดท้ายเสมอ · headless Chrome ปิด motion เอง</span></p>
+      </section>
+
+      <!-- ================= skeleton ================= -->
+      <section class="gallery-section" id="skeleton" aria-labelledby="h-skeleton">
+        <div class="section__head"><h2 class="section__title" id="h-skeleton">Skeleton ระหว่างโหลด</h2><span class="section__meta">บล็อกเทาขนาดเท่าของจริง มีแสงวิ่งช้า ๆ หนึ่งเส้น · ใช้เมื่อรอ API เกิน 300 ms · ห้ามใช้แทน empty state</span></div>
+        <div class="grid grid--2">
+          <div class="panel" aria-busy="true">
+            <div class="panel__head"><span class="skel skel--title" style="width:38%"></span><span class="sr-only">กำลังโหลด KPI</span></div>
+            <div class="kpis kpis--3" style="border:0;border-radius:0">
+              <div class="kpi"><span class="skel skel--short"></span><span class="skel skel--kpi"></span><span class="skel skel--text"></span></div>
+              <div class="kpi"><span class="skel skel--short"></span><span class="skel skel--kpi"></span><span class="skel skel--text"></span></div>
+              <div class="kpi"><span class="skel skel--short"></span><span class="skel skel--kpi"></span><span class="skel skel--text"></span></div>
+            </div>
+          </div>
+          <div class="panel" aria-busy="true">
+            <div class="panel__head"><span class="skel skel--title"></span><span class="sr-only">กำลังโหลดกราฟ</span></div>
+            <div class="panel__body"><span class="skel skel--chart"></span></div>
+          </div>
+        </div>
+        <div class="panel mt-4" aria-busy="true">
+          <div class="panel__head"><span class="skel skel--title" style="width:22%"></span><span class="sr-only">กำลังโหลดบรรทัด log</span></div>
+          <div class="panel__body" style="display:grid;gap:var(--sp-2)">
+            <span class="skel skel--text"></span><span class="skel skel--short" style="margin:0"></span><span class="skel skel--text" style="margin:0"></span><span class="skel skel--short" style="margin:0;width:70%"></span>
+          </div>
+        </div>
+        <p class="spec"><code>.skel</code><code>.skel--title</code><code>.skel--text</code><code>.skel--short</code><code>.skel--kpi</code><code>.skel--chart</code><code>.skel--row</code><code>[aria-busy="true"]</code><span>container มี <code>aria-busy</code> และข้อความ sr-only "กำลังโหลด…" · แสงวิ่งหยุดเมื่อ motion ปิด (บล็อกยังอยู่)</span></p>
+      </section>
+
+      <!-- ================= 3D views ================= -->
+      <section class="gallery-section" id="views3d" aria-labelledby="h-views3d">
+        <div class="section__head"><h2 class="section__title" id="h-views3d">ภาพ 3 มิติ</h2><span class="section__meta">ใช้อธิบายภาพรวม ไม่ใช่ที่อ่านตัวเลข: ตัวเลขทุกตัวในภาพมีในตารางหรือรายการของหน้านั้นด้วย (overview: สุขภาพ service และ Dependency) ค่าที่ API ยังไม่มีเป็น <span class="mono">null</span> และไม่แสดงตัวเลข · <span class="mono">assets/system-map.js</span> + <span class="mono">system-map.css</span> · three.js 0.170.0</span></div>
+        <div class="stack" style="gap:var(--sp-4)">
+          <div class="panel" data-mo id="v3d-map-panel">
+            <div class="panel__head"><h3 class="panel__title">แผนที่ระบบ</h3><span class="panel__meta">overview.html · prod · 1 ชั่วโมงล่าสุด</span></div>
+            <div class="v3d-bar">
+              <div class="seg" role="group" aria-label="ช่วงเวลาของข้อมูลในภาพ" data-choice id="v3d-scenario">
+                <button class="seg__btn" type="button" aria-pressed="true" data-scenario="now">ตอนนี้ 14:20</button>
+                <button class="seg__btn" type="button" aria-pressed="false" data-scenario="cache-down">13:42:50 redis cache down</button>
+              </div>
+            </div>
+            <div class="v3d-map" id="v3d-map"><p class="smap-placeholder">กำลังโหลดภาพ 3 มิติ…</p></div>
+          </div>
+          <div class="panel" data-mo id="v3d-pipe-panel">
+            <div class="panel__head"><h3 class="panel__title">ข้อมูลเดินทางอย่างไร</h3><span class="panel__meta">index.html · ค่าคงที่ตาม SPEC §4</span></div>
+            <div class="v3d-pipe" id="v3d-pipe"><p class="smap-placeholder">กำลังโหลดภาพ 3 มิติ…</p></div>
+          </div>
+        </div>
+        <div class="table-wrap mt-4">
+          <table class="table table--dense">
+            <caption>อ่านภาพอย่างไร และกติกาที่ภาพต้องทำตาม</caption>
+            <thead><tr><th scope="col">อะไร</th><th scope="col">หมายความว่า</th><th scope="col">มาจาก</th></tr></thead>
+            <tbody>
+              <tr><td>อาคาร</td><td>service (role api) สีประจำ service เดียวกับ <span class="svc svc-1">core</span> ทุกหน้า · ความสูง = req/นาที แบบ log จึงเห็นทั้ง 1,180 และ 54</td><td class="mono">kind service · rpm</td></tr>
+              <tr><td>ชั้นซ้อน · แท่งยาวสีส้ม</td><td>worker / consumer · queue (BullMQ, Kafka, RabbitMQ) สีส้มเป็นสีเดียวที่ใช้ highlight ในภาพ</td><td class="mono">worker · queue · --highlight</td></tr>
+              <tr><td>ถังซ้อน · โดม · ผู้ใช้</td><td>database และ cache · API ภายนอก · ทราฟฟิกที่เข้ามา</td><td class="mono">dependency · external · client</td></tr>
+              <tr><td>จุดวิ่งบนเส้น</td><td>การเรียกจริงต่อนาที (ยิ่งถี่ยิ่งมาก) · จุดแดง = ส่วนที่ล้มเหลว ขยายสเกลให้ 0.16 % ยังมองเห็น ตัวเลขจริงอยู่บนป้าย · เส้นไม่มีตัวเลข = รู้ว่าเรียกแต่ไม่รู้อัตรา</td><td class="mono">edges · rpm · errorRate</td></tr>
+              <tr><td>วงที่พื้นและวงกระเพื่อม</td><td>แดง = มี error หรือ down · เหลือง = ต้องดู · ป้ายมีจุดรูปเดียวกับ <span class="state state--warn">ต้องดู</span> เพราะสีอย่างเดียวไม่พอ</td><td class="mono">state</td></tr>
+              <tr><td>down</td><td>ตัวอาคารจาง ไม่ส่งจุดออก เส้นที่เข้าหาเป็นสีแดงทั้งเส้น (กด "13:42:50 redis cache down")</td><td class="mono">state down</td></tr>
+              <tr><td>ป้ายและ tooltip</td><td>ชื่อ + ตัวเลขที่ต้องรู้ · จอแคบ หรือ <span class="mono">compactLabels</span> (overview): ป้ายของจุดปกติเหลือแค่ชื่อ · ชี้หรือ focus: tooltip ครบทุกค่า ไฮไลต์จุดที่เชื่อมกัน ส่วนจุดและป้ายอื่นจางลง · ชี้แถวในตารางของหน้า (<span class="mono">highlight(id)</span>) ก็ไฮไลต์จุดเดียวกัน</td><td class="mono">.smap__label · .smap__tip</td></tr>
+              <tr><td>การเคลื่อนไหว</td><td>อาคารโตขึ้นเมื่อเลื่อนมาเห็น (<span class="mono">mo:in</span>) จุดวิ่งต่อเนื่อง = ข้อมูลยังไหล · motion ปิดหรือ reduced motion: ภาพนิ่ง เส้นประ ปุ่มเล่นเปิดได้เอง · นอกจอหรือแท็บถูกซ่อน: หยุดวาด</td><td class="mono">data-motion · ≤ 30 fps</td></tr>
+              <tr><td>ไม่มี WebGL</td><td>ข้อความหนึ่งบรรทัดและรายการ HTML ของข้อมูลชุดเดียวกัน ไม่ปล่อยกล่องว่าง (ลอง <span class="mono">?webgl=off</span>)</td><td class="mono">.smap--fallback</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="spec"><code>mountSystemMap(el, data, options)</code><code>mountPipeline(el, options)</code><code>.update(data)</code><code>.highlight(id)</code><code>.setCompactLabels(bool)</code><code>.setTransport(t)</code><code>.destroy()</code><code>demoSystemMapData()</code><code>systemMapFromApi(overview)</code><code>--smap-h</code><code>--smap-h-narrow</code><code>[data-mo] + mo:in</code><code>smap:select</code><span>ลากเพื่อหมุน, ปุ่ม + − ซูม (ล้อเมาส์ไม่ซูม), ลูกศร / + − / 0 บนภาพ · หน้าทดสอบเต็มจอ <span class="mono">system-map-lab.html</span> ในโฟลเดอร์ design · DESIGN.md §7c</span></p>
+      </section>
+
+      <details class="design-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <p>แหล่งเดียวของ markup สำหรับ component ทุกตัว designer คัดลอกจากหน้านี้และ _shell.html ห้ามสร้าง class ใหม่ที่ซ้ำกับของที่มีอยู่</p>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>KPI และ route: <code>GET /api/overview</code> (<code>services[]</code>, <code>routes[]</code>)</li>
+              <li>Error row: <code>LogRow.error</code> หรือ <code>ErrorGroup</code> จาก <code>/api/errors</code></li>
+              <li>Waterfall: <code>SpanRow.startTime</code> และ <code>durationMs</code> จาก <code>/api/traces/:traceId</code></li>
+              <li>กราฟ: <code>overview.series</code>; ค่าต่อนาทีในกราฟเป็นตัวอย่างรอบค่าเฉลี่ยใน dataset</li>
+              <li>กราฟใน Motion: บรรทัด ERR และ WRN ต่อนาที 14:00–14:19 จากตารางเดียวกับ histogram ใน logs.html</li>
+              <li>ภาพ 3 มิติ: <code>demoSystemMapData('now' | 'cache-down')</code> = ชุดข้อมูลใน BRIEF.md (ค่าเดียวกับตารางสุขภาพ service และ Dependency ใน overview.html); เส้นทางข้อมูลเป็นค่าคงที่ตาม SPEC §4</li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li><code>assets/app.js</code>: ธีม, motion (<code>data-motion</code>, reveal <code>.is-in</code>, <code>window.skMonitor</code>), sidebar, drawer, tab, copy, ขยายแถว, toggle chip, tooltip <code>[data-tip]</code></li>
+              <li>ตัวอย่าง Motion: ปุ่ม "เล่นอีกครั้ง" (<code>[data-mo-replay]</code>), "นาทีถัดไป" (ค่า 14:17–14:19 จาก dataset) และ "จำลองบรรทัดใหม่" ใช้ script สั้น ๆ ท้ายหน้านี้</li>
+              <li>ทุกอย่างที่ hover ได้ต้อง focus ด้วยคีย์บอร์ดได้และแสดงผลเหมือนกัน</li>
+              <li>ภาพ 3 มิติ: ปุ่ม "ตอนนี้ 14:20" / "13:42:50 redis cache down" เรียก <code>map.update()</code> · ป้ายชื่อเป็นลิงก์ไปหน้าที่เกี่ยวข้อง · โหลด three.js เมื่อหน้าพร้อมแล้ว และเริ่มวาดเมื่อเลื่อนมาเห็น</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li>Stack trace มีเลขบรรทัดจริงจาก source map หรือไม่ (ตัวอย่างนี้สมมติ)</li>
+              <li>Service ที่ 7 ขึ้นไปใช้สีเทา "อื่น ๆ" ตกลงไหม</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+
+      <!-- Drawer: lives at the end of <main>; opened by [data-drawer-open="drawer-log"] -->
+      <aside class="drawer" id="drawer-log" role="dialog" aria-modal="true" aria-labelledby="drawer-log-title" aria-hidden="true">
+        <div class="drawer__head">
+          <div class="drawer__heading">
+            <div class="drawer__sub"><span class="lvl lvl--err">ERR</span><span class="ts">17 ต.ค. 14:18:09.226</span><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span><span class="env env--prod">prod</span></div>
+            <h2 class="drawer__title" id="drawer-log-title">Value too long for column</h2>
+          </div>
+          <button class="btn-icon" type="button" data-drawer-close aria-label="ปิด"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        </div>
+        <div class="drawer__body">
+          <p class="err-row__detail"><span class="err-row__detail-label">ต้องแก้อะไร</span>QuestionBankEntity.title got 312 (max 255). Validate the length in the DTO or import before saving.</p>
+          <div class="field-group">
+            <h3 class="field-group__title">Error</h3>
+            <dl class="fields">
+              <dt>หมวด<span class="fname">error_category</span></dt><dd><span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span></dd>
+              <dt>ประเภท · code<span class="fname">error_type · error_code</span></dt><dd class="mono">QueryFailedError · ORA-12899</dd>
+              <dt>ทั่วไป<span class="fname">error_hint_detail</span></dt><dd>A text value exceeds the column size. Common in Excel imports; validate length before saving.</dd>
+              <dt>เป้าหมาย<span class="fname">error_target</span></dt><dd class="mono">QuestionBankEntity.title</dd>
+              <dt>Function<span class="fname">origin_function</span></dt><dd class="mono">ImportQuestionBankHandler.execute</dd>
+              <dt>ไฟล์<span class="fname">origin_file</span></dt><dd class="mono">src/domain/question-bank/import-question-bank.handler.ts</dd>
+              <dt>Usecase<span class="fname">usecase</span></dt><dd class="mono">ImportQuestionBankCommand</dd>
+              <dt>ขั้นที่พัง<span class="fname">failed_step</span></dt><dd class="mono">oracle INSERT QUESTION_BANK</dd>
+            </dl>
+          </div>
+          <div class="field-group">
+            <h3 class="field-group__title">Request</h3>
+            <dl class="fields">
+              <dt>Route<span class="fname">http_method · http_route</span></dt><dd class="mono">POST /question-bank/import</dd>
+              <dt>Status<span class="fname">http_status</span></dt><dd><span class="http http--5xx">500</span></dd>
+              <dt>เวลาที่ใช้<span class="fname">duration_ms</span></dt><dd>1,842 ms</dd>
+            </dl>
+          </div>
+          <div class="field-group">
+            <h3 class="field-group__title">ใคร และ trace ไหน</h3>
+            <dl class="fields">
+              <dt>Trace<span class="fname">trace_id</span></dt><dd><span class="idchip"><a href="trace-detail.html">4bf92f3577b34da6a3ce929d0e0e4736</a><button class="btn-icon btn-icon--xs btn-copy" type="button" data-copy="4bf92f3577b34da6a3ce929d0e0e4736" aria-label="คัดลอก trace id"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></button></span></dd>
+              <dt>User<span class="fname">user_id · user_roles</span></dt><dd class="mono">u_1029 · teacher<span class="hint">ไม่ถูกใส่ในข้อความที่คัดลอกให้ AI</span></dd>
+              <dt>โรงเรียน<span class="fname">organization_id</span></dt><dd class="mono">s_118</dd>
+              <dt>Version<span class="fname">version</span></dt><dd class="mono">31.4.0</dd>
+            </dl>
+          </div>
+          <details class="disclosure">
+            <summary>error จริง</summary>
+            <div class="disclosure__body"><p class="err-row__actual">QueryFailedError [ORA-12899] ORA-12899: value too large for column "APP"."QUESTION_BANK"."TITLE" (actual: 312, maximum: 255)</p></div>
+          </details>
+        </div>
+        <div class="drawer__foot">
+          <a class="btn" href="trace-detail.html">เปิด trace</a>
+          <a class="btn btn--quiet" href="error-detail.html">ดู error group</a>
+          <button class="btn btn--primary btn-copy ml-auto" type="button" data-copy-target="#ai-md-1"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกให้ AI</span></button>
+        </div>
+      </aside>
+
+    </main>
+  </div>
+</div>
+<script>
+  /* components.html only: Motion demo buttons (dataset minutes 14:17-14:19 from overview.html, log lines from logs.html) */
+  (function () {
+    var minutes = [['14:17', '1,185', '0', '310'], ['14:18', '1,187', '2', '298'], ['14:19', '1,187', '0', '304']], at = 0;
+    var newRows = [['14:19:59.388', 'request completed · <span class="mono">GET /me</span>', '18 ms'], ['14:19:59.412', 'request completed · <span class="mono">GET /question-bank/my</span>', '126 ms']], next = 0;
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-demo]'); if (!b || !window.skMonitor) return;
+      if (b.getAttribute('data-demo') === 'next-minute') {
+        var prev = minutes[at]; at = (at + 1) % minutes.length; var m = minutes[at];
+        var box = document.getElementById('mo-kpi-demo');
+        [['req', 1], ['err', 2], ['p95', 3]].forEach(function (k) {
+          var el = box.querySelector('[data-demo-v="' + k[0] + '"]');
+          if (prev[k[1]] !== m[k[1]]) skMonitor.setValue(el, m[k[1]]);
+        });
+        box.querySelector('[data-demo-v="minute"]').textContent = 'นาที ' + m[0];
+      } else if (b.getAttribute('data-demo') === 'new-row') {
+        var tbody = document.getElementById('mo-rows'), r = newRows[next % newRows.length]; next++;
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td class="ts">' + r[0] + '</td><td><span class="lvl lvl--inf">INF</span></td><td>' + r[1] + ' <span class="http http--2xx">200</span></td><td class="num">' + r[2] + '</td>';
+        skMonitor.addRow(tbody, tr);
+        while (tbody.children.length > 4) tbody.removeChild(tbody.lastElementChild);
+      }
+    });
+  })();
+</script>
+<script type="module">
+  /* components.html only: the two 3D views, mounted when each panel is first seen (mo:in) or at once when motion is off */
+  const root = document.documentElement;
+  function whenSeen(panel, fn) {
+    if (root.dataset.motion !== 'on' || panel.classList.contains('is-in')) fn();
+    else panel.addEventListener('mo:in', fn, { once: true });
+  }
+  import('./assets/system-map.js').then(({ mountSystemMap, mountPipeline, demoSystemMapData }) => {
+    const motion = root.dataset.motion !== 'off';
+    let map = null;
+    whenSeen(document.getElementById('v3d-map-panel'), () => {
+      map = mountSystemMap(document.getElementById('v3d-map'), demoSystemMapData('now'), {
+        serviceOrder: ['school-core-api', 'school-etl-api', 'video-transcoder-api'], motion,
+      });
+    });
+    document.getElementById('v3d-scenario').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-scenario]');
+      if (b && map) map.update(demoSystemMapData(b.dataset.scenario));
+    });
+    whenSeen(document.getElementById('v3d-pipe-panel'), () => {
+      mountPipeline(document.getElementById('v3d-pipe'), { motion, links: { monitor: 'overview.html' } });
+    });
+  }).catch(() => {
+    document.querySelectorAll('#views3d .smap-placeholder').forEach((p) => {
+      p.textContent = location.protocol === 'file:'
+        ? 'ภาพ 3 มิติต้องเปิดผ่าน http server (Chrome ไม่โหลด module จากไฟล์ในเครื่อง)'
+        : 'โหลดภาพ 3 มิติไม่สำเร็จ';
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,988 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ภาพรวม · skilllane monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans+Thai:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<link rel="stylesheet" href="assets/system-map.css">
+<script src="assets/app.js"></script>
+<!-- three@0.170.0 for the 3D system map (assets/system-map.js imports 'three' and 'three/addons/…' by bare specifier) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  /* overview.html only. Tokens and shared components: assets/styles.css */
+  .ov-deploy { display: inline-flex; align-items: center; gap: var(--sp-1h); flex-wrap: wrap; }
+  .ov-attn .callout__title .badge-new, .ov-attn .callout__title .cat { margin-left: var(--sp-1); vertical-align: 1px; }
+  .ov-attn .callout__title .cat { height: 20px; }
+  .ov-attn .callout__text .svc, .ov-attn .callout__text .state { vertical-align: -1px; }
+  .ov-note { font-size: var(--fs-12); color: var(--ink-2); min-width: 220px; }
+  /* top band: "ต้องดูตอนนี้" and the 3D system map side by side from 1280 px; narrower, the map follows the health table */
+  .ov-top { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "attn" "health" "map"; gap: var(--sp-8) var(--sp-6); }
+  .ov-top > .section { margin-top: 0; }
+  .ov-attn { grid-area: attn; }
+  .ov-health-sec { grid-area: health; min-width: 0; }
+  .ov-map { grid-area: map; min-width: 0; }
+  .ov-map__panel { position: relative; overflow: hidden; }
+  .ov-map__box { --smap-h: 340px; --smap-h-narrow: 360px; }
+  .ov-map__cap { margin-top: var(--sp-2); }
+  .ov-map .section__actions { margin-block: -6px; }   /* the button must not make this head taller than "ต้องดูตอนนี้" */
+  .ov-top.is-map-wide .ov-map__box { --smap-h: 540px; --smap-h-narrow: 560px; }
+  @media (min-width: 1280px) {
+    .ov-top { grid-template-columns: minmax(0, 1fr) minmax(440px, 0.84fr); grid-template-areas: "attn map" "health health"; }
+    .ov-map { display: flex; flex-direction: column; }
+    .ov-map__panel { flex: 1 1 auto; min-height: 300px; }
+    .ov-map__box { position: absolute; inset: 0; --smap-h: 100%; }   /* as tall as the three callouts */
+    .ov-map__box:has(> .smap--fallback) { overflow: auto; }            /* no WebGL: the list scrolls inside the box */
+    /* next to the map the callouts are narrower: the button sits on the title line so the text keeps the full width */
+    .ov-attn .callout__text { grid-column: 2 / -1; }
+    .ov-attn .callout__actions { grid-row: 1; align-self: start; }
+    /* ขยาย: the map takes the full width under the callouts */
+    .ov-top.is-map-wide { grid-template-columns: minmax(0, 1fr); grid-template-areas: "attn" "map" "health"; }
+    .ov-top.is-map-wide .ov-map__panel { flex: none; height: 540px; }
+  }
+  /* a row whose node is hovered in the map (and the other way round) */
+  .ov-health > tbody > tr.is-linked > td, .dep-list > li.is-linked { background: var(--hover-bg); }
+  .ov-body { margin-top: var(--sp-8); align-items: start; }
+  .ov-body > .section, .ov-main > .section:first-child { margin-top: 0; }
+  .ov-charts .chart + .chart { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line-soft); }
+  .ov-charts .chart__head { margin-bottom: var(--sp-1); }
+  .ov-charts .panel__foot.chart__foot { padding-top: var(--sp-2); }
+  .ov-routes th, .ov-routes td { padding-left: 8px; padding-right: 8px; }
+  @media (min-width: 1100px) { .ov-body { grid-template-columns: minmax(0, 2.2fr) minmax(300px, 1fr); } }
+  .ov-routes .ov-r-route { padding-right: var(--sp-1); }
+  .ov-routes .row-detail .row { gap: var(--sp-2) var(--sp-3); }
+  .ov-rd { font-size: var(--fs-13); }
+  .ov-side__stack { gap: var(--sp-4); }
+  .panel .ov-jobs td { vertical-align: top; }
+  @media (max-width: 599px) {
+    .ov-deploy { width: 100%; }
+    /* health: state + service, then error rate · p95 · volume, then the note */
+    .ov-health > tbody > tr { grid-template-columns: auto auto minmax(0, 1fr); grid-template-areas: "state svc svc" "err p95 vol" "note note note"; }
+    .ov-h-state { grid-area: state; } .ov-h-svc { grid-area: svc; } .ov-h-err { grid-area: err; } .ov-h-p95 { grid-area: p95; } .ov-h-vol { grid-area: vol; text-align: right !important; } .ov-h-note { grid-area: note; min-width: 0; }
+    /* routes: toggle + route, then request · error · Δ 5xx, then p95 · Δ p95 */
+    .ov-routes > tbody > tr { grid-template-columns: 24px auto auto minmax(0, 1fr); grid-template-areas: "tog route route route" ". req err d5" ". p95 p95 d95"; column-gap: var(--sp-3); }
+    .ov-r-tog { grid-area: tog; } .ov-r-route { grid-area: route; white-space: normal !important; } .ov-r-req { grid-area: req; } .ov-r-err { grid-area: err; } .ov-r-d5 { grid-area: d5; text-align: right !important; } .ov-r-p95 { grid-area: p95; } .ov-r-d95 { grid-area: d95; text-align: right !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปที่เนื้อหา</a>
+<div class="app">
+
+  <!-- ===== sidebar (copy verbatim; move to the current screen, none on index.html) ===== -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar__top">
+      <a class="brand" href="index.html">
+        <svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>
+        <span class="brand__name">skilllane monitor<span class="brand__sub">log · trace · error</span></span>
+      </a>
+      <button class="btn-icon sidebar__close" type="button" data-nav-toggle aria-label="ปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <nav class="nav" aria-label="หน้าจอ">
+      <a class="nav-item" href="overview.html" aria-current="page"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>ภาพรวม</a>
+      <a class="nav-item" href="logs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>Log</a>
+      <a class="nav-item" href="traces.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.75h6.5v2.5H2zM4.5 6.75h8v2.5h-8zM8 10.75h6v2.5H8z"/></svg>Trace</a>
+      <a class="nav-item" href="errors.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>Error</a>
+      <a class="nav-item" href="jobs.html"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg>งานเบื้องหลัง</a>
+      <p class="nav__label">เอกสาร</p>
+      <a class="nav-item" href="../../docs/DATA-DICTIONARY.md" title="ชื่อ field ทุกตัวใน log และ trace สำหรับคนและ AI"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3a1 1 0 0 1 1-1h8.5v10H4a1 1 0 0 0-1 1z"/><path d="M3 13a1 1 0 0 0 1 1h8.5v-2"/></svg>พจนานุกรมข้อมูล<svg class="i i--sm nav-item__ext" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 8 8M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/></svg></a>
+    </nav>
+    <div class="sidebar__foot">
+      <span class="state state--ok">ClickHouse ปกติ</span>
+      <span class="sidebar__fresh"><span class="live" title="อัปเดตอัตโนมัติ">สด</span>ข้อมูลล่าสุด <span class="ts">14:20:00</span> ICT</span>
+    </div>
+  </aside>
+  <!-- ===== /sidebar ===== -->
+
+  <div class="main">
+
+    <!-- ===== top bar (copy verbatim; Errors and Jobs select 24 ชั่วโมงล่าสุด and change .range-abs) ===== -->
+    <header class="topbar" data-env="prod">
+      <button class="btn-icon topbar__menu" type="button" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
+      <a class="topbar__brand" href="index.html"><svg class="brand__mark" viewBox="0 0 22 22" aria-hidden="true"><rect class="bm-bg" width="22" height="22" rx="5"/><rect class="bm-bar" x="5" y="5.5" width="9" height="2.2" rx="1.1"/><rect class="bm-hi" x="8" y="9.9" width="9" height="2.2" rx="1.1"/><rect class="bm-bar" x="5" y="14.3" width="6" height="2.2" rx="1.1"/></svg>skilllane monitor</a>
+      <div class="topbar__scope">
+        <div class="seg seg--env" role="group" aria-label="Environment" data-choice>
+          <button class="seg__btn" type="button" aria-pressed="false">dev</button>
+          <button class="seg__btn" type="button" aria-pressed="false">staging</button>
+          <button class="seg__btn seg__btn--prod" type="button" aria-pressed="true"><span class="seg__dot" aria-hidden="true"></span>prod</button>
+        </div>
+        <label class="select select--lead">
+          <svg class="i select__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 4.75V8l2.25 1.5"/></svg>
+          <span class="sr-only">ช่วงเวลา</span>
+          <select class="select__control" name="range">
+            <option value="now-15m">15 นาทีล่าสุด</option>
+            <option value="now-1h" selected>1 ชั่วโมงล่าสุด</option>
+            <option value="now-6h">6 ชั่วโมงล่าสุด</option>
+            <option value="now-24h">24 ชั่วโมงล่าสุด</option>
+            <option value="now-7d">7 วันล่าสุด</option>
+            <option value="custom">กำหนดเอง…</option>
+          </select>
+          <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </label>
+        <span class="range-abs">17 ต.ค. 13:20–14:20 ICT</span>
+      </div>
+      <form class="jump" role="search" action="logs.html">
+        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3.25 3.25"/></svg>
+        <label class="sr-only" for="jump-q">ค้นหา trace id, user id หรือคำค้น</label>
+        <input class="jump__input" id="jump-q" type="search" name="q" placeholder="trace id, user id หรือคำค้น" autocomplete="off" spellcheck="false">
+        <kbd class="jump__kbd" aria-hidden="true">/</kbd>
+      </form>
+      <div class="topbar__end">
+        <button class="btn-icon theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="เปลี่ยนเป็นธีมมืด">
+          <svg class="i i--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z"/></svg>
+          <svg class="i i--sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.75"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>
+        </button>
+      </div>
+    </header>
+    <!-- ===== /top bar ===== -->
+
+    <main class="content" id="main" tabindex="-1">
+
+      <header class="page-head">
+        <div class="page-head__text">
+          <nav class="crumbs" aria-label="ตำแหน่ง"><a href="index.html">skilllane monitor</a><span class="crumbs__sep" aria-hidden="true">/</span><span>ภาพรวม</span></nav>
+          <h1 class="page-title">ภาพรวม</h1>
+          <p class="page-sub">ตอนนี้ prod มีอะไรผิดปกติ service ไหน route ไหนต้องดูก่อน · <span class="env env--prod">prod</span> · 1 ชั่วโมงล่าสุด (13:20–14:20 ICT)</p>
+        </div>
+        <div class="page-actions">
+          <span class="hint ov-deploy">deploy ล่าสุด <span class="svc svc-1">school-core-api</span> <span class="tag">31.4.0</span> <span class="ts">17 ต.ค. 08:00</span></span>
+          <button class="btn btn--quiet btn-copy" type="button" data-copy="skilllane-monitor/overview?env=prod&amp;from=now-1h"><svg class="i i--copy" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg><svg class="i i--check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg><span class="btn-copy__label">คัดลอกลิงก์</span></button>
+          <a class="btn" href="logs.html?env=prod&amp;from=now-1h"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11M2.5 6.5h8M2.5 9.5h11M2.5 12.5h6"/></svg>เปิด Log ช่วงนี้</a>
+        </div>
+      </header>
+
+      <!-- screen content starts here -->
+      <div class="ov-top">
+      <section class="section ov-attn" aria-labelledby="ov-attn-t">
+        <div class="section__head">
+          <h2 class="section__title" id="ov-attn-t">ต้องดูตอนนี้</h2>
+          <span class="section__meta">3 เรื่อง · เรียงจากรุนแรงไปเบา · สรุปจาก error group, route และ dependency</span>
+        </div>
+        <div class="callouts">
+          <div class="callout callout--error">
+            <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1.75h5l3.75 3.75v5l-3.75 3.75h-5L1.75 10.5v-5z"/><path d="M8 5v3.5M8 10.9v.1"/></svg>
+            <p class="callout__title">Error ใหม่หลัง deploy 31.4.0: Read from undefined value <span class="badge-new">NEW</span> <span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span></p>
+            <p class="callout__text"><b class="t-strong">66</b> ครั้งตั้งแต่ 08:03 · 21 users · <span class="mono">GET /classes/:id/report</span> · <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span> · ครั้งแรก <span class="ts">08:03</span> (3 นาทีหลัง deploy) · ล่าสุด <span class="ts">14:16</span> · 65 ครั้งอยู่ใน 1 ชั่วโมงล่าสุด</p>
+            <div class="callout__actions"><a class="btn btn--sm" href="error-detail-null-read.html">เปิด error</a></div>
+          </div>
+          <div class="callout callout--warn">
+            <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.3 13.3H1.7z"/><path d="M8 6.5v3M8 11.4v.1"/></svg>
+            <p class="callout__title">Route ช้า: GET /classes/:id/students p95 2.4 s</p>
+            <p class="callout__text"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span> · 9,870 request · error 0 % · ก่อน deploy p95 2.3 s · trace ช้าสุด <a href="trace-detail.html?traceId=9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a" class="mono" title="9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a">9a1c4e0b…</a> 2,712 ms ใช้เวลาใน <span class="mono">oracle SELECT STUDENT</span> 2,430 ms</p>
+            <div class="callout__actions"><a class="btn btn--sm" href="traces.html?route=GET%20%2Fclasses%2F%3Aid%2Fstudents&amp;minMs=1000">ดู trace ที่ช้า</a></div>
+          </div>
+          <div class="callout">
+            <svg class="i callout__icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 7.25v3.5M8 5.2v.1"/></svg>
+            <p class="callout__title">Redis "cache" down 45.2 s เมื่อ 13:42 กลับมาแล้ว</p>
+            <p class="callout__text"><span class="mono">10.0.3.21:6379</span> · ECONNREFUSED 3 ครั้ง <span class="ts">13:42:35–13:43:20</span> · <span class="state state--ok">up ตั้งแต่ 13:43:20</span> · ไม่มี 5xx เพิ่ม (อ่านจาก DB แทน cache) แต่ p95 ของ <span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span> ขึ้นเป็น 418 ms ในนาทีนั้น</p>
+            <div class="callout__actions"><a class="btn btn--sm" href="jobs.html#dep-cache">ดู dependency</a></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section ov-health-sec" aria-labelledby="ov-health-t">
+        <div class="section__head">
+          <h2 class="section__title" id="ov-health-t">สุขภาพ service</h2>
+          <span class="section__meta">5 service/role ใน prod · 1 ชั่วโมงล่าสุด · กดแถวเพื่อเปลี่ยน service ของกราฟและ route ด้านล่าง</span>
+        </div>
+        <div class="table-wrap">
+          <table class="table table--reflow ov-health">
+            <caption class="sr-only">สุขภาพของทุก service และ role ใน prod ช่วง 13:20–14:20 ICT</caption>
+            <thead>
+              <tr>
+                <th scope="col">สถานะ</th>
+                <th scope="col">Service / role</th>
+                <th scope="col" class="num">Error rate</th>
+                <th scope="col" class="num">p95</th>
+                <th scope="col" class="num">ปริมาณ</th>
+                <th scope="col">ประเภท</th>
+                <th scope="col">60 นาที</th>
+                <th scope="col">ที่ต้องดู</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="is-clickable" aria-current="true" data-node="core-api">
+                <td class="col-tight ov-h-state"><span class="state state--warn">ต้องดู</span></td>
+                <td class="nowrap ov-h-svc"><a class="link-quiet" href="logs.html?service=school-core-api&amp;role=api"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span></a><span class="sr-only"> (แสดงในกราฟด้านล่าง)</span></td>
+                <td class="num ov-h-err" data-label="error">0.16 %</td>
+                <td class="num ov-h-p95" data-label="p95">312 ms</td>
+                <td class="num ov-h-vol">1,180<span class="unit">req/นาที</span></td>
+                <td class="nowrap t-ink2 rf-hide">HTTP API</td>
+                <td class="col-tight rf-hide"><span class="spark-inline" tabindex="0" data-tip="request · 13:20–14:20|1,187 req::นาทีล่าสุด (14:19)|1,115–1,237::ต่ำสุด–สูงสุด"><svg width="120" height="24" viewBox="0 0 120 24" role="img" aria-label="request ต่อนาที 60 นาที ต่ำสุด 1,115 สูงสุด 1,237 ล่าสุด 1,187"><path class="spark__area" d="M0 14L2 8.4L4.1 11.6L6.1 11.8L8.1 8.5L10.2 9.4L12.2 10.4L14.2 7.9L16.3 7.8L18.3 9.1L20.3 8.3L22.4 8.8L24.4 7.9L26.4 11.4L28.5 11L30.5 9.5L32.5 9.9L34.6 14L36.6 10.8L38.6 12.5L40.7 10.4L42.7 11.5L44.7 15.8L46.8 14L48.8 12.1L50.8 13.7L52.9 14.3L54.9 14.8L56.9 13.1L59 13.3L61 16.3L63.1 16.5L65.1 13.6L67.1 16.3L69.2 17.1L71.2 16L73.2 15L75.3 15.4L77.3 11.3L79.3 13.1L81.4 11.7L83.4 10.4L85.4 14.6L87.5 12.9L89.5 10.8L91.5 10.8L93.6 10.8L95.6 11.8L97.6 7.5L99.7 12.1L101.7 10.2L103.7 10.2L105.8 8.3L107.8 6.9L109.8 9.3L111.9 11.4L113.9 10.3L115.9 11.3L118 11.1L120 11.1L120 24L0 24Z"/><path class="spark__line" d="M0 14L2 8.4L4.1 11.6L6.1 11.8L8.1 8.5L10.2 9.4L12.2 10.4L14.2 7.9L16.3 7.8L18.3 9.1L20.3 8.3L22.4 8.8L24.4 7.9L26.4 11.4L28.5 11L30.5 9.5L32.5 9.9L34.6 14L36.6 10.8L38.6 12.5L40.7 10.4L42.7 11.5L44.7 15.8L46.8 14L48.8 12.1L50.8 13.7L52.9 14.3L54.9 14.8L56.9 13.1L59 13.3L61 16.3L63.1 16.5L65.1 13.6L67.1 16.3L69.2 17.1L71.2 16L73.2 15L75.3 15.4L77.3 11.3L79.3 13.1L81.4 11.7L83.4 10.4L85.4 14.6L87.5 12.9L89.5 10.8L91.5 10.8L93.6 10.8L95.6 11.8L97.6 7.5L99.7 12.1L101.7 10.2L103.7 10.2L105.8 8.3L107.8 6.9L109.8 9.3L111.9 11.4L113.9 10.3L115.9 11.3L118 11.1L120 11.1"/><circle class="spark__dot" cx="120" cy="11.1" r="2.5"/></svg></span></td>
+                <td class="ov-note ov-h-note"><a href="error-detail-null-read.html">error group ใหม่ 1</a> · <a href="#ov-routes-t">route ช้า 2</a> · <a href="#ov-routes-t">route error สูง 2</a></td>
+              </tr>
+              <tr class="is-clickable" data-node="core-worker">
+                <td class="col-tight ov-h-state"><span class="state state--warn">ต้องดู</span></td>
+                <td class="nowrap ov-h-svc"><a class="link-quiet" href="logs.html?service=school-core-api&amp;role=worker"><span class="svc svc-1">school-core-api<span class="svc__role">/worker</span></span></a></td>
+                <td class="num ov-h-err t-danger" data-label="error">2.1 %</td>
+                <td class="num ov-h-p95" data-label="p95">4.2 s</td>
+                <td class="num ov-h-vol">4<span class="unit">job/นาที</span></td>
+                <td class="nowrap t-ink2 rf-hide">BullMQ worker</td>
+                <td class="col-tight rf-hide"><span class="spark-inline" tabindex="0" data-tip="job attempt · 13:20–14:20|4 job::นาทีล่าสุด (14:19)|3–5::ต่ำสุด–สูงสุด"><svg width="120" height="24" viewBox="0 0 120 24" role="img" aria-label="job attempt ต่อนาที 60 นาที ต่ำสุด 3 สูงสุด 5 ล่าสุด 4"><path class="spark__area" d="M0 4.9L2 12L4.1 12L6.1 12L8.1 4.9L10.2 12L12.2 12L14.2 12L16.3 12L18.3 12L20.3 12L22.4 12L24.4 12L26.4 12L28.5 12L30.5 12L32.5 19.1L34.6 19.1L36.6 19.1L38.6 12L40.7 12L42.7 19.1L44.7 12L46.8 12L48.8 12L50.8 12L52.9 4.9L54.9 4.9L56.9 12L59 12L61 12L63.1 19.1L65.1 12L67.1 4.9L69.2 12L71.2 12L73.2 12L75.3 12L77.3 12L79.3 12L81.4 4.9L83.4 12L85.4 12L87.5 4.9L89.5 12L91.5 19.1L93.6 19.1L95.6 12L97.6 12L99.7 12L101.7 12L103.7 12L105.8 12L107.8 12L109.8 12L111.9 19.1L113.9 12L115.9 12L118 4.9L120 12L120 24L0 24Z"/><path class="spark__line" d="M0 4.9L2 12L4.1 12L6.1 12L8.1 4.9L10.2 12L12.2 12L14.2 12L16.3 12L18.3 12L20.3 12L22.4 12L24.4 12L26.4 12L28.5 12L30.5 12L32.5 19.1L34.6 19.1L36.6 19.1L38.6 12L40.7 12L42.7 19.1L44.7 12L46.8 12L48.8 12L50.8 12L52.9 4.9L54.9 4.9L56.9 12L59 12L61 12L63.1 19.1L65.1 12L67.1 4.9L69.2 12L71.2 12L73.2 12L75.3 12L77.3 12L79.3 12L81.4 4.9L83.4 12L85.4 12L87.5 4.9L89.5 12L91.5 19.1L93.6 19.1L95.6 12L97.6 12L99.7 12L101.7 12L103.7 12L105.8 12L107.8 12L109.8 12L111.9 19.1L113.9 12L115.9 12L118 4.9L120 12"/><circle class="spark__dot" cx="120" cy="12" r="2.5"/></svg></span></td>
+                <td class="ov-note ov-h-note"><a href="jobs.html#failures">report:generate retry เพราะ Google API rate limited</a></td>
+              </tr>
+              <tr class="is-clickable" data-node="core-persister">
+                <td class="col-tight ov-h-state"><span class="state state--ok">ปกติ</span></td>
+                <td class="nowrap ov-h-svc"><a class="link-quiet" href="logs.html?service=school-core-api&amp;role=persister"><span class="svc svc-1">school-core-api<span class="svc__role">/persister</span></span></a></td>
+                <td class="num ov-h-err t-muted" data-label="error">0 %</td>
+                <td class="num ov-h-p95" data-label="p95">38 ms</td>
+                <td class="num ov-h-vol">240<span class="unit">msg/นาที</span></td>
+                <td class="nowrap t-ink2 rf-hide">Kafka consumer</td>
+                <td class="col-tight rf-hide"><span class="spark-inline" tabindex="0" data-tip="message · 13:20–14:20|232 msg::นาทีล่าสุด (14:19)|231–249::ต่ำสุด–สูงสุด"><svg width="120" height="24" viewBox="0 0 120 24" role="img" aria-label="message ต่อนาที 60 นาที ต่ำสุด 231 สูงสุด 249 ล่าสุด 232"><path class="spark__area" d="M0 14.9L2 16.3L4.1 13.9L6.1 14.4L8.1 14.4L10.2 15.3L12.2 13.9L14.2 10.6L16.3 9.6L18.3 13.9L20.3 12L22.4 13.9L24.4 15.8L26.4 11.5L28.5 9.6L30.5 11L32.5 10.1L34.6 13.9L36.6 13.4L38.6 12L40.7 9.6L42.7 12.5L44.7 10.6L46.8 13L48.8 14.4L50.8 12L52.9 14.4L54.9 12L56.9 13L59 13L61 10.1L63.1 9.6L65.1 8.7L67.1 7.7L69.2 9.1L71.2 8.7L73.2 9.1L75.3 12.5L77.3 13.4L79.3 13L81.4 10.6L83.4 8.7L85.4 8.7L87.5 9.6L89.5 12L91.5 9.6L93.6 12.5L95.6 13.4L97.6 11L99.7 13.9L101.7 12L103.7 10.1L105.8 9.6L107.8 13.4L109.8 12.5L111.9 12.5L113.9 11L115.9 12.5L118 13.9L120 15.8L120 24L0 24Z"/><path class="spark__line" d="M0 14.9L2 16.3L4.1 13.9L6.1 14.4L8.1 14.4L10.2 15.3L12.2 13.9L14.2 10.6L16.3 9.6L18.3 13.9L20.3 12L22.4 13.9L24.4 15.8L26.4 11.5L28.5 9.6L30.5 11L32.5 10.1L34.6 13.9L36.6 13.4L38.6 12L40.7 9.6L42.7 12.5L44.7 10.6L46.8 13L48.8 14.4L50.8 12L52.9 14.4L54.9 12L56.9 13L59 13L61 10.1L63.1 9.6L65.1 8.7L67.1 7.7L69.2 9.1L71.2 8.7L73.2 9.1L75.3 12.5L77.3 13.4L79.3 13L81.4 10.6L83.4 8.7L85.4 8.7L87.5 9.6L89.5 12L91.5 9.6L93.6 12.5L95.6 13.4L97.6 11L99.7 13.9L101.7 12L103.7 10.1L105.8 9.6L107.8 13.4L109.8 12.5L111.9 12.5L113.9 11L115.9 12.5L118 13.9L120 15.8"/><circle class="spark__dot" cx="120" cy="15.8" r="2.5"/></svg></span></td>
+                <td class="ov-note ov-h-note"><span class="t-muted">–</span></td>
+              </tr>
+              <tr class="is-clickable" data-node="etl-api">
+                <td class="col-tight ov-h-state"><span class="state state--ok">ปกติ</span></td>
+                <td class="nowrap ov-h-svc"><a class="link-quiet" href="logs.html?service=school-etl-api&amp;role=api"><span class="svc svc-2">school-etl-api<span class="svc__role">/api</span></span></a></td>
+                <td class="num ov-h-err t-muted" data-label="error">0 %</td>
+                <td class="num ov-h-p95" data-label="p95">1.9 s</td>
+                <td class="num ov-h-vol">54<span class="unit">req/นาที</span></td>
+                <td class="nowrap t-ink2 rf-hide">HTTP API</td>
+                <td class="col-tight rf-hide"><span class="spark-inline" tabindex="0" data-tip="request · 13:20–14:20|52 req::นาทีล่าสุด (14:19)|50–60::ต่ำสุด–สูงสุด"><svg width="120" height="24" viewBox="0 0 120 24" role="img" aria-label="request ต่อนาที 60 นาที ต่ำสุด 50 สูงสุด 60 ล่าสุด 52"><path class="spark__area" d="M0 14.6L2 8.1L4.1 17.2L6.1 13.3L8.1 15.9L10.2 13.3L12.2 18.5L14.2 12L16.3 10.7L18.3 13.3L20.3 13.3L22.4 9.4L24.4 13.3L26.4 12L28.5 9.4L30.5 5.5L32.5 5.5L34.6 12L36.6 10.7L38.6 9.4L40.7 17.2L42.7 15.9L44.7 17.2L46.8 15.9L48.8 17.2L50.8 12L52.9 14.6L54.9 13.3L56.9 14.6L59 12L61 9.4L63.1 13.3L65.1 13.3L67.1 13.3L69.2 18.5L71.2 12L73.2 8.1L75.3 15.9L77.3 18.5L79.3 14.6L81.4 12L83.4 15.9L85.4 12L87.5 14.6L89.5 17.2L91.5 14.6L93.6 18.5L95.6 15.9L97.6 10.7L99.7 8.1L101.7 14.6L103.7 15.9L105.8 18.5L107.8 10.7L109.8 12L111.9 14.6L113.9 12L115.9 9.4L118 10.7L120 15.9L120 24L0 24Z"/><path class="spark__line" d="M0 14.6L2 8.1L4.1 17.2L6.1 13.3L8.1 15.9L10.2 13.3L12.2 18.5L14.2 12L16.3 10.7L18.3 13.3L20.3 13.3L22.4 9.4L24.4 13.3L26.4 12L28.5 9.4L30.5 5.5L32.5 5.5L34.6 12L36.6 10.7L38.6 9.4L40.7 17.2L42.7 15.9L44.7 17.2L46.8 15.9L48.8 17.2L50.8 12L52.9 14.6L54.9 13.3L56.9 14.6L59 12L61 9.4L63.1 13.3L65.1 13.3L67.1 13.3L69.2 18.5L71.2 12L73.2 8.1L75.3 15.9L77.3 18.5L79.3 14.6L81.4 12L83.4 15.9L85.4 12L87.5 14.6L89.5 17.2L91.5 14.6L93.6 18.5L95.6 15.9L97.6 10.7L99.7 8.1L101.7 14.6L103.7 15.9L105.8 18.5L107.8 10.7L109.8 12L111.9 14.6L113.9 12L115.9 9.4L118 10.7L120 15.9"/><circle class="spark__dot" cx="120" cy="15.9" r="2.5"/></svg></span></td>
+                <td class="ov-note ov-h-note"><span class="t-muted">– (parse Excel ใช้เวลานานเป็นปกติ)</span></td>
+              </tr>
+              <tr class="is-clickable" data-node="video-api">
+                <td class="col-tight ov-h-state"><span class="state state--ok">ปกติ</span></td>
+                <td class="nowrap ov-h-svc"><a class="link-quiet" href="logs.html?service=video-transcoder-api&amp;role=api"><span class="svc svc-3">video-transcoder-api<span class="svc__role">/api</span></span></a></td>
+                <td class="num ov-h-err" data-label="error">0.1 %</td>
+                <td class="num ov-h-p95" data-label="p95">95 ms</td>
+                <td class="num ov-h-vol">310<span class="unit">req/นาที</span></td>
+                <td class="nowrap t-ink2 rf-hide">HTTP API</td>
+                <td class="col-tight rf-hide"><span class="spark-inline" tabindex="0" data-tip="request · 13:20–14:20|323 req::นาทีล่าสุด (14:19)|293–328::ต่ำสุด–สูงสุด"><svg width="120" height="24" viewBox="0 0 120 24" role="img" aria-label="request ต่อนาที 60 นาที ต่ำสุด 293 สูงสุด 328 ล่าสุด 323"><path class="spark__area" d="M0 9.7L2 8.5L4.1 8.2L6.1 10.3L8.1 7L10.2 9.7L12.2 8.2L14.2 10L16.3 10.6L18.3 11.8L20.3 12.5L22.4 12.2L24.4 11.5L26.4 14.9L28.5 13.7L30.5 16.4L32.5 14.9L34.6 16.1L36.6 16.1L38.6 15.8L40.7 13.1L42.7 12.5L44.7 16.1L46.8 11.5L48.8 14.9L50.8 12.5L52.9 13.4L54.9 13.1L56.9 7.3L59 11.2L61 8.5L63.1 10.9L65.1 9.1L67.1 8.2L69.2 10.6L71.2 6.7L73.2 7.3L75.3 7.6L77.3 8.2L79.3 8.8L81.4 10.3L83.4 13.7L85.4 15.5L87.5 14.9L89.5 16.4L91.5 17.3L93.6 14.3L95.6 16.7L97.6 14L99.7 15.5L101.7 14.3L103.7 16.4L105.8 12.5L107.8 15.5L109.8 14.3L111.9 10.6L113.9 14.3L115.9 11.5L118 13.7L120 8.2L120 24L0 24Z"/><path class="spark__line" d="M0 9.7L2 8.5L4.1 8.2L6.1 10.3L8.1 7L10.2 9.7L12.2 8.2L14.2 10L16.3 10.6L18.3 11.8L20.3 12.5L22.4 12.2L24.4 11.5L26.4 14.9L28.5 13.7L30.5 16.4L32.5 14.9L34.6 16.1L36.6 16.1L38.6 15.8L40.7 13.1L42.7 12.5L44.7 16.1L46.8 11.5L48.8 14.9L50.8 12.5L52.9 13.4L54.9 13.1L56.9 7.3L59 11.2L61 8.5L63.1 10.9L65.1 9.1L67.1 8.2L69.2 10.6L71.2 6.7L73.2 7.3L75.3 7.6L77.3 8.2L79.3 8.8L81.4 10.3L83.4 13.7L85.4 15.5L87.5 14.9L89.5 16.4L91.5 17.3L93.6 14.3L95.6 16.7L97.6 14L99.7 15.5L101.7 14.3L103.7 16.4L105.8 12.5L107.8 15.5L109.8 14.3L111.9 10.6L113.9 14.3L115.9 11.5L118 13.7L120 8.2"/><circle class="spark__dot" cx="120" cy="8.2" r="2.5"/></svg></span></td>
+                <td class="ov-note ov-h-note"><span class="t-muted">–</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint mt-2">ต้องดู = error rate ≥ 1 %, มี error group ใหม่หลัง deploy หรือมี route ที่ p95 ≥ 1 s · ปริมาณของ worker นับเป็น job attempt, ของ consumer นับเป็น message · เส้น 60 นาทีวัดปริมาณ สเกลตามช่วงของแต่ละแถว</p>
+      </section>
+
+      <section class="section ov-map" aria-labelledby="ov-map-t">
+        <div class="section__head">
+          <h2 class="section__title" id="ov-map-t">แผนที่ระบบ</h2>
+          <span class="section__meta">ภาพ 3 มิติ · 1 ชั่วโมงล่าสุด</span>
+          <div class="section__actions"><button class="btn btn--sm btn--quiet" type="button" id="ov-map-size" aria-pressed="false" aria-controls="ov-map"><svg class="i i--sm" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg><span>ขยาย</span></button></div>
+        </div>
+        <div class="panel ov-map__panel" data-mo>
+          <div class="ov-map__box" id="ov-map"><p class="smap-placeholder">กำลังโหลดภาพ 3 มิติ…</p></div>
+        </div>
+        <p class="hint ov-map__cap">ใครเรียกใครใน prod และติดขัดที่ไหน · ตัวเลขในภาพมาจาก <a href="#ov-health-t">สุขภาพ service</a> และ <a href="#ov-dep-t">Dependency</a> เท่านั้น · เส้นไม่มีตัวเลข = รู้ว่าเรียก แต่ยังไม่มีอัตรา</p>
+      </section>
+      </div>
+
+      <div class="grid grid--main-side ov-body">
+        <div class="ov-main">
+          <section class="section" aria-labelledby="ov-trend-t">
+            <div class="section__head">
+              <h2 class="section__title" id="ov-trend-t">Traffic, error และ latency</h2>
+              <span class="section__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span> · step 1 นาที</span>
+              <div class="section__actions">
+                <label class="select">
+                  <span class="sr-only">Service ของกราฟและ route</span>
+                  <select class="select__control" name="service">
+                    <option selected>school-core-api/api</option>
+                    <option>school-core-api/worker</option>
+                    <option>school-core-api/persister</option>
+                    <option>school-etl-api/api</option>
+                    <option>video-transcoder-api/api</option>
+                  </select>
+                  <svg class="i select__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+                </label>
+              </div>
+            </div>
+            <div class="panel ov-charts">
+              <div class="panel__body">
+                <figure class="chart chart--bare">
+                  <div class="chart__head">
+                    <h3 class="chart__title" id="ov-c-req-t">Request ต่อนาที</h3>
+                    <span class="chart__sub">รวม 70,800 · เฉลี่ย 1,180 ต่อนาที</span>
+                  </div>
+                  <div class="chart__plot" data-time-axis>
+<svg viewBox="0 0 740 138" role="img" aria-labelledby="ov-c-req-t" style="--chart-min:666px">
+  <line class="c-axis" x1="44" x2="690" y1="112" y2="112"/>
+  <text class="c-tick c-tick--end" x="36" y="116">0</text>
+  <line class="c-grid" x1="44" x2="690" y1="78.7" y2="78.7"/>
+  <text class="c-tick c-tick--end" x="36" y="82.7">500</text>
+  <line class="c-grid" x1="44" x2="690" y1="45.3" y2="45.3"/>
+  <text class="c-tick c-tick--end" x="36" y="49.3">1K</text>
+  <line class="c-grid" x1="44" x2="690" y1="12" y2="12"/>
+  <text class="c-tick c-tick--end" x="36" y="16">1.5K</text>
+  <text class="c-tick c-tick--mid" x="49.4" y="130">13:20</text>
+  <text class="c-tick c-tick--mid" x="157.1" y="130">13:30</text>
+  <text class="c-tick c-tick--mid" x="264.7" y="130">13:40</text>
+  <text class="c-tick c-tick--mid" x="372.4" y="130">13:50</text>
+  <text class="c-tick c-tick--mid" x="480.1" y="130">14:00</text>
+  <text class="c-tick c-tick--mid" x="587.7" y="130">14:10</text>
+  <rect class="c-band" x="287.1" y="12" width="8.1" height="100"/>
+  <line class="c-event" x1="287.1" x2="287.1" y1="12" y2="112"/>
+  <text class="c-event-label" x="294.1" y="22">Redis "cache" down 45.2 s</text>
+  <path class="c-area svc-1" d="M49.4 35.2L60.2 30.7L70.9 33.3L81.7 33.4L92.5 30.8L103.2 31.5L114 32.3L124.8 30.3L135.5 30.3L146.3 31.3L157.1 30.7L167.8 31L178.6 30.3L189.4 33.1L200.1 32.8L210.9 31.6L221.7 31.9L232.4 35.2L243.2 32.7L254 34L264.7 32.3L275.5 33.2L286.3 36.7L297 35.2L307.8 33.7L318.6 34.9L329.3 35.4L340.1 35.9L350.9 34.5L361.6 34.6L372.4 37.1L383.2 37.2L393.9 34.9L404.7 37.1L415.5 37.7L426.2 36.8L437 36L447.8 36.3L458.5 33.1L469.3 34.5L480.1 33.3L490.8 32.3L501.6 35.7L512.4 34.3L523.1 32.7L533.9 32.6L544.7 32.7L555.4 33.5L566.2 30L577 33.7L587.7 32.1L598.5 32.1L609.3 30.7L620 29.5L630.8 31.4L641.6 33.1L652.3 32.2L663.1 33L673.9 32.9L684.6 32.9L684.6 112L49.4 112Z"/>
+  <path class="c-line svc-1" d="M49.4 35.2L60.2 30.7L70.9 33.3L81.7 33.4L92.5 30.8L103.2 31.5L114 32.3L124.8 30.3L135.5 30.3L146.3 31.3L157.1 30.7L167.8 31L178.6 30.3L189.4 33.1L200.1 32.8L210.9 31.6L221.7 31.9L232.4 35.2L243.2 32.7L254 34L264.7 32.3L275.5 33.2L286.3 36.7L297 35.2L307.8 33.7L318.6 34.9L329.3 35.4L340.1 35.9L350.9 34.5L361.6 34.6L372.4 37.1L383.2 37.2L393.9 34.9L404.7 37.1L415.5 37.7L426.2 36.8L437 36L447.8 36.3L458.5 33.1L469.3 34.5L480.1 33.3L490.8 32.3L501.6 35.7L512.4 34.3L523.1 32.7L533.9 32.6L544.7 32.7L555.4 33.5L566.2 30L577 33.7L587.7 32.1L598.5 32.1L609.3 30.7L620 29.5L630.8 31.4L641.6 33.1L652.3 32.2L663.1 33L673.9 32.9L684.6 32.9"/>
+  <circle class="c-dot svc-1" cx="684.6" cy="32.9" r="4"/>
+  <text class="c-label" x="693.6" y="36.9">1,187</text>
+  <g>
+    <rect class="c-hit" x="44" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:20|1,152::request|1::5xx (report 0 · import 1)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="54.8" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:21|1,219::request|3::5xx (report 1 · import 2)|296 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="65.5" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:22|1,181::request|2::5xx (report 2 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="76.3" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:23|1,179::request|1::5xx (report 1 · import 0)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="87.1" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:24|1,218::request|2::5xx (report 0 · import 2)|301 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="97.8" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:25|1,207::request|3::5xx (report 2 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="108.6" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:26|1,195::request|2::5xx (report 1 · import 1)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="119.4" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:27|1,225::request|2::5xx (report 1 · import 1)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="130.1" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:28|1,226::request|1::5xx (report 0 · import 1)|299 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="140.9" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:29|1,211::request|0::5xx (report 0 · import 0)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="151.7" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:30|1,220::request|2::5xx (report 2 · import 0)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="162.4" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:31|1,215::request|2::5xx (report 2 · import 0)|302 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="173.2" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:32|1,225::request|4::5xx (report 2 · import 2)|303 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="184" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:33|1,183::request|2::5xx (report 1 · import 1)|294 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="194.7" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:34|1,188::request|0::5xx (report 0 · import 0)|301 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="205.5" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:35|1,206::request|1::5xx (report 1 · import 0)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="216.3" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:36|1,201::request|2::5xx (report 1 · import 1)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="227" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:37|1,152::request|2::5xx (report 2 · import 0)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="237.8" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:38|1,190::request|2::5xx (report 1 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="248.6" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:39|1,170::request|4::5xx (report 2 · import 2)|315 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="259.3" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:40|1,195::request|1::5xx (report 0 · import 1)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="270.1" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:41|1,182::request|3::5xx (report 2 · import 1)|296 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="280.9" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:42|1,130::request|2::5xx (report 2 · import 0)|418 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="291.6" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:43|1,152::request|0::5xx (report 0 · import 0)|371 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="302.4" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:44|1,175::request|2::5xx (report 2 · import 0)|329 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="313.2" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:45|1,156::request|2::5xx (report 2 · import 0)|311 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="323.9" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:46|1,149::request|2::5xx (report 2 · import 0)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="334.7" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:47|1,142::request|3::5xx (report 2 · import 1)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="345.5" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:48|1,163::request|2::5xx (report 1 · import 1)|320 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="356.2" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:49|1,161::request|1::5xx (report 0 · import 1)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="367" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:50|1,124::request|0::5xx (report 0 · import 0)|302 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="377.8" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:51|1,122::request|3::5xx (report 2 · import 1)|308 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="388.5" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:52|1,157::request|2::5xx (report 0 · import 2)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="399.3" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:53|1,124::request|4::5xx (report 2 · import 2)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="410.1" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:54|1,115::request|2::5xx (report 2 · import 0)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="420.8" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:55|1,128::request|2::5xx (report 0 · import 2)|322 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="431.6" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:56|1,140::request|2::5xx (report 2 · import 0)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="442.4" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:57|1,135::request|3::5xx (report 1 · import 2)|305 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="453.1" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:58|1,184::request|3::5xx (report 1 · import 2)|300 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="463.9" y="12" width="10.8" height="100" data-tip="17 ต.ค. 13:59|1,163::request|1::5xx (report 0 · import 1)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="474.7" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:00|1,180::request|1::5xx (report 0 · import 1)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="485.4" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:01|1,195::request|3::5xx (report 1 · import 2)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="496.2" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:02|1,145::request|2::5xx (report 1 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="507" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:03|1,165::request|0::5xx (report 0 · import 0)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="517.7" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:04|1,190::request|2::5xx (report 2 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="528.5" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:05|1,191::request|2::5xx (report 2 · import 0)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="539.3" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:06|1,190::request|4::5xx (report 2 · import 2)|303 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="550" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:07|1,178::request|3::5xx (report 1 · import 2)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="560.8" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:08|1,230::request|0::5xx (report 0 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="571.6" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:09|1,175::request|3::5xx (report 2 · import 1)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="582.3" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:10|1,198::request|1::5xx (report 1 · import 0)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="593.1" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:11|1,198::request|2::5xx (report 1 · import 1)|320 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="603.9" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:12|1,220::request|2::5xx (report 2 · import 0)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="614.6" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:13|1,237::request|0::5xx (report 0 · import 0)|321 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="625.4" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:14|1,209::request|1::5xx (report 1 · import 0)|316 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="636.2" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:15|1,183::request|2::5xx (report 1 · import 1)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="646.9" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:16|1,197::request|4::5xx (report 3 · import 1)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="657.7" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:17|1,185::request|0::5xx (report 0 · import 0)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="668.5" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:18|1,187::request|2::5xx (report 0 · import 2)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="679.2" y="12" width="10.8" height="100" data-tip="17 ต.ค. 14:19|1,187::request|0::5xx (report 0 · import 0)|304 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+  </g>
+</svg>
+                  </div>
+                </figure>
+                <figure class="chart chart--bare">
+                  <div class="chart__head">
+                    <h3 class="chart__title" id="ov-c-err-t">5xx error ต่อนาที</h3>
+                    <span class="chart__sub">รวม 112 ครั้ง (0.16 %) · GET /classes/:id/report 65 · POST /question-bank/import 47 · ไม่มีช่วงที่พุ่ง</span>
+                  </div>
+                  <div class="chart__plot" data-time-axis>
+<svg viewBox="0 0 740 110" role="img" aria-labelledby="ov-c-err-t" style="--chart-min:666px">
+  <line class="c-axis" x1="44" x2="690" y1="84" y2="84"/>
+  <text class="c-tick c-tick--end" x="36" y="88">0</text>
+  <line class="c-grid" x1="44" x2="690" y1="60" y2="60"/>
+  <text class="c-tick c-tick--end" x="36" y="64">2</text>
+  <line class="c-grid" x1="44" x2="690" y1="36" y2="36"/>
+  <text class="c-tick c-tick--end" x="36" y="40">4</text>
+  <line class="c-grid" x1="44" x2="690" y1="12" y2="12"/>
+  <text class="c-tick c-tick--end" x="36" y="16">6</text>
+  <text class="c-tick c-tick--mid" x="49.4" y="102">13:20</text>
+  <text class="c-tick c-tick--mid" x="157.1" y="102">13:30</text>
+  <text class="c-tick c-tick--mid" x="264.7" y="102">13:40</text>
+  <text class="c-tick c-tick--mid" x="372.4" y="102">13:50</text>
+  <text class="c-tick c-tick--mid" x="480.1" y="102">14:00</text>
+  <text class="c-tick c-tick--mid" x="587.7" y="102">14:10</text>
+  <rect class="c-band" x="287.1" y="12" width="8.1" height="72"/>
+  <line class="c-event" x1="287.1" x2="287.1" y1="12" y2="84"/>
+  <path class="c-bar" d="M45.4 84V74Q45.4 72 47.4 72H51.4Q53.4 72 53.4 74V84Z"/>
+  <path class="c-bar" d="M56.2 84V50Q56.2 48 58.2 48H62.2Q64.2 48 64.2 50V84Z"/>
+  <path class="c-bar" d="M66.9 84V62Q66.9 60 68.9 60H72.9Q74.9 60 74.9 62V84Z"/>
+  <path class="c-bar" d="M77.7 84V74Q77.7 72 79.7 72H83.7Q85.7 72 85.7 74V84Z"/>
+  <path class="c-bar" d="M88.5 84V62Q88.5 60 90.5 60H94.5Q96.5 60 96.5 62V84Z"/>
+  <path class="c-bar" d="M99.2 84V50Q99.2 48 101.2 48H105.2Q107.2 48 107.2 50V84Z"/>
+  <path class="c-bar" d="M110 84V62Q110 60 112 60H116Q118 60 118 62V84Z"/>
+  <path class="c-bar" d="M120.8 84V62Q120.8 60 122.8 60H126.8Q128.8 60 128.8 62V84Z"/>
+  <path class="c-bar" d="M131.5 84V74Q131.5 72 133.5 72H137.5Q139.5 72 139.5 74V84Z"/>
+  <path class="c-bar" d="M153.1 84V62Q153.1 60 155.1 60H159.1Q161.1 60 161.1 62V84Z"/>
+  <path class="c-bar" d="M163.8 84V62Q163.8 60 165.8 60H169.8Q171.8 60 171.8 62V84Z"/>
+  <path class="c-bar" d="M174.6 84V38Q174.6 36 176.6 36H180.6Q182.6 36 182.6 38V84Z"/>
+  <path class="c-bar" d="M185.4 84V62Q185.4 60 187.4 60H191.4Q193.4 60 193.4 62V84Z"/>
+  <path class="c-bar" d="M206.9 84V74Q206.9 72 208.9 72H212.9Q214.9 72 214.9 74V84Z"/>
+  <path class="c-bar" d="M217.7 84V62Q217.7 60 219.7 60H223.7Q225.7 60 225.7 62V84Z"/>
+  <path class="c-bar" d="M228.4 84V62Q228.4 60 230.4 60H234.4Q236.4 60 236.4 62V84Z"/>
+  <path class="c-bar" d="M239.2 84V62Q239.2 60 241.2 60H245.2Q247.2 60 247.2 62V84Z"/>
+  <path class="c-bar" d="M250 84V38Q250 36 252 36H256Q258 36 258 38V84Z"/>
+  <path class="c-bar" d="M260.7 84V74Q260.7 72 262.7 72H266.7Q268.7 72 268.7 74V84Z"/>
+  <path class="c-bar" d="M271.5 84V50Q271.5 48 273.5 48H277.5Q279.5 48 279.5 50V84Z"/>
+  <path class="c-bar" d="M282.3 84V62Q282.3 60 284.3 60H288.3Q290.3 60 290.3 62V84Z"/>
+  <path class="c-bar" d="M303.8 84V62Q303.8 60 305.8 60H309.8Q311.8 60 311.8 62V84Z"/>
+  <path class="c-bar" d="M314.6 84V62Q314.6 60 316.6 60H320.6Q322.6 60 322.6 62V84Z"/>
+  <path class="c-bar" d="M325.3 84V62Q325.3 60 327.3 60H331.3Q333.3 60 333.3 62V84Z"/>
+  <path class="c-bar" d="M336.1 84V50Q336.1 48 338.1 48H342.1Q344.1 48 344.1 50V84Z"/>
+  <path class="c-bar" d="M346.9 84V62Q346.9 60 348.9 60H352.9Q354.9 60 354.9 62V84Z"/>
+  <path class="c-bar" d="M357.6 84V74Q357.6 72 359.6 72H363.6Q365.6 72 365.6 74V84Z"/>
+  <path class="c-bar" d="M379.2 84V50Q379.2 48 381.2 48H385.2Q387.2 48 387.2 50V84Z"/>
+  <path class="c-bar" d="M389.9 84V62Q389.9 60 391.9 60H395.9Q397.9 60 397.9 62V84Z"/>
+  <path class="c-bar" d="M400.7 84V38Q400.7 36 402.7 36H406.7Q408.7 36 408.7 38V84Z"/>
+  <path class="c-bar" d="M411.5 84V62Q411.5 60 413.5 60H417.5Q419.5 60 419.5 62V84Z"/>
+  <path class="c-bar" d="M422.2 84V62Q422.2 60 424.2 60H428.2Q430.2 60 430.2 62V84Z"/>
+  <path class="c-bar" d="M433 84V62Q433 60 435 60H439Q441 60 441 62V84Z"/>
+  <path class="c-bar" d="M443.8 84V50Q443.8 48 445.8 48H449.8Q451.8 48 451.8 50V84Z"/>
+  <path class="c-bar" d="M454.5 84V50Q454.5 48 456.5 48H460.5Q462.5 48 462.5 50V84Z"/>
+  <path class="c-bar" d="M465.3 84V74Q465.3 72 467.3 72H471.3Q473.3 72 473.3 74V84Z"/>
+  <path class="c-bar" d="M476.1 84V74Q476.1 72 478.1 72H482.1Q484.1 72 484.1 74V84Z"/>
+  <path class="c-bar" d="M486.8 84V50Q486.8 48 488.8 48H492.8Q494.8 48 494.8 50V84Z"/>
+  <path class="c-bar" d="M497.6 84V62Q497.6 60 499.6 60H503.6Q505.6 60 505.6 62V84Z"/>
+  <path class="c-bar" d="M519.1 84V62Q519.1 60 521.1 60H525.1Q527.1 60 527.1 62V84Z"/>
+  <path class="c-bar" d="M529.9 84V62Q529.9 60 531.9 60H535.9Q537.9 60 537.9 62V84Z"/>
+  <path class="c-bar" d="M540.7 84V38Q540.7 36 542.7 36H546.7Q548.7 36 548.7 38V84Z"/>
+  <path class="c-bar" d="M551.4 84V50Q551.4 48 553.4 48H557.4Q559.4 48 559.4 50V84Z"/>
+  <path class="c-bar" d="M573 84V50Q573 48 575 48H579Q581 48 581 50V84Z"/>
+  <path class="c-bar" d="M583.7 84V74Q583.7 72 585.7 72H589.7Q591.7 72 591.7 74V84Z"/>
+  <path class="c-bar" d="M594.5 84V62Q594.5 60 596.5 60H600.5Q602.5 60 602.5 62V84Z"/>
+  <path class="c-bar" d="M605.3 84V62Q605.3 60 607.3 60H611.3Q613.3 60 613.3 62V84Z"/>
+  <path class="c-bar" d="M626.8 84V74Q626.8 72 628.8 72H632.8Q634.8 72 634.8 74V84Z"/>
+  <path class="c-bar" d="M637.6 84V62Q637.6 60 639.6 60H643.6Q645.6 60 645.6 62V84Z"/>
+  <path class="c-bar" d="M648.3 84V38Q648.3 36 650.3 36H654.3Q656.3 36 656.3 38V84Z"/>
+  <path class="c-bar" d="M669.9 84V62Q669.9 60 671.9 60H675.9Q677.9 60 677.9 62V84Z"/>
+  <g>
+    <rect class="c-hit" x="44" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:20|1,152::request|1::5xx (report 0 · import 1)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="54.8" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:21|1,219::request|3::5xx (report 1 · import 2)|296 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="65.5" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:22|1,181::request|2::5xx (report 2 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="76.3" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:23|1,179::request|1::5xx (report 1 · import 0)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="87.1" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:24|1,218::request|2::5xx (report 0 · import 2)|301 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="97.8" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:25|1,207::request|3::5xx (report 2 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="108.6" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:26|1,195::request|2::5xx (report 1 · import 1)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="119.4" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:27|1,225::request|2::5xx (report 1 · import 1)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="130.1" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:28|1,226::request|1::5xx (report 0 · import 1)|299 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="140.9" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:29|1,211::request|0::5xx (report 0 · import 0)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="151.7" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:30|1,220::request|2::5xx (report 2 · import 0)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="162.4" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:31|1,215::request|2::5xx (report 2 · import 0)|302 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="173.2" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:32|1,225::request|4::5xx (report 2 · import 2)|303 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="184" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:33|1,183::request|2::5xx (report 1 · import 1)|294 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="194.7" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:34|1,188::request|0::5xx (report 0 · import 0)|301 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="205.5" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:35|1,206::request|1::5xx (report 1 · import 0)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="216.3" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:36|1,201::request|2::5xx (report 1 · import 1)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="227" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:37|1,152::request|2::5xx (report 2 · import 0)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="237.8" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:38|1,190::request|2::5xx (report 1 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="248.6" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:39|1,170::request|4::5xx (report 2 · import 2)|315 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="259.3" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:40|1,195::request|1::5xx (report 0 · import 1)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="270.1" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:41|1,182::request|3::5xx (report 2 · import 1)|296 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="280.9" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:42|1,130::request|2::5xx (report 2 · import 0)|418 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="291.6" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:43|1,152::request|0::5xx (report 0 · import 0)|371 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="302.4" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:44|1,175::request|2::5xx (report 2 · import 0)|329 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="313.2" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:45|1,156::request|2::5xx (report 2 · import 0)|311 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="323.9" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:46|1,149::request|2::5xx (report 2 · import 0)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="334.7" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:47|1,142::request|3::5xx (report 2 · import 1)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="345.5" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:48|1,163::request|2::5xx (report 1 · import 1)|320 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="356.2" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:49|1,161::request|1::5xx (report 0 · import 1)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="367" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:50|1,124::request|0::5xx (report 0 · import 0)|302 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="377.8" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:51|1,122::request|3::5xx (report 2 · import 1)|308 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="388.5" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:52|1,157::request|2::5xx (report 0 · import 2)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="399.3" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:53|1,124::request|4::5xx (report 2 · import 2)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="410.1" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:54|1,115::request|2::5xx (report 2 · import 0)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="420.8" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:55|1,128::request|2::5xx (report 0 · import 2)|322 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="431.6" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:56|1,140::request|2::5xx (report 2 · import 0)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="442.4" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:57|1,135::request|3::5xx (report 1 · import 2)|305 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="453.1" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:58|1,184::request|3::5xx (report 1 · import 2)|300 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="463.9" y="12" width="10.8" height="72" data-tip="17 ต.ค. 13:59|1,163::request|1::5xx (report 0 · import 1)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="474.7" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:00|1,180::request|1::5xx (report 0 · import 1)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="485.4" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:01|1,195::request|3::5xx (report 1 · import 2)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="496.2" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:02|1,145::request|2::5xx (report 1 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="507" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:03|1,165::request|0::5xx (report 0 · import 0)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="517.7" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:04|1,190::request|2::5xx (report 2 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="528.5" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:05|1,191::request|2::5xx (report 2 · import 0)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="539.3" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:06|1,190::request|4::5xx (report 2 · import 2)|303 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="550" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:07|1,178::request|3::5xx (report 1 · import 2)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="560.8" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:08|1,230::request|0::5xx (report 0 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="571.6" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:09|1,175::request|3::5xx (report 2 · import 1)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="582.3" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:10|1,198::request|1::5xx (report 1 · import 0)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="593.1" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:11|1,198::request|2::5xx (report 1 · import 1)|320 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="603.9" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:12|1,220::request|2::5xx (report 2 · import 0)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="614.6" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:13|1,237::request|0::5xx (report 0 · import 0)|321 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="625.4" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:14|1,209::request|1::5xx (report 1 · import 0)|316 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="636.2" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:15|1,183::request|2::5xx (report 1 · import 1)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="646.9" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:16|1,197::request|4::5xx (report 3 · import 1)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="657.7" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:17|1,185::request|0::5xx (report 0 · import 0)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="668.5" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:18|1,187::request|2::5xx (report 0 · import 2)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="679.2" y="12" width="10.8" height="72" data-tip="17 ต.ค. 14:19|1,187::request|0::5xx (report 0 · import 0)|304 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+  </g>
+</svg>
+                  </div>
+                </figure>
+                <figure class="chart chart--bare">
+                  <div class="chart__head">
+                    <h3 class="chart__title" id="ov-c-p95-t">p95 ต่อนาที (ms)</h3>
+                    <span class="chart__sub">ทั้งชั่วโมง 312 ms</span>
+                  </div>
+                  <div class="chart__plot" data-time-axis>
+<svg viewBox="0 0 740 118" role="img" aria-labelledby="ov-c-p95-t" style="--chart-min:666px">
+  <line class="c-axis" x1="44" x2="690" y1="92" y2="92"/>
+  <text class="c-tick c-tick--end" x="36" y="96">0</text>
+  <line class="c-grid" x1="44" x2="690" y1="52" y2="52"/>
+  <text class="c-tick c-tick--end" x="36" y="56">250</text>
+  <line class="c-grid" x1="44" x2="690" y1="12" y2="12"/>
+  <text class="c-tick c-tick--end" x="36" y="16">500</text>
+  <text class="c-tick c-tick--mid" x="49.4" y="110">13:20</text>
+  <text class="c-tick c-tick--mid" x="157.1" y="110">13:30</text>
+  <text class="c-tick c-tick--mid" x="264.7" y="110">13:40</text>
+  <text class="c-tick c-tick--mid" x="372.4" y="110">13:50</text>
+  <text class="c-tick c-tick--mid" x="480.1" y="110">14:00</text>
+  <text class="c-tick c-tick--mid" x="587.7" y="110">14:10</text>
+  <rect class="c-band" x="287.1" y="12" width="8.1" height="80"/>
+  <line class="c-event" x1="287.1" x2="287.1" y1="12" y2="92"/>
+  <path class="c-line svc-1" d="M49.4 42.6L60.2 44.6L70.9 42.1L81.7 42.9L92.5 43.8L103.2 42.4L114 42.9L124.8 44.3L135.5 44.2L146.3 44.5L157.1 41.9L167.8 43.7L178.6 43.5L189.4 45L200.1 43.8L210.9 42.4L221.7 44.5L232.4 44.5L243.2 42.4L254 41.6L264.7 42.6L275.5 44.6L286.3 25.1L297 32.6L307.8 39.4L318.6 42.2L329.3 44.3L340.1 42.1L350.9 40.8L361.6 41.1L372.4 43.7L383.2 42.7L393.9 42.4L404.7 41L415.5 41.1L426.2 40.5L437 41.1L447.8 43.2L458.5 44L469.3 41.9L480.1 41.1L490.8 42.4L501.6 42.4L512.4 44.3L523.1 42.1L533.9 42.6L544.7 43.5L555.4 41.9L566.2 42.1L577 41L587.7 41L598.5 40.8L609.3 41.9L620 40.6L630.8 41.4L641.6 42.9L652.3 44.3L663.1 42.4L673.9 44.3L684.6 43.4"/>
+  <text class="c-label c-label--muted" x="294.3" y="28.1">418</text>
+  <circle class="c-dot svc-1" cx="684.6" cy="43.4" r="4"/>
+  <text class="c-label" x="693.6" y="47.4">304</text>
+  <g>
+    <rect class="c-hit" x="44" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:20|1,152::request|1::5xx (report 0 · import 1)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="54.8" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:21|1,219::request|3::5xx (report 1 · import 2)|296 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="65.5" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:22|1,181::request|2::5xx (report 2 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="76.3" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:23|1,179::request|1::5xx (report 1 · import 0)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="87.1" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:24|1,218::request|2::5xx (report 0 · import 2)|301 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="97.8" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:25|1,207::request|3::5xx (report 2 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="108.6" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:26|1,195::request|2::5xx (report 1 · import 1)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="119.4" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:27|1,225::request|2::5xx (report 1 · import 1)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="130.1" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:28|1,226::request|1::5xx (report 0 · import 1)|299 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="140.9" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:29|1,211::request|0::5xx (report 0 · import 0)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="151.7" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:30|1,220::request|2::5xx (report 2 · import 0)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="162.4" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:31|1,215::request|2::5xx (report 2 · import 0)|302 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="173.2" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:32|1,225::request|4::5xx (report 2 · import 2)|303 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="184" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:33|1,183::request|2::5xx (report 1 · import 1)|294 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="194.7" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:34|1,188::request|0::5xx (report 0 · import 0)|301 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="205.5" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:35|1,206::request|1::5xx (report 1 · import 0)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="216.3" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:36|1,201::request|2::5xx (report 1 · import 1)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="227" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:37|1,152::request|2::5xx (report 2 · import 0)|297 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="237.8" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:38|1,190::request|2::5xx (report 1 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="248.6" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:39|1,170::request|4::5xx (report 2 · import 2)|315 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="259.3" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:40|1,195::request|1::5xx (report 0 · import 1)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="270.1" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:41|1,182::request|3::5xx (report 2 · import 1)|296 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="280.9" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:42|1,130::request|2::5xx (report 2 · import 0)|418 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="291.6" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:43|1,152::request|0::5xx (report 0 · import 0)|371 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="302.4" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:44|1,175::request|2::5xx (report 2 · import 0)|329 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="313.2" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:45|1,156::request|2::5xx (report 2 · import 0)|311 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="323.9" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:46|1,149::request|2::5xx (report 2 · import 0)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="334.7" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:47|1,142::request|3::5xx (report 2 · import 1)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="345.5" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:48|1,163::request|2::5xx (report 1 · import 1)|320 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="356.2" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:49|1,161::request|1::5xx (report 0 · import 1)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="367" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:50|1,124::request|0::5xx (report 0 · import 0)|302 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="377.8" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:51|1,122::request|3::5xx (report 2 · import 1)|308 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="388.5" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:52|1,157::request|2::5xx (report 0 · import 2)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="399.3" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:53|1,124::request|4::5xx (report 2 · import 2)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="410.1" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:54|1,115::request|2::5xx (report 2 · import 0)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="420.8" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:55|1,128::request|2::5xx (report 0 · import 2)|322 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="431.6" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:56|1,140::request|2::5xx (report 2 · import 0)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="442.4" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:57|1,135::request|3::5xx (report 1 · import 2)|305 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="453.1" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:58|1,184::request|3::5xx (report 1 · import 2)|300 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="463.9" y="12" width="10.8" height="80" data-tip="17 ต.ค. 13:59|1,163::request|1::5xx (report 0 · import 1)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="474.7" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:00|1,180::request|1::5xx (report 0 · import 1)|318 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="485.4" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:01|1,195::request|3::5xx (report 1 · import 2)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="496.2" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:02|1,145::request|2::5xx (report 1 · import 1)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="507" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:03|1,165::request|0::5xx (report 0 · import 0)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="517.7" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:04|1,190::request|2::5xx (report 2 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="528.5" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:05|1,191::request|2::5xx (report 2 · import 0)|309 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="539.3" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:06|1,190::request|4::5xx (report 2 · import 2)|303 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="550" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:07|1,178::request|3::5xx (report 1 · import 2)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="560.8" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:08|1,230::request|0::5xx (report 0 · import 0)|312 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="571.6" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:09|1,175::request|3::5xx (report 2 · import 1)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="582.3" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:10|1,198::request|1::5xx (report 1 · import 0)|319 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="593.1" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:11|1,198::request|2::5xx (report 1 · import 1)|320 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="603.9" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:12|1,220::request|2::5xx (report 2 · import 0)|313 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="614.6" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:13|1,237::request|0::5xx (report 0 · import 0)|321 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="625.4" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:14|1,209::request|1::5xx (report 1 · import 0)|316 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="636.2" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:15|1,183::request|2::5xx (report 1 · import 1)|307 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="646.9" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:16|1,197::request|4::5xx (report 3 · import 1)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="657.7" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:17|1,185::request|0::5xx (report 0 · import 0)|310 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="668.5" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:18|1,187::request|2::5xx (report 0 · import 2)|298 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+    <rect class="c-hit" x="679.2" y="12" width="10.8" height="80" data-tip="17 ต.ค. 14:19|1,187::request|0::5xx (report 0 · import 0)|304 ms::p95" data-tip-keys="svc-1,bar-neutral,svc-1"/>
+  </g>
+</svg>
+                  </div>
+                </figure>
+              </div>
+              <div class="panel__foot chart__foot">
+                <span>เส้นตั้ง + แถบแดงจาง = Redis "cache" down 13:42:35–13:43:20 · ชี้หรือแตะกราฟเพื่อดูค่าทั้งสามของนาทีนั้น</span>
+                <details class="chart__table">
+                  <summary class="summary-line">ดูเป็นตาราง</summary>
+                  <div class="table-wrap"><table class="table table--dense"><caption class="sr-only">ค่าต่อนาทีของ school-core-api/api, 13:20–14:20 ICT</caption><thead><tr><th scope="col">นาที</th><th scope="col" class="num">Request</th><th scope="col" class="num">5xx</th><th scope="col" class="num">p95</th></tr></thead><tbody><tr><td class="ts">14:19</td><td class="num">1,187</td><td class="num">0</td><td class="num">304 ms</td></tr><tr><td class="ts">14:18</td><td class="num">1,187</td><td class="num">2</td><td class="num">298 ms</td></tr><tr><td class="ts">14:17</td><td class="num">1,185</td><td class="num">0</td><td class="num">310 ms</td></tr><tr><td class="ts">14:16</td><td class="num">1,197</td><td class="num">4</td><td class="num">298 ms</td></tr><tr><td class="ts">14:15</td><td class="num">1,183</td><td class="num">2</td><td class="num">307 ms</td></tr><tr><td class="ts">14:14</td><td class="num">1,209</td><td class="num">1</td><td class="num">316 ms</td></tr><tr><td class="ts">14:13</td><td class="num">1,237</td><td class="num">0</td><td class="num">321 ms</td></tr><tr><td class="ts">14:12</td><td class="num">1,220</td><td class="num">2</td><td class="num">313 ms</td></tr><tr><td class="ts">14:11</td><td class="num">1,198</td><td class="num">2</td><td class="num">320 ms</td></tr><tr><td class="ts">14:10</td><td class="num">1,198</td><td class="num">1</td><td class="num">319 ms</td></tr><tr><td class="ts">14:09</td><td class="num">1,175</td><td class="num">3</td><td class="num">319 ms</td></tr><tr><td class="ts">14:08</td><td class="num">1,230</td><td class="num">0</td><td class="num">312 ms</td></tr><tr><td class="ts">14:07</td><td class="num">1,178</td><td class="num">3</td><td class="num">313 ms</td></tr><tr><td class="ts">14:06</td><td class="num">1,190</td><td class="num">4</td><td class="num">303 ms</td></tr><tr><td class="ts">14:05</td><td class="num">1,191</td><td class="num">2</td><td class="num">309 ms</td></tr><tr><td class="ts">14:04</td><td class="num">1,190</td><td class="num">2</td><td class="num">312 ms</td></tr><tr><td class="ts">14:03</td><td class="num">1,165</td><td class="num">0</td><td class="num">298 ms</td></tr><tr><td class="ts">14:02</td><td class="num">1,145</td><td class="num">2</td><td class="num">310 ms</td></tr><tr><td class="ts">14:01</td><td class="num">1,195</td><td class="num">3</td><td class="num">310 ms</td></tr><tr><td class="ts">14:00</td><td class="num">1,180</td><td class="num">1</td><td class="num">318 ms</td></tr><tr><td class="ts">13:59</td><td class="num">1,163</td><td class="num">1</td><td class="num">313 ms</td></tr><tr><td class="ts">13:58</td><td class="num">1,184</td><td class="num">3</td><td class="num">300 ms</td></tr><tr><td class="ts">13:57</td><td class="num">1,135</td><td class="num">3</td><td class="num">305 ms</td></tr><tr><td class="ts">13:56</td><td class="num">1,140</td><td class="num">2</td><td class="num">318 ms</td></tr><tr><td class="ts">13:55</td><td class="num">1,128</td><td class="num">2</td><td class="num">322 ms</td></tr><tr><td class="ts">13:54</td><td class="num">1,115</td><td class="num">2</td><td class="num">318 ms</td></tr><tr><td class="ts">13:53</td><td class="num">1,124</td><td class="num">4</td><td class="num">319 ms</td></tr><tr><td class="ts">13:52</td><td class="num">1,157</td><td class="num">2</td><td class="num">310 ms</td></tr><tr><td class="ts">13:51</td><td class="num">1,122</td><td class="num">3</td><td class="num">308 ms</td></tr><tr><td class="ts">13:50</td><td class="num">1,124</td><td class="num">0</td><td class="num">302 ms</td></tr><tr><td class="ts">13:49</td><td class="num">1,161</td><td class="num">1</td><td class="num">318 ms</td></tr><tr><td class="ts">13:48</td><td class="num">1,163</td><td class="num">2</td><td class="num">320 ms</td></tr><tr><td class="ts">13:47</td><td class="num">1,142</td><td class="num">3</td><td class="num">312 ms</td></tr><tr><td class="ts">13:46</td><td class="num">1,149</td><td class="num">2</td><td class="num">298 ms</td></tr><tr><td class="ts">13:45</td><td class="num">1,156</td><td class="num">2</td><td class="num">311 ms</td></tr><tr><td class="ts">13:44</td><td class="num">1,175</td><td class="num">2</td><td class="num">329 ms</td></tr><tr><td class="ts">13:43</td><td class="num">1,152</td><td class="num">0</td><td class="num">371 ms</td></tr><tr><td class="ts">13:42</td><td class="num">1,130</td><td class="num">2</td><td class="num">418 ms</td></tr><tr><td class="ts">13:41</td><td class="num">1,182</td><td class="num">3</td><td class="num">296 ms</td></tr><tr><td class="ts">13:40</td><td class="num">1,195</td><td class="num">1</td><td class="num">309 ms</td></tr><tr><td class="ts">13:39</td><td class="num">1,170</td><td class="num">4</td><td class="num">315 ms</td></tr><tr><td class="ts">13:38</td><td class="num">1,190</td><td class="num">2</td><td class="num">310 ms</td></tr><tr><td class="ts">13:37</td><td class="num">1,152</td><td class="num">2</td><td class="num">297 ms</td></tr><tr><td class="ts">13:36</td><td class="num">1,201</td><td class="num">2</td><td class="num">297 ms</td></tr><tr><td class="ts">13:35</td><td class="num">1,206</td><td class="num">1</td><td class="num">310 ms</td></tr><tr><td class="ts">13:34</td><td class="num">1,188</td><td class="num">0</td><td class="num">301 ms</td></tr><tr><td class="ts">13:33</td><td class="num">1,183</td><td class="num">2</td><td class="num">294 ms</td></tr><tr><td class="ts">13:32</td><td class="num">1,225</td><td class="num">4</td><td class="num">303 ms</td></tr><tr><td class="ts">13:31</td><td class="num">1,215</td><td class="num">2</td><td class="num">302 ms</td></tr><tr><td class="ts">13:30</td><td class="num">1,220</td><td class="num">2</td><td class="num">313 ms</td></tr><tr><td class="ts">13:29</td><td class="num">1,211</td><td class="num">0</td><td class="num">297 ms</td></tr><tr><td class="ts">13:28</td><td class="num">1,226</td><td class="num">1</td><td class="num">299 ms</td></tr><tr><td class="ts">13:27</td><td class="num">1,225</td><td class="num">2</td><td class="num">298 ms</td></tr><tr><td class="ts">13:26</td><td class="num">1,195</td><td class="num">2</td><td class="num">307 ms</td></tr><tr><td class="ts">13:25</td><td class="num">1,207</td><td class="num">3</td><td class="num">310 ms</td></tr><tr><td class="ts">13:24</td><td class="num">1,218</td><td class="num">2</td><td class="num">301 ms</td></tr><tr><td class="ts">13:23</td><td class="num">1,179</td><td class="num">1</td><td class="num">307 ms</td></tr><tr><td class="ts">13:22</td><td class="num">1,181</td><td class="num">2</td><td class="num">312 ms</td></tr><tr><td class="ts">13:21</td><td class="num">1,219</td><td class="num">3</td><td class="num">296 ms</td></tr><tr><td class="ts">13:20</td><td class="num">1,152</td><td class="num">1</td><td class="num">309 ms</td></tr></tbody></table></div>
+                </details>
+              </div>
+            </div>
+          </section>
+          <section class="section" aria-labelledby="ov-routes-t">
+            <div class="section__head">
+              <h2 class="section__title" id="ov-routes-t">Route</h2>
+              <span class="section__meta"><span class="svc svc-1">school-core-api<span class="svc__role">/api</span></span> · 8 route ที่มี request มากสุด · เรียงตาม request · Δ เทียบ 07:00–08:00 (31.3.2)</span>
+              <div class="section__actions"><a class="btn btn--sm btn--quiet" href="traces.html">ดู trace ทั้งหมด</a></div>
+            </div>
+            <div class="table-wrap">
+              <table class="table table--reflow ov-routes">
+                <caption class="sr-only">Route ของ school-core-api/api ช่วง 13:20–14:20 ICT เทียบกับ 07:00–08:00 ก่อน deploy 31.4.0</caption>
+                <thead>
+                  <tr>
+                    <th scope="col" class="col-tight"><span class="sr-only">ขยาย</span></th>
+                    <th scope="col">Route</th>
+                    <th scope="col" class="num" aria-sort="descending">Request</th>
+                    <th scope="col" class="num">Error rate</th>
+                    <th scope="col" class="num" title="เทียบ 07:00–08:00 บน 31.3.2">Δ 5xx</th>
+                    <th scope="col" class="num">4xx</th>
+                    <th scope="col" class="num">p50</th>
+                    <th scope="col" class="num">p95</th>
+                    <th scope="col" class="num" title="เทียบ 07:00–08:00 บน 31.3.2">Δ p95</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="ov-r-tog"></td>
+                    <td class="mono nowrap ov-r-route"><a class="link-quiet" href="traces.html?route=GET%20%2Fquestion-bank%2Fmy"><span class="method">GET</span> /question-bank/my</a></td>
+                    <td class="num ov-r-req" data-label="request">14,210</td>
+                    <td class="num ov-r-err t-muted" data-label="error">0 %</td>
+                    <td class="num ov-r-d5 t-muted" data-label="Δ 5xx">–</td>
+                    <td class="num t-muted rf-hide">–</td>
+                    <td class="num t-ink2 rf-hide">48 ms</td>
+                    <td class="num ov-r-p95" data-label="p95">140 ms</td>
+                    <td class="num ov-r-d95 t-muted" data-label="Δ p95">+2 ms</td>
+                  </tr>
+                  <tr>
+                    <td class="ov-r-tog"></td>
+                    <td class="mono nowrap ov-r-route"><a class="link-quiet" href="traces.html?route=GET%20%2Fme"><span class="method">GET</span> /me</a></td>
+                    <td class="num ov-r-req" data-label="request">12,800</td>
+                    <td class="num ov-r-err t-muted" data-label="error">0 %</td>
+                    <td class="num ov-r-d5 t-muted" data-label="Δ 5xx">–</td>
+                    <td class="num t-muted rf-hide">–</td>
+                    <td class="num t-ink2 rf-hide">8 ms</td>
+                    <td class="num ov-r-p95" data-label="p95">22 ms</td>
+                    <td class="num ov-r-d95 t-muted" data-label="Δ p95">+1 ms</td>
+                  </tr>
+                  <tr class="is-slow">
+                    <td class="ov-r-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="ov-rd-students" aria-label="ขยาย GET /classes/:id/students"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                    <td class="mono nowrap ov-r-route"><a class="link-quiet" href="traces.html?route=GET%20%2Fclasses%2F%3Aid%2Fstudents"><span class="method">GET</span> /classes/:id/students</a></td>
+                    <td class="num ov-r-req" data-label="request">9,870</td>
+                    <td class="num ov-r-err t-muted" data-label="error">0 %</td>
+                    <td class="num ov-r-d5 t-muted" data-label="Δ 5xx">–</td>
+                    <td class="num t-muted rf-hide">–</td>
+                    <td class="num t-ink2 rf-hide">1.9 s</td>
+                    <td class="num ov-r-p95" data-label="p95"><span class="t-warn">2.4 s · ช้า</span></td>
+                    <td class="num ov-r-d95 t-muted" data-label="Δ p95">+0.1 s</td>
+                  </tr>
+                  <tr class="row-detail" id="ov-rd-students" hidden><td></td><td colspan="8"><div class="row-detail__body"><div class="row ov-rd"><span class="t-warn">ช้า</span><span>trace ช้าสุด</span><span class="idchip"><a href="trace-detail.html?traceId=9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a" title="9a1c4e0b7d2f4c8e8b3a6f5d2e1c0b9a">9a1c4e0b7d2f4c8e…</a></span><span class="ts">14:11:52.090</span><span>2,712 ms · span ที่ช้า <span class="mono">oracle SELECT STUDENT</span> 2,430 ms</span><span class="hint">error group ของ route นี้: <a href="errors.html#g7">Query cancelled (ORA-01013)</a> 12 ครั้งใน 24 ชั่วโมง, ไม่มีใน 1 ชั่วโมงล่าสุด</span><a class="btn btn--sm" href="traces.html?route=GET%20%2Fclasses%2F%3Aid%2Fstudents&amp;minMs=1000">ดู trace ที่ช้า</a></div></div></td></tr>
+                  <tr>
+                    <td class="ov-r-tog"></td>
+                    <td class="mono nowrap ov-r-route"><a class="link-quiet" href="traces.html?route=GET%20%2Fexams%2F%3Aid"><span class="method">GET</span> /exams/:id</a></td>
+                    <td class="num ov-r-req" data-label="request">8,940</td>
+                    <td class="num ov-r-err t-muted" data-label="error">0 %</td>
+                    <td class="num ov-r-d5 t-muted" data-label="Δ 5xx">–</td>
+                    <td class="num rf-hide">3.1 %</td>
+                    <td class="num t-ink2 rf-hide">31 ms</td>
+                    <td class="num ov-r-p95" data-label="p95">96 ms</td>
+                    <td class="num ov-r-d95 t-muted" data-label="Δ p95">+1 ms</td>
+                  </tr>
+                  <tr>
+                    <td class="ov-r-tog"></td>
+                    <td class="mono nowrap ov-r-route"><a class="link-quiet" href="traces.html?route=POST%20%2Fexams%2F%3Aid%2Fsubmit"><span class="method">POST</span> /exams/:id/submit</a></td>
+                    <td class="num ov-r-req" data-label="request">6,120</td>
+                    <td class="num ov-r-err t-muted" data-label="error">0 %</td>
+                    <td class="num ov-r-d5 t-muted" data-label="Δ 5xx">–</td>
+                    <td class="num rf-hide">1.1 %</td>
+                    <td class="num t-ink2 rf-hide">64 ms</td>
+                    <td class="num ov-r-p95" data-label="p95">180 ms</td>
+                    <td class="num ov-r-d95 t-muted" data-label="Δ p95">+4 ms</td>
+                  </tr>
+                  <tr class="is-bad">
+                    <td class="ov-r-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="ov-rd-report" aria-label="ขยาย GET /classes/:id/report"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                    <td class="mono nowrap ov-r-route"><a class="link-quiet" href="traces.html?route=GET%20%2Fclasses%2F%3Aid%2Freport"><span class="method">GET</span> /classes/:id/report</a></td>
+                    <td class="num ov-r-req" data-label="request">3,480</td>
+                    <td class="num ov-r-err t-danger" data-label="error">1.9 %</td>
+                    <td class="num ov-r-d5" data-label="Δ 5xx"><span class="t-warn">+1.9 pt · ใหม่</span></td>
+                    <td class="num t-muted rf-hide">–</td>
+                    <td class="num t-ink2 rf-hide">150 ms</td>
+                    <td class="num ov-r-p95" data-label="p95">420 ms</td>
+                    <td class="num ov-r-d95" data-label="Δ p95"><span class="t-warn">+120 ms · +40 %</span></td>
+                  </tr>
+                  <tr class="row-detail" id="ov-rd-report" hidden><td></td><td colspan="8"><div class="row-detail__body"><div class="row ov-rd"><span class="lvl lvl--err">ERR</span><b>Read from undefined value</b><span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span><span class="badge-new">NEW</span><span class="badge-new__since">ตั้งแต่ 31.4.0</span><span class="hint">error หลักของ route นี้ · 65 ครั้งใน 1 ชั่วโมงล่าสุด · 66 ครั้งตั้งแต่ 08:03 · 21 users · ก่อน deploy route นี้ไม่มี 5xx</span><a class="btn btn--sm" href="error-detail-null-read.html">เปิด error</a></div></div></td></tr>
+                  <tr class="is-bad">
+                    <td class="ov-r-tog"><button class="row-toggle" type="button" data-expand aria-expanded="false" aria-controls="ov-rd-import" aria-label="ขยาย POST /question-bank/import"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg></button></td>
+                    <td class="mono nowrap ov-r-route"><a class="link-quiet" href="traces.html?route=POST%20%2Fquestion-bank%2Fimport"><span class="method">POST</span> /question-bank/import</a></td>
+                    <td class="num ov-r-req" data-label="request">412</td>
+                    <td class="num ov-r-err t-danger" data-label="error">11.4 %</td>
+                    <td class="num ov-r-d5 t-muted" data-label="Δ 5xx">+1.4 pt</td>
+                    <td class="num t-muted rf-hide">–</td>
+                    <td class="num t-ink2 rf-hide">1.3 s</td>
+                    <td class="num ov-r-p95" data-label="p95"><span class="t-warn">2.1 s · ช้า</span></td>
+                    <td class="num ov-r-d95 t-muted" data-label="Δ p95">+0.1 s</td>
+                  </tr>
+                  <tr class="row-detail" id="ov-rd-import" hidden><td></td><td colspan="8"><div class="row-detail__body"><div class="row ov-rd"><span class="lvl lvl--err">ERR</span><b>Value too long for column</b><span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span><span class="hint">error หลักของ route นี้ · 47 ครั้งใน 1 ชั่วโมงล่าสุด · 214 ครั้งใน 24 ชั่วโมง · 37 users · เกิดตั้งแต่ 31.3.2 (07:00–08:00 = 10.0 %)</span><a class="btn btn--sm" href="error-detail.html">เปิด error</a><a class="btn btn--sm" href="trace-detail.html">ตัวอย่าง trace 4bf92f35…</a></div></div></td></tr>
+                  <tr>
+                    <td class="ov-r-tog"></td>
+                    <td class="mono nowrap ov-r-route"><a class="link-quiet" href="traces.html?route=POST%20%2Freports%2F%3Aid%2Fgenerate"><span class="method">POST</span> /reports/:id/generate</a></td>
+                    <td class="num ov-r-req" data-label="request">380</td>
+                    <td class="num ov-r-err t-muted" data-label="error">0 %</td>
+                    <td class="num ov-r-d5 t-muted" data-label="Δ 5xx">–</td>
+                    <td class="num t-muted rf-hide">–</td>
+                    <td class="num t-ink2 rf-hide">18 ms</td>
+                    <td class="num ov-r-p95" data-label="p95">60 ms</td>
+                    <td class="num ov-r-d95 t-muted" data-label="Δ p95">+2 ms</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="hint mt-2"><span class="legend__key--bar" style="--c:var(--danger-solid)" aria-hidden="true"></span>error rate (5xx) ≥ 1 % · <span class="legend__key--bar" style="--c:var(--warn-solid)" aria-hidden="true"></span>p95 ≥ 1 s (ช้า) · Δ = ค่าตอนนี้ลบค่า 07:00–08:00 (pt = percentage point) · สีเตือน = แย่ลงชัดหลัง deploy (p95 +20 % ขึ้นไป หรือ 5xx จาก 0 เป็นมากกว่า 0) · กดลูกศรเพื่อดู error หลักหรือ trace ที่ช้าของ route</p>
+          </section>
+        </div>
+        <section class="section ov-side" aria-labelledby="ov-side-t">
+          <div class="section__head">
+            <h2 class="section__title" id="ov-side-t">ทั้ง env prod</h2>
+            <span class="section__meta">24 ชั่วโมงล่าสุด · ไม่ขึ้นกับ service และช่วงเวลาที่เลือก</span>
+          </div>
+          <div class="stack ov-side__stack">
+            <div class="panel">
+              <div class="panel__head">
+                <h3 class="panel__title">Error group อันดับต้น</h3>
+                <span class="panel__meta">24 ชั่วโมงล่าสุด</span>
+                <div class="panel__actions"><a class="btn btn--sm btn--quiet" href="errors.html">ดูทั้งหมด</a></div>
+              </div>
+              <div class="err-list">
+                <article class="err-row err-row--compact">
+                  <div class="err-row__main">
+                    <div class="err-row__head"><span class="lvl lvl--wrn">WRN</span><h4 class="err-row__title"><a href="errors.html#g5">Not found</a></h4></div>
+                    <p class="err-row__ctx"><span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span><span class="mono">GET /exams/:id</span></p>
+                  </div>
+                  <p class="err-row__n"><b>2,771</b><span>402 users</span></p>
+                </article>
+                <article class="err-row err-row--compact">
+                  <div class="err-row__main">
+                    <div class="err-row__head"><span class="lvl lvl--wrn">WRN</span><h4 class="err-row__title"><a href="errors.html#g6">Invalid request</a></h4></div>
+                    <p class="err-row__ctx"><span class="cat cat--input"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6l3 3 3-3M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>ข้อมูลที่ส่งมาผิด</span><span class="mono">POST /exams/:id/submit</span></p>
+                  </div>
+                  <p class="err-row__n"><b>655</b><span>287 users</span></p>
+                </article>
+                <article class="err-row err-row--compact">
+                  <div class="err-row__main">
+                    <div class="err-row__head"><span class="lvl lvl--err">ERR</span><h4 class="err-row__title"><a href="error-detail.html">Value too long for column</a></h4></div>
+                    <p class="err-row__ctx"><span class="cat cat--data"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><ellipse cx="8" cy="4" rx="5" ry="1.75"/><path d="M3 4v8c0 .97 2.24 1.75 5 1.75s5-.78 5-1.75V4M3 8c0 .97 2.24 1.75 5 1.75S13 8.97 13 8"/></svg>ข้อมูลในระบบขัดกัน</span><span class="mono">POST /question-bank/import</span></p>
+                  </div>
+                  <p class="err-row__n"><b>214</b><span>37 users</span></p>
+                </article>
+                <article class="err-row err-row--compact">
+                  <div class="err-row__main">
+                    <div class="err-row__head"><span class="lvl lvl--err">ERR</span><h4 class="err-row__title"><a href="error-detail-null-read.html">Read from undefined value</a></h4><span class="badge-new">NEW</span></div>
+                    <p class="err-row__ctx"><span class="cat cat--bug"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg>ต้องแก้โค้ด</span><span class="mono">GET /classes/:id/report</span></p>
+                  </div>
+                  <p class="err-row__n"><b>66</b><span>21 users</span></p>
+                </article>
+                <article class="err-row err-row--compact">
+                  <div class="err-row__main">
+                    <div class="err-row__head"><span class="lvl lvl--err">ERR</span><h4 class="err-row__title"><a href="errors.html#g3">Google API rate limited</a></h4></div>
+                    <p class="err-row__ctx"><span class="cat cat--dependency"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1.25-1.25a2.65 2.65 0 0 1 3.75 3.75L10.75 8.25M9 11.5l-1.25 1.25A2.65 2.65 0 0 1 4 9l1.25-1.25"/></svg>ระบบที่เรียกใช้มีปัญหา</span><span class="mono">job report:generate</span></p>
+                  </div>
+                  <p class="err-row__n"><b>41</b><span>38 retry · 3 ล้มเหลวจริง</span></p>
+                </article>
+              </div>
+              <div class="panel__foot">5 จาก 8 group · เรียงตามจำนวนครั้ง · ทั้งหมดจาก <span class="svc svc-1">school-core-api</span></div>
+            </div>
+            <div class="panel">
+              <div class="panel__head">
+                <h3 class="panel__title" id="ov-dep-t">Dependency</h3>
+                <span class="panel__meta">สถานะล่าสุด</span>
+                <div class="panel__actions"><a class="btn btn--sm btn--quiet" href="jobs.html#dependencies">ดูประวัติ</a></div>
+              </div>
+              <ul class="dep-list">
+                <li data-node="thaid">
+                  <span class="dep"><span class="dep__top"><span class="tag">http</span><a class="dep__name" href="jobs.html#dep-thaid">ThaID</a></span><span class="dep__host">imauth.bora.dopa.go.th</span></span>
+                  <span class="state state--warn">401 4 ครั้ง</span>
+                  <p class="dep__sub">ปฏิเสธ request 4 ครั้งใน 1 ชั่วโมง</p>
+                </li>
+                <li data-node="cache">
+                  <span class="dep"><span class="dep__top"><span class="tag">redis</span><a class="dep__name" href="jobs.html#dep-cache">cache</a></span><span class="dep__host">10.0.3.21:6379</span></span>
+                  <span class="state state--ok">up ตั้งแต่ 13:43:20</span>
+                  <p class="dep__sub">down 45.2 s เมื่อ 13:42:35</p>
+                  <div class="dep__strip" role="img" aria-label="ช่วง down 13:42:35–13:43:20 ในช่วง 13:20–14:20"><span class="dur dur--bad"><i style="--s:37.6;--w:1.3"></i></span><span class="mini-axis" aria-hidden="true"><span class="mini-axis__start">13:20</span><span class="mini-axis__end">14:20</span></span></div>
+                </li>
+                <li data-node="bullmq">
+                  <span class="dep"><span class="dep__top"><span class="tag">redis</span><a class="dep__name" href="jobs.html#dependencies">queue</a></span><span class="dep__host">10.0.3.22:6379</span></span>
+                  <span class="state state--ok">up</span>
+                </li>
+                <li data-node="kafka">
+                  <span class="dep"><span class="dep__top"><span class="tag">kafka</span><a class="dep__name" href="jobs.html#dependencies">producer</a></span><span class="dep__host">kafka-0.kafka:9092</span></span>
+                  <span class="state state--ok">up</span>
+                </li>
+                <li data-node="rabbitmq">
+                  <span class="dep"><span class="dep__top"><span class="tag">rabbitmq</span><a class="dep__name" href="jobs.html#dependencies">rabbitmq</a></span><span class="dep__host">10.0.5.10:5672</span></span>
+                  <span class="state state--ok">up</span>
+                </li>
+              </ul>
+              <div class="panel__foot">ที่มีปัญหาอยู่บนสุด · ใช้โดย <span class="svc svc-1">school-core-api</span></div>
+            </div>
+            <div class="panel">
+              <div class="panel__head">
+                <h3 class="panel__title">งานเบื้องหลัง</h3>
+                <span class="panel__meta">24 ชั่วโมงล่าสุด</span>
+                <div class="panel__actions"><a class="btn btn--sm btn--quiet" href="jobs.html">ดูทั้งหมด</a></div>
+              </div>
+              <div class="table-wrap">
+                <table class="table table--dense ov-jobs">
+                  <caption class="sr-only">สรุป queue ใน 24 ชั่วโมงล่าสุด</caption>
+                  <thead><tr><th scope="col">Queue</th><th scope="col" class="num" title="บรรทัด job.started นับทุก attempt">เริ่ม</th><th scope="col" class="num">ล้มเหลว</th><th scope="col" class="num">p95</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><a class="queue-name" href="jobs.html#queues" title="report:generate">report</a><span class="queue-sub"><span class="tag">BullMQ</span><span>retry 38 ครั้ง</span></span></td>
+                      <td class="num">380</td>
+                      <td class="num"><span class="t-danger">3</span></td>
+                      <td class="num">4.2 s</td>
+                    </tr>
+                    <tr>
+                      <td><a class="queue-name" href="jobs.html#queues" title="notification:send">notification</a><span class="queue-sub"><span class="tag">BullMQ</span></span></td>
+                      <td class="num">2,410</td>
+                      <td class="num"><span class="t-muted">0</span></td>
+                      <td class="num">310 ms</td>
+                    </tr>
+                    <tr>
+                      <td><a class="queue-name" href="jobs.html#queues" title="export:class-score">export</a><span class="queue-sub"><span class="tag">BullMQ</span></span></td>
+                      <td class="num">120</td>
+                      <td class="num"><span class="t-danger">1</span></td>
+                      <td class="num">12.6 s</td>
+                    </tr>
+                    <tr>
+                      <td><a class="queue-name" href="jobs.html#queues" title="persister">school.events.score</a><span class="queue-sub"><span class="tag">Kafka</span></span></td>
+                      <td class="num">345,600</td>
+                      <td class="num"><span class="t-muted">0</span></td>
+                      <td class="num">38 ms</td>
+                    </tr>
+                    <tr>
+                      <td><a class="queue-name" href="jobs.html#queues">lms.sync</a><span class="queue-sub"><span class="tag">RabbitMQ</span><span>redeliver 4 ครั้ง</span></span></td>
+                      <td class="num">860</td>
+                      <td class="num"><span class="t-muted">0</span></td>
+                      <td class="num">–</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <ul class="cron-list">
+                <li class="cron-line"><span class="state state--ok"><span class="tag">cron</span></span><span class="cron-line__name">ReportCleanupService.purge</span><span class="cron-line__when">ทุกชั่วโมง · ล่าสุด <span class="ts">14:00</span> ปกติ</span></li>
+                <li class="cron-line"><span class="state state--warn"><span class="tag">cron</span></span><span class="cron-line__name">AttendanceSyncService.sync</span><span class="cron-line__when">ทุก 15 นาที · <span class="t-warn">ล้มเหลว 1 ครั้ง</span> <span class="ts">11:45</span></span></li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </div>
+      <!-- screen content ends here -->
+
+      <details class="design-notes">
+        <summary><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>หมายเหตุการออกแบบ</summary>
+        <div class="design-notes__body">
+          <section>
+            <h3>วัตถุประสงค์</h3>
+            <p>หน้าแรกของคนที่ on call และ tech lead หลัง deploy: ตอบให้ได้ในไม่กี่วินาทีว่า prod ตอนนี้มีอะไรผิดปกติ service ไหน route ไหนต้องดูก่อน และ version ใหม่ทำให้ route ไหนช้าลงหรือ error เพิ่ม ลำดับคือ สรุป (ต้องดูตอนนี้ คู่กับแผนที่ระบบ 3 มิติที่บอกว่าเรื่องนั้นอยู่ตรงไหนของระบบ) → สุขภาพทุก service → แนวโน้มและ route ของ service ที่เลือก (พร้อม Δ เทียบก่อน deploy) → ภาพรวม env 24 ชั่วโมง (error, dependency, งานเบื้องหลัง)</p>
+          </section>
+          <section>
+            <h3>ข้อมูลมาจาก</h3>
+            <ul>
+              <li>สุขภาพ service, กราฟ, route: <code>GET /api/overview?env=prod&amp;from=now-1h</code> · <code>services[]</code> (<code>kind</code> เลือกหน่วย req / job / msg และป้ายประเภท, <code>rpm</code>, <code>errorRate</code>, <code>p95Ms</code>, <code>spark</code>) · <code>series[]</code> เรียกซ้ำด้วย <code>service</code> + <code>role</code> ที่เลือก · <code>routes[]</code> (<code>kind</code>, <code>route</code>, <code>requests</code>, <code>errorRate</code>, <code>clientErrorRate</code> = คอลัมน์ 4xx, <code>p50Ms</code>, <code>p95Ms</code>)</li>
+              <li>Δ 5xx และ Δ p95: เรียก <code>/api/overview</code> ครั้งที่สองด้วย <code>service</code> + <code>role</code> เดียวกัน <code>from</code> = deploy − 1 ชั่วโมง, <code>to</code> = เวลา deploy (07:00–08:00 ICT) แล้วเทียบ <code>routes[]</code> ทีละ route · เวลา deploy และ "deploy ล่าสุด" บนหัวหน้ามาจาก <code>/api/meta</code> <code>deploys</code> (SPEC §12 C)</li>
+              <li>แผนที่ระบบ (3 มิติ, DESIGN.md §7c): <code>demoSystemMapData('now')</code> ใน <code>assets/system-map.js</code> มีตัวเลขเฉพาะที่หน้านี้แสดงอยู่แล้ว: req/job/msg ต่อนาที, error rate และ p95 ของ 5 service/role จากตารางสุขภาพ service (เส้น ผู้ใช้ → api และ queue → consumer ใช้ค่าของแถวนั้น) และหมายเหตุของ ThaID (401 4 ครั้ง) กับ redis cache (down 45.2 s) จาก Dependency · ในของจริงประกอบด้วย <code>systemMapFromApi()</code> จาก <code>/api/overview</code> (<code>services[]</code>, <code>dependencies[]</code>, <code>jobs[]</code>) · อัตราการเรียกระหว่างระบบ และอัตราของผู้ใช้ queue oracle และ Google Sheets API ยังไม่มี endpoint จึงเป็น <code>null</code>: วาดเป็นเส้นไม่มีตัวเลข · Google Sheets API ไม่อยู่ใน Dependency (ไม่มี dependency event) จึงไม่มีสถานะ ต้องดู ในภาพ ปัญหา rate limit แสดงที่ worker และ error group</li>
+              <li>ต้องดูตอนนี้: คำนวณฝั่ง frontend จาก error group (<code>isNew</code>, <code>firstSeenVersion</code>), <code>routes</code> (<code>p95Ms</code> ≥ 1,000) และ <code>dependencies</code> (<code>state</code>, <code>since</code>, <code>lastOutageMs</code>, <code>affects</code>)</li>
+              <li>ฝั่งขวา (24 ชั่วโมงเสมอ ไม่ขึ้นกับช่วงของหน้า): <code>GET /api/errors?env=prod&amp;from=now-24h&amp;limit=5</code>, <code>GET /api/jobs?env=prod&amp;from=now-24h</code> (<code>stats[]</code>: <code>service</code>, <code>role</code>, <code>lastRunAt</code>, <code>lastFailedAt</code>; cron = <code>module</code> cron) และ <code>GET /api/dependencies?env=prod</code> (state ณ ตอนนี้, <code>events</code> รวม <code>http.outbound_failed</code> ของ ThaID)</li>
+              <li>ค่าต่อนาทีเป็นตัวอย่างรอบค่าเฉลี่ยใน dataset จากตารางเดียวกับหน้า Log และ components.html; ผลรวมตรงกับ dataset: 70,800 request, 5xx 112 ครั้ง = 0.16 % (65 ของ GET /classes/:id/report + 47 ของ POST /question-bank/import), worker 240 job attempt (4 ต่อนาที) ล้มเหลว 5 = 2.1 %</li>
+            </ul>
+          </section>
+          <section>
+            <h3>การโต้ตอบ</h3>
+            <ul>
+              <li>แผนที่ระบบ: ป้ายของจุดที่ปกติแสดงแค่ชื่อ (<code>compactLabels</code>) เพราะกล่องเล็ก ตัวเลขอยู่ใน tooltip และในตาราง · ชี้หรือ focus แถวในตารางสุขภาพ service หรือ Dependency: จุดเดียวกันในภาพสว่างขึ้นพร้อมจุดที่เชื่อมกัน ส่วนจุดและป้ายอื่นจางลง · ชี้จุดหรือป้ายในภาพ: แถวของมันในตารางสว่างขึ้นและมี tooltip ครบทุกค่า · กดป้าย: เปิดหน้าที่เกี่ยวข้อง · ลากเพื่อหมุน ปุ่ม + − รีเซ็ต หยุด · "ขยาย": ภาพเต็มความกว้าง 540 px และป้ายแสดงตัวเลขครบ · จอแคบกว่า 1280 px ภาพอยู่ใต้ตารางสุขภาพ service</li>
+              <li>Motion: เส้นกราฟวาดจากซ้ายไปขวา แท่ง 5xx โตจากแกน จุดค่าล่าสุดมีวงกระเพื่อม 3 ครั้งแล้วหยุด (= นาทีปัจจุบัน ไม่วนตลอด) · sparkline ในตาราง service วาดเมื่อเลื่อนมาเห็น จุดท้ายเป็นสีเทาเข้ม ไม่ใช่สีเขียว (เขียว = SkillLane / กดได้ หรือ ปกติ)</li>
+              <li>ปุ่มใน "ต้องดูตอนนี้" เปิด error-detail ของ group นั้น, Trace (กรอง route + <code>minMs</code>) และ dependency ในหน้างานเบื้องหลัง · trace id ในข้อความเปิด trace นั้นตรง ๆ</li>
+              <li>กดแถว service: เปลี่ยน service ของกราฟและตาราง route (sync กับ select และ URL <code>service</code>, <code>role</code>); กดชื่อ service: เปิด Log กรองตาม service/role</li>
+              <li>ชี้หรือ focus บนกราฟ: tooltip แสดง request, 5xx (แยก route) และ p95 ของนาทีนั้นพร้อมกัน · กดหนึ่งนาที: เปิด Log ช่วงนาทีนั้น · "ดูเป็นตาราง" มีทุกค่า · จอแคบกราฟเลื่อนไปนาทีล่าสุดก่อน</li>
+              <li>กดชื่อ route: เปิด Trace กรอง route นั้น (<code>route=METHOD /path</code>) · ลูกศรขยายแถว route ที่ช้าหรือ error สูง</li>
+              <li>ชื่อ error group: group 1 และ 2 เปิดหน้า error-detail ของตัวเอง group อื่นเลื่อนไปแถวของมันใน errors.html · dependency และ queue เปิดหน้างานเบื้องหลังที่แถวนั้น</li>
+              <li>จอแคบกว่า 600 px: ตารางสุขภาพและ route เปลี่ยนเป็นแถวละ 2–3 บรรทัด (ซ่อน ประเภท, 60 นาที, 4xx, p50) เพื่อให้ error rate และ p95 อยู่ในจอเสมอ</li>
+              <li>หน้านี้ refresh ทุก 30 วินาที (ตาม <code>meta.now</code> ท้าย sidebar) โดยค้างภาพเดิมไว้ ไม่กระพริบ</li>
+            </ul>
+          </section>
+          <section>
+            <h3>คำถามที่ยังเปิดอยู่</h3>
+            <ul>
+              <li><code>Dependency.state</code> มีแค่ up/down; ThaID ที่ตอบ 401 แสดงเป็น "ต้องดู" จากจำนวน <code>http.outbound_failed</code> ใน <code>events</code> ควรมี state <code>degraded</code> ใน API ไหม</li>
+              <li>เกณฑ์ ต้องดู (error ≥ 1 %, p95 ≥ 1 s, group ใหม่หลัง deploy) และเกณฑ์ Δ (+20 %) ควรตั้งต่อ route/service ได้ไหม (เช่น import Excel ช้าเป็นปกติ)</li>
+              <li>แผนที่ระบบต้องการจำนวนการเรียกระหว่างระบบ (from, to, rpm, errorRate) จาก span CLIENT: เพิ่มใน <code>/api/overview</code> หรือแยก endpoint</li>
+              <li>sparkline ในแถว service วัดปริมาณ (<code>services[].spark</code>) ควรทำเครื่องหมายนาทีที่มี 5xx ด้วยไหม</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+    </main>
+  </div>
+</div>
+<script type="module">
+  // 3D system map: imported on demand so three.js never holds up the page, mounted the first time the panel is seen
+  // (mo:in, so the blocks grow in view) or at once when motion is off. Same dataset as the health table and Dependency;
+  // hovering a row there highlights its node, hovering a node highlights its row.
+  const box = document.getElementById('ov-map');
+  const panel = box.closest('[data-mo]');
+  const root = document.documentElement;
+  const linked = Array.from(document.querySelectorAll('[data-node]'));
+  const top = box.closest('.ov-top');
+  let map = null;
+  // ขยาย / ย่อ: full width at 540 px (the module refits on resize); only the wide map labels healthy nodes with numbers
+  const sizeBtn = document.getElementById('ov-map-size');
+  sizeBtn.addEventListener('click', () => {
+    const wide = top.classList.toggle('is-map-wide');
+    sizeBtn.setAttribute('aria-pressed', String(wide));
+    sizeBtn.lastElementChild.textContent = wide ? 'ย่อ' : 'ขยาย';
+    if (map) map.setCompactLabels(!wide);
+  });
+  import('./assets/system-map.js').then(({ mountSystemMap, demoSystemMapData }) => {
+    function mount() {
+      if (map) return;
+      map = mountSystemMap(box, demoSystemMapData('now'), {
+        serviceOrder: ['school-core-api', 'school-etl-api', 'video-transcoder-api'],
+        motion: root.dataset.motion !== 'off',
+        legendOpen: false,   // the box is short here; "อ่านภาพนี้อย่างไร" stays one click away
+        compactLabels: !top.classList.contains('is-map-wide'),   // healthy nodes: name only, their numbers are in the tooltip
+        ariaLabel: 'แผนที่ระบบ prod 1 ชั่วโมงล่าสุด',
+        onHover: (node) => linked.forEach((r) => r.classList.toggle('is-linked', !!node && r.dataset.node === node.id)),
+      });
+      linked.forEach((r) => {
+        const on = () => map.highlight(r.dataset.node), off = () => map.highlight(null);
+        r.addEventListener('mouseenter', on);
+        r.addEventListener('mouseleave', off);
+        r.addEventListener('focusin', on);
+        r.addEventListener('focusout', off);
+      });
+    }
+    if (root.dataset.motion !== 'on' || panel.classList.contains('is-in')) mount();
+    else panel.addEventListener('mo:in', mount, { once: true });
+  }).catch(() => {
+    const p = box.querySelector('.smap-placeholder');
+    if (p) p.textContent = location.protocol === 'file:'
+      ? 'ภาพ 3 มิติต้องเปิดผ่าน http server (Chrome ไม่โหลด module จากไฟล์ในเครื่อง) · ตัวเลขชุดเดียวกันอยู่ในตาราง สุขภาพ service'
+      : 'โหลดภาพ 3 มิติไม่สำเร็จ · ตัวเลขชุดเดียวกันอยู่ในตาราง สุขภาพ service และ Dependency';
+  });
+</script>
+</body>
+</html>

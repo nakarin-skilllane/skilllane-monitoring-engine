@@ -1,0 +1,215 @@
+/* App-only CSS: font wiring and the few shell/component pieces the mockups do not have.
+   Tokens and every component class live in design-system.css (generated from the design).
+   Screen CSS goes in app/<route>/screen.css with the screen's prefix (README.md). */
+
+/* next/font families first, then the design's fallback stacks (DESIGN.md §3 Type) */
+:root {
+  --font-ui: var(--nf-ui), "IBM Plex Sans Thai", "Noto Sans Thai", "Sukhumvit Set", "Thonburi", "Leelawadee UI", Tahoma, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--nf-mono), "IBM Plex Mono", var(--nf-ui), "IBM Plex Sans Thai", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* Top bar: compact select for the envs outside dev · staging · prod. --quiet = it holds only envs without
+   data in the last hour and "ทุก env": narrow, and left out of the phone header (prod is what an incident needs) */
+.shell-env .select__control { max-width: 24ch; font-family: var(--font-mono); font-size: var(--fs-12); text-overflow: ellipsis; }
+.shell-env--quiet .select__control { max-width: 13ch; }
+@media (max-width: 599px) { .shell-env--quiet { display: none; } }
+
+/* Top bar: custom range (ICT wall clock); under 600 px each input gets a row of its own, buttons share one */
+.shell-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1h); min-width: 0; }
+.shell-range__input {
+  height: 32px; padding: 0 var(--sp-2); border: 1px solid var(--control-line); border-radius: var(--r-2);
+  background: var(--surface); color: var(--ink); font: 400 var(--fs-12)/1 var(--font-mono); min-width: 0;
+}
+.shell-range__input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--accent); }
+.shell-range__sep { color: var(--muted); }
+@media (max-width: 599px) {
+  .shell-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .shell-range__input { grid-column: 1 / -1; width: 100%; }
+  .shell-range__sep { display: none; }
+}
+
+/* AutoRefresh: the icon turns while a refresh is in flight */
+.ui-refresh[aria-pressed="false"] { color: var(--muted); }
+.ui-refresh.is-pending .i { animation: ui-spin 0.9s linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+/* Callout for invalid URL params sits above the content */
+.ui-problems { margin-bottom: var(--sp-4); }
+
+/* Loading skeleton layouts (the blocks are the design's .skel) */
+.ui-skel-text { display: grid; gap: var(--sp-2); }
+.ui-skel-text > .skel + .skel, .ui-skel-table .skel + .skel { margin-top: 0; }
+.ui-skel-table { display: grid; }
+.ui-skel-table__row { display: grid; gap: var(--sp-4); padding: 11px var(--sp-3); border-bottom: 1px solid var(--line-soft); }
+.ui-skel-table__row:last-child { border-bottom: 0; }
+
+/* 3D views (components/SystemMap3D.tsx, Pipeline3D.tsx): the box keeps the scene's height while three.js
+   loads; the scene inside fills it (--smap-h: 100% on the host). Without WebGL the map's node list scrolls
+   inside the box (the overview box is as tall as its callouts); the pipeline (.ui-smap--grow) lists its six
+   stations at full height, as the design's .smap--fallback does. */
+.ui-smap { position: relative; height: var(--smap-h, 460px); min-height: 260px; }
+@media (max-width: 640px) { .ui-smap { height: var(--smap-h-narrow, 520px); } }
+.ui-smap__frame { position: relative; height: 100%; }
+.ui-smap__host { height: 100%; --smap-h: 100%; --smap-h-narrow: 100%; }
+.ui-smap__host:has(> .smap--fallback) { overflow: auto; }
+.ui-smap--grow:has(.smap--fallback),
+.ui-smap--grow .ui-smap__frame:has(.smap--fallback),
+.ui-smap--grow .ui-smap__host:has(> .smap--fallback) { height: auto; min-height: 0; overflow: visible; }
+.ui-smap__skel { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--sp-4); }
+.ui-smap__skel-block { position: absolute; inset: var(--sp-3); height: auto; border-radius: var(--r-2); opacity: 0.7; }
+.ui-smap__skel-text { position: relative; color: var(--muted); font-size: var(--fs-13); }
+
+/* A chart bucket with a link (TimeCharts bucketHrefs, followed by components/charts/BucketLinks) */
+.c-hit[data-href] { cursor: pointer; }
+
+/* ---------- Trace Network view (components/network: NetworkTable, SpanIoPanel; DevTools-like) ---------- */
+
+/* The list (or the waterfall) and the span panel side by side from 1280 px; below that the panel is a sheet
+   over the page (full width on a phone). With the panel docked the list keeps what DevTools keeps: name,
+   method, status, size, time. */
+.ui-nw-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+.ui-nw-split__main { min-width: 0; }
+@media (min-width: 1280px) {
+  .ui-nw-split.is-open { grid-template-columns: minmax(0, 1fr) clamp(380px, 40%, 600px); }
+  .ui-nw-split.is-open .ui-nw-c-type, .ui-nw-split.is-open .ui-nw-c-wf { display: none; }
+  .ui-nw-split.is-open .ui-nw-name__main, .ui-nw-split.is-open .ui-nw-name__sub { max-width: 34ch; }
+}
+
+/* Network table */
+.ui-nw__head { flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.ui-nw__keys { margin-left: auto; }
+.ui-nw__foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); font-size: var(--fs-12); color: var(--muted); }
+.ui-nw__foot > .btn { margin-left: auto; }
+.ui-nw-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 0; }
+.table tbody tr.ui-nw-row.is-open > td { background: var(--sel-bg); }
+.ui-nw-name__main { display: block; max-width: 56ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12.5px/1.4 var(--font-mono); color: var(--ink); }
+.ui-nw-name__sub { display: block; max-width: 56ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 var(--fs-11)/1.35 var(--font-mono); color: var(--muted); }
+.ui-nw-table .ui-nw-c-wf { width: 24%; min-width: 120px; }
+.ui-nw-wf { position: relative; display: block; height: 12px; background: linear-gradient(to right, var(--grid) 1px, transparent 1px) 0 0 / 25% 100%; }
+.ui-nw-wf .dur { position: absolute; inset: 0; height: auto; background: transparent; }
+@media (max-width: 599px) {
+  /* each request is a small grid: name + time, then method · status · size · type, then its bar */
+  .ui-nw-table > tbody > tr { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "name name name time" "method status size type" "wf wf wf wf"; }
+  .table.ui-nw-table > tbody > tr > td.ui-nw-name { grid-area: name; }
+  .table.ui-nw-table > tbody > tr > td.ui-nw-c-method { grid-area: method; }
+  .table.ui-nw-table > tbody > tr > td.ui-nw-c-status { grid-area: status; }
+  .table.ui-nw-table > tbody > tr > td.ui-nw-c-size { grid-area: size; color: var(--muted); font-size: var(--fs-12); }
+  .table.ui-nw-table > tbody > tr > td.ui-nw-c-type { grid-area: type; justify-self: end; }
+  .table.ui-nw-table > tbody > tr > td.ui-nw-c-time { grid-area: time; text-align: right; font-family: var(--font-mono); font-size: 12.5px; }
+  .table.ui-nw-table > tbody > tr > td.ui-nw-c-wf { grid-area: wf; width: auto; min-width: 0; }
+  .ui-nw-name__main, .ui-nw-name__sub { max-width: none; white-space: normal; overflow-wrap: anywhere; }
+  .ui-nw-row:focus-visible { outline-offset: -2px; }
+}
+
+/* Span panel: docked (sticky beside the list) or a sheet over the page */
+.ui-nw-sheet { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-3); overflow: hidden; }
+@media (min-width: 1280px) {
+  .ui-nw-sheet { position: sticky; top: calc(var(--topbar-h) + var(--sp-3)); max-height: calc(100vh - var(--topbar-h) - var(--sp-6)); }
+}
+@media (max-width: 1279px) {
+  .ui-nw-sheet { position: fixed; top: 0; right: 0; bottom: 0; z-index: var(--z-drawer); width: min(640px, 100vw); border-width: 0 0 0 1px; border-radius: 0; box-shadow: var(--shadow-overlay); }
+  :root[data-motion="on"] .ui-nw-sheet { animation: ui-nw-in var(--dur-3) var(--ease-out); }
+}
+@keyframes ui-nw-in { from { translate: 32px 0; opacity: 0; } }
+.ui-nw-sheet__head { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3) var(--sp-2) var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); }
+.ui-nw-sheet__heading { flex: 1; min-width: 0; display: grid; gap: var(--sp-1); }
+.ui-nw-sheet__sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); font-size: var(--fs-12); color: var(--muted); }
+.ui-nw-sheet__title { font: 600 13px/1.45 var(--font-mono); color: var(--ink); overflow-wrap: anywhere; }
+.ui-nw-sheet__host { display: block; font: 400 var(--fs-12)/1.4 var(--font-mono); color: var(--muted); }
+.ui-nw-sheet__tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); margin-left: calc(var(--sp-2) * -1); }
+.ui-nw-sheet__tools .ui-nw-warn { margin-left: 0; }
+/* why a failed row failed (exception / status message), under the title on every tab */
+.ui-nw-sheet__err {
+  margin: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-1); border: 1px solid var(--danger-line); background: var(--danger-bg);
+  color: var(--danger); font: 500 var(--fs-12)/1.45 var(--font-mono); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden;
+}
+.ui-nw-sheet__note { padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line-soft); background: var(--surface-2); }
+.ui-nw-sheet__note .empty { padding: var(--sp-4) var(--sp-2); }
+.ui-nw-tabs { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.ui-nw-tabs > .tabs { flex: none; padding: 0 var(--sp-2); }
+.ui-nw-tabs > .tab-panel { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4) var(--sp-5); }
+@media (max-width: 599px) {
+  .ui-nw-tabs > .tabs .tab { padding-left: var(--sp-2); padding-right: var(--sp-2); }
+  .ui-nw-tabs > .tab-panel { padding: var(--sp-3); }
+}
+
+/* Header / query / form rows (name: value, DevTools style) and sections */
+.ui-nw-sec { position: relative; min-width: 0; }
+.ui-nw-sec > .disclosure > summary { font-size: var(--fs-12); font-weight: 600; }
+.ui-nw-sec--copy > .disclosure > summary { padding-right: 88px; }
+.ui-nw-sec > .disclosure > .disclosure__body { padding-top: 0; color: var(--ink); }
+.ui-nw-sec__copy { position: absolute; top: 5px; right: var(--sp-1); }
+.ui-nw-pairs { display: grid; margin: 0; font: 400 12.5px/1.5 var(--font-mono); }
+.ui-nw-pairs__row { display: grid; grid-template-columns: minmax(120px, 34%) minmax(0, 1fr); gap: var(--sp-3); padding: 3px 0; border-bottom: 1px solid var(--line-soft); }
+.ui-nw-pairs__row:last-child { border-bottom: 0; }
+.ui-nw-pairs dt { color: var(--ink-2); font-weight: 500; overflow-wrap: anywhere; }
+.ui-nw-pairs dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; white-space: pre-wrap; }
+.ui-nw-pairs--general dt { font-family: var(--font-ui); font-size: var(--fs-12); line-height: 1.6; }
+@media (max-width: 479px) { .ui-nw-pairs__row { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+.ui-nw-none { padding: var(--sp-2) 0; }
+.ui-nw-note { margin-bottom: var(--sp-2); }
+.ui-nw-fname { display: inline; margin: 0 0 0 var(--sp-1); }
+
+/* Masked values: what the SDK replaced with [REDACTED] before the data left the app */
+.ui-nw-masked, .ui-nw-masked-n {
+  display: inline-block; padding: 0 4px; border-radius: var(--r-1); background: var(--surface-3); color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line-strong); font: 500 var(--fs-11)/1.55 var(--font-mono); letter-spacing: 0.02em; white-space: nowrap; vertical-align: 1px;
+}
+.ui-nw-masked-n { margin-left: var(--sp-1); }
+/* a warning that comes with words: [REDACTED] values to replace, placeholders without a value */
+.ui-nw-warn {
+  display: inline-flex; align-items: center; min-height: 20px; margin-left: var(--sp-1); padding: 0 6px; border-radius: var(--r-1);
+  border: 1px solid var(--warn-line); background: var(--warn-bg); color: var(--warn); font: 500 var(--fs-11)/1.3 var(--font-mono); white-space: nowrap;
+}
+.ui-nw-trunc { display: inline-flex; align-items: center; height: 20px; margin-left: var(--sp-1); padding: 0 6px; border-radius: var(--r-1); background: var(--surface-3); color: var(--ink-2); font-size: var(--fs-11); font-weight: 500; }
+
+/* Bodies, JSON tree, SQL */
+.ui-nw-body .code-block__title { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-1); }
+.ui-nw-body .seg__btn { height: 22px; padding: 0 var(--sp-2); font-size: var(--fs-12); }
+.ui-nw-body__main { padding: var(--sp-2) var(--sp-3); }
+.ui-nw-body__main > .code { padding: 0; border: 0; background: transparent; }
+.ui-nw-pre { tab-size: 2; }
+/* a captured HTML body rendered (sandbox, no script, nothing loaded): drawn as a light page in both themes */
+.ui-nw-html { display: block; width: 100%; height: 360px; border: 1px solid var(--line); border-radius: var(--r-1); color-scheme: light; background: Canvas; }
+.ui-nw-treebox { display: grid; gap: var(--sp-1); min-width: 0; }
+.ui-nw-treebox__tools { display: flex; justify-content: flex-end; gap: var(--sp-1); }
+.ui-nw-tree, .ui-nw-tree__group { list-style: none; margin: 0; padding: 0; font: 400 12.5px/1.6 var(--font-mono); min-width: 0; }
+.ui-nw-tree__group { margin-left: 6px; padding-left: 12px; border-left: 1px solid var(--line-soft); }
+.ui-nw-tree__leaf { padding-left: 18px; overflow-wrap: anywhere; }
+.ui-nw-tree__toggle { display: inline-flex; align-items: baseline; gap: 2px; max-width: 100%; padding: 0 4px 0 0; border: 0; border-radius: var(--r-1); background: none; font: inherit; color: inherit; text-align: left; }
+.ui-nw-tree__toggle:hover { background: var(--hover-bg); }
+.ui-nw-tree__chev { flex: none; align-self: center; color: var(--muted); transition: transform var(--dur-1) var(--ease-out); }
+.ui-nw-tree__toggle[aria-expanded="true"] .ui-nw-tree__chev { transform: rotate(90deg); }
+.ui-nw-tree__key { color: var(--accent); }
+.ui-nw-tree__colon, .ui-nw-tree__null, .ui-nw-tree__sum { color: var(--muted); }
+.ui-nw-tree__str { color: var(--ink); }
+.ui-nw-tree__num { color: var(--ink-2); font-weight: 500; }
+.ui-nw-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); font-size: var(--fs-12); color: var(--ink-2); }
+.ui-nw-sql .c-key, .ui-nw-sqlval { color: var(--accent); }
+.ui-nw-sqlval { font-weight: 500; }
+.ui-nw-sqlmiss { color: var(--warn); background: var(--warn-bg); border-radius: 2px; font-weight: 600; }
+.ui-nw-params { max-height: 320px; }
+.ui-nw-params .ui-nw-val { overflow-wrap: anywhere; white-space: pre-wrap; }
+.ui-nw-ict { display: block; font-size: var(--fs-11); }
+
+/* Timing */
+.ui-nw-tl { display: grid; gap: 2px; }
+.ui-nw-tl__track { position: relative; display: block; height: 14px; border-radius: 2px; background: var(--track); }
+.ui-nw-tl__track .dur { position: absolute; inset: 0; height: auto; background: transparent; }
+.ui-nw-inner { list-style: none; margin: var(--sp-1) 0 0; padding: 0; display: grid; }
+.ui-nw-inner__btn {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--sp-2); width: 100%;
+  padding: 4px var(--sp-1); border: 0; border-bottom: 1px solid var(--line-soft); background: none; font: inherit; font-size: var(--fs-12); color: var(--ink); text-align: left;
+}
+.ui-nw-inner__btn:hover { background: var(--hover-bg); }
+.ui-nw-inner__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+
+/* Sign-in pages (/login, /set-password): no shell, one centred card */
+.auth-page { min-height: 100dvh; display: grid; place-items: center; padding: var(--sp-6) var(--sp-4); background: var(--bg); }
+
+/* Top bar: the signed-in user (name → /account) and sign out */
+.user-menu { display: inline-flex; align-items: center; gap: var(--sp-1); margin-left: var(--sp-1); }
+.user-menu__name { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-13); color: var(--ink-2); padding: 0 var(--sp-1); }
+.user-menu__name:hover { color: var(--ink); }
+@media (max-width: 599px) { .user-menu__name { display: none; } }

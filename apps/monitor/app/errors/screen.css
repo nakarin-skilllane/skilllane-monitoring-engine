@@ -1,0 +1,90 @@
+/* /errors only (from design/monitoring-ui/errors.html <style>). Tokens and shared components live in design-system.css;
+   page classes are prefixed eg- (DESIGN.md §5b: promote a class used by two screens instead of copying it). */
+.eg-kpis { margin-top: var(--sp-2); }
+.eg-tabs > .tabs { margin-top: calc(-1 * var(--sp-1)); }
+.eg-tab__icon { color: var(--muted); }
+.tab[aria-selected="true"] .eg-tab__icon { color: var(--ink-2); }
+
+/* Group list: one grid shared by the column head and each row */
+.eg-cols, .eg-row {
+  display: grid; column-gap: var(--sp-4);
+  grid-template-columns: minmax(0, 1fr) 144px 76px 64px 184px;
+  grid-template-areas: "main trend count users seen";
+}
+.eg-cols {
+  align-items: end; padding: 6px var(--sp-4) 5px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+  border-radius: var(--r-3) var(--r-3) 0 0; font-size: var(--fs-12); font-weight: 600; color: var(--ink-2); line-height: var(--lh-ui);
+}
+.eg-cols__trend { grid-area: trend; display: grid; gap: 2px; }
+.eg-cols__main { grid-area: main; }
+.eg-cols__num { text-align: right; }
+.eg-cols__count { grid-area: count; }
+.eg-cols__users { grid-area: users; }
+.eg-cols__seen { grid-area: seen; }
+.eg-axis { display: block; width: 144px; height: 14px; overflow: visible; }
+/* app: a custom range that crosses midnight puts the dates on a second axis line */
+.eg-axis--2 { height: 26px; }
+.eg-axis .c-halo { stroke: var(--surface-2); }
+.eg-axis text { font-family: var(--font-mono); font-weight: 400; }
+.eg-group + .eg-group { border-top: 1px solid var(--line); }
+.eg-band { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-2); padding: 5px var(--sp-4); border-bottom: 1px solid var(--line-soft); font-size: var(--fs-12); color: var(--ink-2); line-height: var(--lh-ui); }
+.eg-band__n { font-weight: 600; color: var(--ink); }
+.eg-band__note { color: var(--muted); }
+
+.eg-row { align-items: center; row-gap: var(--sp-1); padding: var(--sp-3) var(--sp-4); }
+.eg-row:target { background: var(--sel-bg); box-shadow: inset 3px 0 0 var(--accent); scroll-margin-top: 72px; }
+/* app: the same highlight after a client-side navigation to #g-… (EgTarget), which never sets :target */
+.eg-row.is-target { background: var(--sel-bg); box-shadow: inset 3px 0 0 var(--accent); scroll-margin-top: 72px; }
+.eg-row.is-target:focus { outline: none; }
+.eg-row.is-target:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.eg-main { grid-area: main; display: grid; gap: 3px; min-width: 0; }
+.eg-main .err-row__head { gap: var(--sp-1) var(--sp-2); }
+.eg-fix { font-size: var(--fs-13); color: var(--ink); line-height: var(--lh-ui); min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.eg-fix__k { font-size: var(--fs-11); color: var(--muted); margin-right: var(--sp-2); }
+.eg-where { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-3); font-size: var(--fs-12); color: var(--ink-2); line-height: var(--lh-ui); min-width: 0; }
+.eg-where__item { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 0; max-width: 100%; }
+.eg-where code { font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
+.eg-where .http { line-height: 16px; }
+.eg-k { font-size: var(--fs-11); color: var(--muted); }
+
+.eg-trend { grid-area: trend; }
+.eg-spark { --c: var(--spark); }
+.eg-count, .eg-users { text-align: right; line-height: 1.3; white-space: nowrap; }
+.eg-count { grid-area: count; }
+.eg-users { grid-area: users; }
+.eg-n { font-size: 15px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.eg-n--none { color: var(--muted); font-weight: 400; }
+.eg-sub { display: grid; margin-top: 2px; font-size: var(--fs-11); color: var(--ink-2); line-height: 1.35; }
+.eg-seen { grid-area: seen; display: grid; gap: 2px; font-size: var(--fs-12); color: var(--muted); line-height: 1.35; white-space: nowrap; }
+.eg-seen .ts { font-size: var(--fs-12); }
+/* app: a long service/role (school-core-api/persister) wraps the role under the name instead of crossing the panel border */
+.eg-seen .svc { flex-wrap: wrap; column-gap: 0; max-width: 100%; }
+.eg-seen .svc::before { margin-right: 6px; }
+.eg-seen .svc__role { margin-left: 0; }
+.eg-row--new .eg-seen > span:nth-child(2) .ts { color: var(--ink); font-weight: 600; }
+
+/* Warn (4xx) rows: same layout, less weight */
+.eg-row--quiet .err-row__title { font-size: var(--fs-14); font-weight: 500; }
+.eg-row--quiet .err-row__title a { color: var(--ink-2); }
+.eg-row--quiet .eg-fix { color: var(--ink-2); }
+.eg-row--quiet .eg-spark { --c: var(--bar-neutral); }
+.eg-row--quiet .eg-n { font-weight: 500; color: var(--ink-2); }
+
+.eg-hours tbody th[scope="row"] { white-space: nowrap; }
+.eg-hours tbody tr:last-child > * { border-top: 1px solid var(--line); font-weight: 600; }
+
+@media (max-width: 1279px) {
+  .eg-cols, .eg-row { grid-template-columns: minmax(0, 1fr) 144px 72px 60px; grid-template-areas: "main trend count users" "seen trend count users"; }
+  .eg-cols__seen { display: none; }
+  .eg-seen { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-4); }
+  .eg-cols, .eg-row { column-gap: var(--sp-5); }
+}
+@media (max-width: 699px) {
+  .eg-cols { display: none; }
+  .eg-list { border-radius: var(--r-3); }
+  .eg-row { grid-template-columns: 144px auto minmax(0, 1fr); grid-template-areas: "main main main" "trend count users" "seen seen seen"; row-gap: var(--sp-2); column-gap: var(--sp-4); align-items: start; }
+  .eg-count, .eg-users { text-align: left; }
+}
+
+/* App only: the axis width follows the bucket count (24 × 6 px for the usual ranges). */
+.eg-cols__trend .eg-axis { max-width: 100%; }
