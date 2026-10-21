@@ -10,7 +10,7 @@
  * attribute. Other instrumentations' bind and header names (fallbacks) are
  * always masked.
  */
-import { type DbParameter, dbParametersJson } from 'skilllane-monitoring-contract'
+import { type DbParameter, dbParametersJson } from 'skilllane-monitoring/contract'
 import {
   isSensitiveKey,
   maskBodyText,

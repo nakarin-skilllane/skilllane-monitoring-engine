@@ -11,7 +11,7 @@ import {
   durationNanos,
   isoToNanos,
   nanosToDateTime64,
-} from 'skilllane-monitoring-contract'
+} from 'skilllane-monitoring/contract'
 import {
   isSensitiveKey,
   maskedBySender,

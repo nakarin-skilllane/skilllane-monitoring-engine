@@ -1,0 +1,117 @@
+# skilllane-monitoring on one VM: ClickHouse + engine + monitor behind Caddy (HTTPS).
+# The engine and monitor images are built here from this repo (setup-vm.sh clones it,
+# builds and starts); the SDK and its wire contract come from npm (skilllane-monitoring).
+#
+#   cp .env.example .env   # fill DOMAIN + secrets
+#   docker compose build && docker compose up -d
+#
+# Set ENGINE_IMAGE / MONITOR_IMAGE / IMAGE_TAG to run images pulled from a registry
+# instead (deploy/build-push.sh pushes them to GHCR); `docker compose pull` then.
+#
+# Only Caddy publishes ports (80/443). ClickHouse, the engine and the monitor are
+# reachable on the compose network only. The engine's queue is the customer's
+# (LOG_* in .env); with none set it is HTTP ingest only.
+name: skilllane-monitoring
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    hostname: clickhouse
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-skilllane_monitoring}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-skilllane_monitoring}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in .env}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      # Read by clickhouse-init/01-reader.sh at first start.
+      CLICKHOUSE_READER_USER: ${CLICKHOUSE_READER_USER:-skilllane_monitoring_reader}
+      CLICKHOUSE_READER_PASSWORD: ${CLICKHOUSE_READER_PASSWORD:?set CLICKHOUSE_READER_PASSWORD in .env}
+    volumes:
+      - ./clickhouse-init/01-reader.sh:/docker-entrypoint-initdb.d/01-reader.sh:ro
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    deploy:
+      resources:
+        limits:
+          memory: ${CLICKHOUSE_MEMORY_LIMIT:-6g}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  engine:
+    image: ${ENGINE_IMAGE:-skilllane-monitoring-engine}:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.engine
+    env_file: .env
+    environment:
+      # Inside the compose network; these win over anything in .env.
+      CLICKHOUSE_URL: http://clickhouse:8123
+      ENGINE_PORT: "5100"
+      ENGINE_CORS_ORIGIN: ${ENGINE_CORS_ORIGIN:-https://monitor.${DOMAIN}}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5100/api/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: ${ENGINE_MEMORY_LIMIT:-1500m}
+    restart: unless-stopped
+
+  monitor:
+    image: ${MONITOR_IMAGE:-skilllane-monitoring-monitor}:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.monitor
+    environment:
+      ENGINE_URL: http://engine:5100
+    depends_on:
+      engine:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3300/login',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: ${MONITOR_MEMORY_LIMIT:-1g}
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - monitor
+      - engine
+    restart: unless-stopped
+
+volumes:
+  clickhouse-data:
+  clickhouse-logs:
+  caddy-data:
+  caddy-config:

@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "skilllane-monitoring": "link:../../../skilllane-monitoring/packages/monitoring",
+    "skilllane-monitoring": "^0.2.0",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",

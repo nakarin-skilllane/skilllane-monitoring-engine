@@ -8,6 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
+    "start": "bash scripts/logging-service.sh",
+    "dev": "MONITOR_MODE=dev bash scripts/logging-service.sh",
     "build": "pnpm -r build",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",

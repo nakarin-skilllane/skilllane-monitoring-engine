@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Publishes realistic sample envelopes (the skilllane-monitoring-contract wire format) to the
+ * Publishes realistic sample envelopes (the skilllane-monitoring/contract wire format) to the
  * queue the engine consumes, the same way skilllane-monitoring does:
  *   logs : an error line with hint/fix/labels, http.request lines, job lines,
  *          a dependency line, app.shutdown with job.inflight
  *   spans: a SERVER root with CLIENT children (old and new semconv), a remote
  *          child in a second service, and a plain read trace
  *
- * Usage (from apps/engine, after `pnpm --filter skilllane-monitoring-contract build`):
+ * Usage (from apps/engine):
  *   LOG_EXPORT=kafka node scripts/publish-sample.js --env ingest-test-kafka
  *   node scripts/publish-sample.js --transport rabbitmq --env dev --repeat 20 --bad
  * Options:
@@ -26,7 +26,7 @@ const { randomBytes } = require('node:crypto')
 const rootEnv = join(__dirname, '..', '..', '..', '.env')
 if (existsSync(rootEnv)) process.loadEnvFile(rootEnv)
 
-const contract = require('skilllane-monitoring-contract')
+const contract = require('skilllane-monitoring/contract')
 
 // ---------- args ----------
 function parseArgs(argv) {

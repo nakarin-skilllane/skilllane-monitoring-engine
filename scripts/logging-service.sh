@@ -13,8 +13,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# skilllane-monitoring and its contract, linked from the sibling repo.
-SDK_ROOT="${SDK_ROOT:-$ROOT/../skilllane-monitoring}"
 export LOG_EXPORT="${LOG_EXPORT:-kafka}"
 MONITOR_MODE="${MONITOR_MODE:-start}"
 
@@ -52,9 +50,8 @@ stale() {
   [ -n "$(find "$@" -newer "$built" -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.css' -o -name '*.json' -o -name '*.mjs' \) -not -path '*/node_modules/*' -print -quit 2>/dev/null)" ]
 }
 
-if stale "$ROOT/apps/engine/dist/main.js" "$ROOT/apps/engine/src" "$SDK_ROOT/packages/monitoring-contract/src"; then
+if stale "$ROOT/apps/engine/dist/main.js" "$ROOT/apps/engine/src"; then
   say "building the engine (sources changed)…"
-  (cd "$SDK_ROOT" && pnpm build)
   (cd "$ROOT" && pnpm --filter @skilllane/monitoring-engine build)
 fi
 if [ "$MONITOR_MODE" = start ] &&

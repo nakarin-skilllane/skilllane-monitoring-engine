@@ -6,7 +6,7 @@ log และ trace ทั้งหมดก็จะวิ่งผ่าน **
 
 หน้าที่ของเรามีแค่ **publish** (SDK ฝั่ง app) และ **subscribe** (engine) เท่านั้น เราไม่ได้รันหรือดูแล queue ของลูกค้า
 
-- สเปกและสัญญาระหว่างส่วนต่าง ๆ: [`SPEC.md`](SPEC.md) (wire format อยู่ที่ [`skilllane-monitoring/packages/monitoring-contract/src/index.ts`](../skilllane-monitoring/packages/monitoring-contract/src/index.ts), ตารางอยู่ที่ [`clickhouse/schema.sql`](clickhouse/schema.sql))
+- สเปกและสัญญาระหว่างส่วนต่าง ๆ: [`SPEC.md`](SPEC.md) (wire format อยู่ที่ [`skilllane-monitoring/packages/monitoring/src/contract/index.ts`](../skilllane-monitoring/packages/monitoring/src/contract/index.ts) ใช้ผ่าน `skilllane-monitoring/contract`, ตารางอยู่ที่ [`clickhouse/schema.sql`](clickhouse/schema.sql))
 - แผนภาพ architecture: [`../skilllane-monitoring-diagram-clickhouse.html`](../skilllane-monitoring-diagram-clickhouse.html)
 - หน้าจอ monitor (**skilllane monitor**, Next.js `:3300`): [`apps/monitor/`](apps/monitor/README.md) วิธีรันอยู่หัวข้อ 3 ด้านล่าง
 - ดีไซน์ที่ approve แล้ว (HTML mockup, ต้นฉบับของ layout และข้อความภาษาไทย): [`design/monitoring-ui/`](design/monitoring-ui/index.html) (`BRIEF.md`, `DESIGN.md`, หนึ่งไฟล์ต่อหน้าจอ)
@@ -92,7 +92,7 @@ SDK เก็บทุกอย่างที่ request หนึ่งทำ 
 - **Redis**: คำสั่งพร้อม argument ครบ
 - **Queue**: payload และ header ของ message ใน Kafka, RabbitMQ และ BullMQ ทั้งฝั่งส่ง (span `send` / `publish`) และฝั่ง job / consumer
 
-**Mask ก่อนออกจาก process เสมอ** ไม่อ่อนกว่ากติกาเดิมของ school-core-api กติกามีชุดเดียวใน `skilllane-monitoring/packages/monitoring-contract/src/mask`
+**Mask ก่อนออกจาก process เสมอ** ไม่อ่อนกว่ากติกาเดิมของ school-core-api กติกามีชุดเดียวใน `skilllane-monitoring/packages/monitoring/src/contract/mask`
 ที่ SDK, engine และ `seed-demo.js` ใช้ร่วมกัน (รายละเอียดใน SPEC §3):
 - **ตาม key**: key, ชื่อ param, ชื่อ column ของ bind, ชื่อ header, field ของ hash, ส่วนของ key ใน Redis หรือชื่อ label ที่ตัวพิมพ์เล็ก**มีคำว่า**
   `password`, `confirmpassword`, `token`, `secret`, `authorization`, `cookie`, `session`, `passwd`, `pwd`, `apikey`, `credential`, `privatekey`
@@ -341,7 +341,7 @@ skilllane-monitoring-engine/
   README.md  SPEC.md  .env.example  docker-compose.yml  package.json  pnpm-workspace.yaml
   clickhouse/schema.sql        ตาราง + materialized view (docker initdb และ engine ตอน boot)
   clickhouse/users.sql         user read-only skilllane_monitoring_reader
-  ../skilllane-monitoring/     skilllane-monitoring (SDK) + skilllane-monitoring-contract (wire format) อยู่ repo แยก ลิงก์ผ่าน link: จนกว่าจะ publish
+  ../skilllane-monitoring/     skilllane-monitoring (SDK รวม contract ที่ `skilllane-monitoring/contract`) อยู่ repo แยก ติดตั้งจาก npm
   apps/engine/                 @skilllane/monitoring-engine: src/ingest/ (consumer 3 แบบ, mapper, ClickhouseWriter), src/query/ (API), scripts/seed-demo.js, scripts/publish-sample.js
   apps/demo-api/               @skilllane/monitoring-demo-api: NestJS app ตัวอย่าง (school-core-api / school-etl-api) + scripts/traffic.js
   apps/monitor/                @skilllane/monitoring-monitor: skilllane monitor (Next.js 16) อ่าน query API ของ engine

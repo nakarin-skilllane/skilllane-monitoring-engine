@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@clickhouse/client": "^1.12.0",
-    "skilllane-monitoring-contract": "link:../../../skilllane-monitoring/packages/monitoring-contract",
+    "skilllane-monitoring": "^0.2.0",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",

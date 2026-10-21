@@ -9,7 +9,7 @@ import {
   logLevel,
   type SASLOptions,
 } from 'kafkajs'
-import type { AnyEnvelope } from 'skilllane-monitoring-contract'
+import type { AnyEnvelope } from 'skilllane-monitoring/contract'
 import { config } from '../../config'
 import { BadEnvelopeError, type EnvelopeHandler } from '../envelope-handler'
 import { type Consumer, errorMessage, sleep } from './consumer'

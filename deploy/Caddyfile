@@ -1,0 +1,18 @@
+# monitor.<DOMAIN> → the Next.js monitor, engine.<DOMAIN> → the engine API (HTTP ingest
+# + query API). Caddy gets Let's Encrypt certificates by itself; DOMAIN=localhost gives
+# *.localhost with Caddy's internal CA for a local check.
+# Caddy adds X-Forwarded-Proto: https, which makes the engine mark its session cookie Secure.
+
+monitor.{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy monitor:3300
+}
+
+engine.{$DOMAIN} {
+	encode zstd gzip
+	# Ingest batches are large (ENGINE_INGEST_MAX_BYTES, default 2 MB after gunzip).
+	request_body {
+		max_size 16MB
+	}
+	reverse_proxy engine:5100
+}

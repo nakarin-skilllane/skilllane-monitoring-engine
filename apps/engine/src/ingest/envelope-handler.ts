@@ -4,7 +4,7 @@ import {
   type LogEnvelope,
   type SpanEnvelope,
   parseEnvelope,
-} from 'skilllane-monitoring-contract'
+} from 'skilllane-monitoring/contract'
 import { ClickhouseWriter } from './clickhouse-writer'
 import { IngestStats } from './ingest.stats'
 import { type Row, mapLog, mapSpan } from './mappers'

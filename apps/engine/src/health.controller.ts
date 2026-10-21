@@ -1,6 +1,6 @@
 import { Controller, Get, Optional } from '@nestjs/common'
 import { Public } from './auth/auth.guard'
-import { resolveExportMode } from 'skilllane-monitoring-contract'
+import { resolveExportMode } from 'skilllane-monitoring/contract'
 import { ClickhouseService } from './clickhouse/clickhouse.service'
 import { config } from './config'
 import { IngestService } from './ingest/ingest.service'

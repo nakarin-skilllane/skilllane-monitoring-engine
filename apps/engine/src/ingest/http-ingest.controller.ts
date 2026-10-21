@@ -14,7 +14,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import type { Response } from 'express'
-import { INGEST_PATH, type TelemetryStream } from 'skilllane-monitoring-contract'
+import { INGEST_PATH, type TelemetryStream } from 'skilllane-monitoring/contract'
 import { Public } from '../auth/auth.guard'
 import { config } from '../config'
 import { BadEnvelopeError, EnvelopeHandler } from './envelope-handler'

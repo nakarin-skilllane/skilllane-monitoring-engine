@@ -33,8 +33,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { createClient } = require('@clickhouse/client')
-// The SDK's own masking rules (skilllane-monitoring/packages/monitoring-contract/src/mask; needs its dist: pnpm --filter skilllane-monitoring-contract build).
-const mask = require('skilllane-monitoring-contract')
+// The SDK's own masking rules (skilllane-monitoring/contract, src/contract/mask of the SDK).
+const mask = require('skilllane-monitoring/contract')
 
 // ---------------------------------------------------------------- config
 const repoEnv = path.resolve(__dirname, '../../../.env')
@@ -518,7 +518,7 @@ const ERR = {
 // ---------------------------------------------------------------- captured I/O (the Network view)
 /**
  * What the SDK captures on a span (skilllane_monitoring.spans I/O columns, SPEC.md section 7), masked
- * with the SDK's own rules: the shared module of skilllane-monitoring-contract (src/mask) that
+ * with the SDK's own rules: the shared module skilllane-monitoring/contract (src/contract/mask) that
  * skilllane-monitoring and the engine use, not a copy. Key rule (isSensitiveKey: password,
  * token, secret, session, cookie, authorization, api-key, x-api-key, pin, otp, auth …;
  * not tokenType / PASSWORD_CHANGED_AT), value rule (redactValue: JWT, Bearer / Basic,

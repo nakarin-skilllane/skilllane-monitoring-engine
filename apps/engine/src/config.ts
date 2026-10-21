@@ -13,7 +13,7 @@ import {
   rabbitmqExchange,
   resolveExportMode,
   topicName,
-} from 'skilllane-monitoring-contract'
+} from 'skilllane-monitoring/contract'
 
 export type EngineRole = 'ingest' | 'api' | 'all'
 export type KafkaSaslMechanism = 'plain' | 'scram-sha-256' | 'scram-sha-512'
