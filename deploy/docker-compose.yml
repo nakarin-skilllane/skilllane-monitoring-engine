@@ -2,7 +2,7 @@
 # The engine and monitor images are built here from this repo (setup-vm.sh clones it,
 # builds and starts); the SDK and its wire contract come from npm (skilllane-monitoring).
 #
-#   cp .env.example .env   # fill the secrets
+#   cp ../.env.example ../.env && ln -s ../.env .env   # one .env at the repo root; fill the secrets
 #   docker compose build && docker compose up -d
 #
 # Set ENGINE_IMAGE / MONITOR_IMAGE / IMAGE_TAG to run images pulled from a registry

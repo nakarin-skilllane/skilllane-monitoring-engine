@@ -23,7 +23,7 @@ with the bearer token `ENGINE_INGEST_TOKEN`).
 | `push-to-vm.sh` | runs `setup-vm.sh` on the VM over ssh |
 | `docker-compose.yml`, `clickhouse-init/`, `clickhouse-config/` | what runs; `clickhouse-config/storage-s3.xml` moves log / span parts older than 14 days to S3 when `CLICKHOUSE_S3_*` is set in `.env` (optional) |
 | `Dockerfile.engine`, `Dockerfile.monitor` | the images; build context = this repo's root (`.dockerignore` there) |
-| `.env.example` | every setting; `setup-vm.sh` turns it into `.env` with random secrets |
+| `../.env.example` | every setting, dev and deploy in one file; `setup-vm.sh` turns it into the root `.env` with random secrets, and `deploy/.env` is a link to it |
 | `build-push.sh` | optional: build on your Mac and push to GHCR, for a VM too small to build |
 
 ## Before the first deploy
@@ -120,7 +120,7 @@ TLS + auth) and `docker compose up -d engine`.
   so the engine marks its session cookie `Secure`, and allow 16 MB request bodies for ingest).
 - ClickHouse (8123/9000) is never exposed; query it through the engine, or add a `127.0.0.1:8123:8123`
   port mapping and reach it over an ssh tunnel.
-- Secrets live only in `deploy/.env` on the VM (`chmod 600`, git-ignored). Rotate `ENGINE_INGEST_TOKEN` by
+- Secrets live only in the root `.env` on the VM (`deploy/.env` links to it; `chmod 600`, git-ignored). Rotate `ENGINE_INGEST_TOKEN` by
   listing old,new comma-separated, redeploying apps, then removing the old one.
 - `ENGINE_CORS_ORIGIN` defaults to `http://localhost:3300`.
 - A 4 GB VM: set `CLICKHOUSE_MEMORY_LIMIT=2g ENGINE_MEMORY_LIMIT=1g MONITOR_MEMORY_LIMIT=768m` in `.env`,

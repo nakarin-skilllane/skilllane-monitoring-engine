@@ -16,7 +16,8 @@
 # What it does:
 #   1. [Linux] Docker Engine + compose plugin
 #   2. clone or pull the repo into WORKDIR
-#   3. deploy/.env from .env.example with random secrets (kept when it exists)
+#   3. .env at the repo root (deploy/.env links to it) from .env.example with random secrets
+#      and no dev queues (kept when it exists; an older deploy/.env file is moved there)
 #   4. docker compose build (both images, on this machine) and docker compose up -d
 set -euo pipefail
 
@@ -67,13 +68,20 @@ fetch() { # fetch <repo url> <dir> <local path>
 }
 fetch "$ENGINE_REPO" "$WORKDIR/skilllane-monitoring-engine" "${LOCAL_ENGINE:-}"
 
-DEPLOY="$WORKDIR/skilllane-monitoring-engine/deploy"
-cd "$DEPLOY"
+ROOT="$WORKDIR/skilllane-monitoring-engine"
+DEPLOY="$ROOT/deploy"
+cd "$ROOT"
 if [ "$SOURCE" = local ]; then TAG="local-$(date +%Y%m%d%H%M)"
-else TAG="$(git -C "$WORKDIR/skilllane-monitoring-engine" rev-parse --short HEAD)"; fi
+else TAG="$(git -C "$ROOT" rev-parse --short HEAD)"; fi
 
-# ---- 3. .env -----------------------------------------------------------------------------
+# ---- 3. .env (repo root; deploy/.env is a link to it) -------------------------------------
+# A deploy made before the single .env kept its own file in deploy/: it becomes the root one.
+if [ -f deploy/.env ] && [ ! -L deploy/.env ]; then
+  [ ! -e .env ] || { echo "Both .env and deploy/.env exist: merge them into .env, delete deploy/.env, re-run"; exit 1; }
+  mv deploy/.env .env && say "moved deploy/.env → .env"
+fi
 if [ ! -f .env ]; then
+  # .env.example carries the dev stack's queues and CORS: a deploy starts with HTTP ingest only.
   awk -v t="$TAG" \
       -v p1="$(rand 24)" -v p2="$(rand 24)" -v p3="$(rand 12)" -v p4="$(rand 32)" -v p5="$(rand 32)" '
     /^IMAGE_TAG=/                            { print "IMAGE_TAG=" t; next }
@@ -82,6 +90,7 @@ if [ ! -f .env ]; then
     /^SKILLLANE_MONITORING_ADMIN_PASSWORD=/  { print "SKILLLANE_MONITORING_ADMIN_PASSWORD=" p3; next }
     /^SKILLLANE_MONITORING_AUTH_SECRET=/     { print "SKILLLANE_MONITORING_AUTH_SECRET=" p4; next }
     /^ENGINE_INGEST_TOKEN=/                  { print "ENGINE_INGEST_TOKEN=" p5; next }
+    /^(LOG_KAFKA_BROKERS|LOG_RABBITMQ_URL|LOG_BULLMQ_REDIS_URL|ENGINE_CORS_ORIGIN)=/ { sub(/=.*/, "="); print; next }
     { print }' .env.example > .env
   chmod 600 .env
   say ".env written (random secrets; printed at the end)"
@@ -90,6 +99,8 @@ else
   awk -v t="$TAG" '/^IMAGE_TAG=/ { print "IMAGE_TAG=" t; next } { print }' .env > .env.tmp && mv .env.tmp .env && chmod 600 .env
   say ".env kept; IMAGE_TAG=$TAG"
 fi
+ln -sfn ../.env deploy/.env
+cd "$DEPLOY"
 env_get() { grep -E "^$1=" .env | cut -d= -f2-; }
 [ -n "$(env_get CLICKHOUSE_S3_URL)" ] || say "CLICKHOUSE_S3_URL not set: cold storage off, everything stays on this disk"
 

@@ -5,16 +5,21 @@
 ```sh
 mkdir -p ~/skilllane-monitoring-deploy && cd ~/skilllane-monitoring-deploy
 git clone --branch main https://github.com/nakarin-skilllane/skilllane-monitoring-engine.git
-cd skilllane-monitoring-engine/deploy
+cd skilllane-monitoring-engine
 ```
 
 ## 2. `.env`
 
+`.env` ไฟล์เดียวที่ root ใช้ทั้ง dev และ deploy · `deploy/.env` เป็น link ไปที่ไฟล์นี้
+
 ```sh
 cp .env.example .env && chmod 600 .env
+ln -s ../.env deploy/.env     # compose ใน deploy/ อ่าน .env ไฟล์เดียวกัน
 openssl rand -hex 24          # ใช้สร้างค่าสุ่มให้รหัสแต่ละตัว
 nano .env
 ```
+
+`.env.example` มีค่าของ dev ใส่ไว้ ตอน deploy ต้อง: เปลี่ยนรหัสด้านล่างเป็นค่าสุ่ม และลบค่า queue ของ dev (`LOG_KAFKA_BROKERS`, `LOG_RABBITMQ_URL`, `LOG_BULLMQ_REDIS_URL`) ถ้าจะรับทาง HTTP อย่างเดียว · `CLICKHOUSE_URL`, `ENGINE_PORT` และตัวแปรของ SDK เป็นของ dev compose ตั้งให้ container เอง
 
 **บังคับ** = ต้องใส่ก่อน start ครั้งแรก · ช่องที่ไม่บังคับปล่อยค่า default ได้
 
@@ -52,7 +57,7 @@ nano .env
 
 ### Queue ของแอป (ใส่เมื่อให้ engine อ่าน queue แทน HTTP)
 
-ว่างทั้งหมด = รับทาง HTTP อย่างเดียว · ค่าต้องตรงกับที่แอปตั้งใน SDK · queue ต้องเข้าถึงได้จากเครื่องนี้ (ควรมี TLS + auth)
+ว่างทั้งหมด = รับทาง HTTP อย่างเดียว (`.env.example` มี queue ของ dev ใส่ไว้ ต้องลบหรือเปลี่ยน) · ค่าต้องตรงกับที่แอปตั้งใน SDK · queue ต้องเข้าถึงได้จากเครื่องนี้ (ควรมี TLS + auth)
 
 | ตัวแปร | คืออะไร |
 |---|---|
@@ -86,7 +91,7 @@ nano .env
 ```sh
 cd ~/skilllane-monitoring-deploy/skilllane-monitoring-engine
 TAG=$(git rev-parse --short HEAD)
-sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/" deploy/.env          # Mac: sed -i ''
+sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/" .env && rm .env.bak   # ใช้ได้ทั้ง Mac และ Linux
 
 docker build -f deploy/Dockerfile.engine  -t skilllane-monitoring-engine:$TAG  .
 docker build -f deploy/Dockerfile.monitor -t skilllane-monitoring-monitor:$TAG .
