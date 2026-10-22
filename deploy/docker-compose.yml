@@ -26,9 +26,10 @@ services:
       # Read by clickhouse-init/01-reader.sh at first start.
       CLICKHOUSE_READER_USER: ${CLICKHOUSE_READER_USER:-skilllane_monitoring_reader}
       CLICKHOUSE_READER_PASSWORD: ${CLICKHOUSE_READER_PASSWORD:?set CLICKHOUSE_READER_PASSWORD in .env}
-      # Cold storage (clickhouse-config/storage-s3.xml), optional. Unset: a placeholder disk nothing
-      # uses (ClickHouse does not start with an empty endpoint). A missing bucket only stops the moves.
-      CLICKHOUSE_S3_ENDPOINT: ${CLICKHOUSE_S3_ENDPOINT:-http://s3-not-configured.invalid/none/}
+      # Cold storage (clickhouse-config/storage-s3.xml), optional: <URL>/<BUCKET>/clickhouse/.
+      # URL unset: a placeholder disk nothing uses (ClickHouse does not start with an empty
+      # endpoint). A missing bucket only stops the moves; nothing creates it.
+      CLICKHOUSE_S3_ENDPOINT: ${CLICKHOUSE_S3_URL:-http://s3-not-configured.invalid}/${CLICKHOUSE_S3_BUCKET:-skilllane-monitoring}/clickhouse/
       CLICKHOUSE_S3_ACCESS_KEY_ID: ${CLICKHOUSE_S3_ACCESS_KEY_ID:-none}
       CLICKHOUSE_S3_SECRET_ACCESS_KEY: ${CLICKHOUSE_S3_SECRET_ACCESS_KEY:-none}
       CLICKHOUSE_S3_REGION: ${CLICKHOUSE_S3_REGION:-us-east-1}
@@ -64,8 +65,8 @@ services:
       CLICKHOUSE_URL: http://clickhouse:8123
       ENGINE_PORT: "5100"
       ENGINE_CORS_ORIGIN: ${ENGINE_CORS_ORIGIN:-http://localhost:3300}
-      # Only with an S3 endpoint: without one the tables keep the default policy.
-      CLICKHOUSE_COLD_STORAGE_POLICY: ${CLICKHOUSE_S3_ENDPOINT:+tiered}
+      # Only with an S3 URL: without one the tables keep the default policy.
+      CLICKHOUSE_COLD_STORAGE_POLICY: ${CLICKHOUSE_S3_URL:+tiered}
     # HTTP ingest + query API. 127.0.0.1 by default: no TLS, so keep it off the network.
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:5100:5100"

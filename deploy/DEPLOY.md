@@ -71,7 +71,8 @@ nano .env
 
 | ตัวแปร | คืออะไร |
 |---|---|
-| `CLICKHOUSE_S3_ENDPOINT` | `https://<bucket>.s3.<region>.amazonaws.com/<prefix>/` (ลงท้าย `/`) · MinIO: `http://<host>:9000/<bucket>/<prefix>/` |
+| `CLICKHOUSE_S3_URL` | URL ของ S3 ไม่ใส่ bucket ไม่ลงท้าย `/` · AWS: `https://s3.<region>.amazonaws.com` · MinIO: `http://<host>:9000` · ว่าง = ปิด |
+| `CLICKHOUSE_S3_BUCKET` | ชื่อ bucket (default `skilllane-monitoring`) · **ต้องสร้างไว้ก่อน** ระบบไม่สร้างให้ · ไฟล์อยู่ใต้ `<bucket>/clickhouse/` |
 | `CLICKHOUSE_S3_ACCESS_KEY_ID`, `CLICKHOUSE_S3_SECRET_ACCESS_KEY` | key ที่อ่าน/เขียน/ลบได้ใน bucket นั้น |
 | `CLICKHOUSE_S3_REGION` | region ของ bucket |
 | `CLICKHOUSE_COLD_AFTER_DAYS` | ย้ายเมื่ออายุเกินกี่วัน (default `14`) |
