@@ -20,6 +20,9 @@
 #      and no dev queues (kept when it exists; an older deploy/.env file is moved there)
 #   4. docker compose build (both images, on this machine) and docker compose up -d
 set -euo pipefail
+# The containers run as non-root users and read files of this checkout (ClickHouse mounts
+# clickhouse-config/ and clickhouse-init/): a stricter host umask (007, 027) would hide them.
+umask 022
 
 WORKDIR="${WORKDIR:-$HOME/skilllane-monitoring-deploy}"
 ENGINE_REPO="${ENGINE_REPO:-https://github.com/nakarin-skilllane/skilllane-monitoring-engine.git}"
@@ -75,6 +78,7 @@ if [ "$SOURCE" = local ]; then TAG="local-$(date +%Y%m%d%H%M)"
 else TAG="$(git -C "$ROOT" rev-parse --short HEAD)"; fi
 
 # ---- 3. .env (repo root; deploy/.env is a link to it) -------------------------------------
+umask 077   # .env and .env.tmp hold the secrets: never readable by others, not even before chmod
 # A deploy made before the single .env kept its own file in deploy/: it becomes the root one.
 if [ -f deploy/.env ] && [ ! -L deploy/.env ]; then
   [ ! -e .env ] || { echo "Both .env and deploy/.env exist: merge them into .env, delete deploy/.env, re-run"; exit 1; }
@@ -100,6 +104,7 @@ else
   say ".env kept; IMAGE_TAG=$TAG"
 fi
 ln -sfn ../.env deploy/.env
+umask 022
 cd "$DEPLOY"
 env_get() { grep -E "^$1=" .env | cut -d= -f2-; }
 [ -n "$(env_get CLICKHOUSE_S3_URL)" ] || say "CLICKHOUSE_S3_URL not set: cold storage off, everything stays on this disk"

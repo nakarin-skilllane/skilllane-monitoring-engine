@@ -15,6 +15,9 @@ RUN pnpm install --frozen-lockfile --filter @skilllane/monitoring-engine
 COPY apps/engine/ apps/engine/
 RUN pnpm --filter @skilllane/monitoring-engine build \
  && pnpm install --prod --frozen-lockfile --filter @skilllane/monitoring-engine
+COPY clickhouse/schema.sql clickhouse/
+# COPY keeps the build host's file modes: under a umask like 007 USER node could not read them.
+RUN find /app -path '*/node_modules' -prune -o -exec chmod a+rX {} +
 
 FROM node:20-bookworm-slim
 ENV NODE_ENV=production \
@@ -26,7 +29,7 @@ COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/apps/engine/package.json ./
 COPY --from=build /app/apps/engine/node_modules ./node_modules
 COPY --from=build /app/apps/engine/dist ./dist
-COPY clickhouse/schema.sql /app/clickhouse/schema.sql
+COPY --from=build /app/clickhouse/schema.sql /app/clickhouse/schema.sql
 USER node
 EXPOSE 5100
 HEALTHCHECK --interval=15s --timeout=10s --start-period=40s --retries=5 \

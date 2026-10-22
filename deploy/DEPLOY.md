@@ -3,6 +3,7 @@
 ## 1. Clone
 
 ```sh
+umask 022                     # container อ่านไฟล์ของ repo ได้แม้เครื่องตั้ง umask เข้มงวด (007, 027) · ใช้ก่อน git pull ด้วย
 mkdir -p ~/skilllane-monitoring-deploy && cd ~/skilllane-monitoring-deploy
 git clone --branch main https://github.com/nakarin-skilllane/skilllane-monitoring-engine.git
 cd skilllane-monitoring-engine

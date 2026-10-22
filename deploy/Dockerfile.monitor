@@ -19,6 +19,8 @@ COPY apps/monitor/ apps/monitor/
 RUN pnpm --filter @skilllane/monitoring-monitor build \
  && pnpm install --prod --frozen-lockfile --filter @skilllane/monitoring-monitor \
  && rm -rf apps/monitor/.next/cache
+# COPY keeps the build host's file modes: under a umask like 007 USER node could not read them.
+RUN find /app -path '*/node_modules' -prune -o -exec chmod a+rX {} +
 
 FROM node:20-bookworm-slim
 ARG ENGINE_URL=http://engine:5100
