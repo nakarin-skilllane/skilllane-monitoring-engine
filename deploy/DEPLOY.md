@@ -1,12 +1,4 @@
-# Deploy skilllane-monitoring (VM เครื่องเดียว)
-
-stack: `caddy` (HTTPS :80/:443) → `monitor` (Next.js) → `engine` (ingest + API) → `clickhouse`
-รายละเอียดไฟล์ใน `deploy/` ดู [README.md](README.md)
-
-**ต้องมีก่อน**
-- เครื่องมี Docker (พร้อม compose plugin) และ git, เปิด port 80/443 จากภายนอก
-- DNS: `monitor.<DOMAIN>` และ `engine.<DOMAIN>` ชี้มาที่ IP ของเครื่อง (Caddy ขอใบรับรองได้เมื่อชื่อ resolve แล้ว)
-- โค้ดที่จะ deploy อยู่บน branch `main` แล้ว
+# Deploy skilllane-monitoring-engine
 
 ## 1. Clone
 
@@ -110,22 +102,3 @@ curl https://engine.<DOMAIN>/api/health             # {"ok":true,"clickhouse":tr
 
 เปิด `https://monitor.<DOMAIN>` แล้ว login ด้วย `SKILLLANE_MONITORING_ADMIN_USERNAME` / `SKILLLANE_MONITORING_ADMIN_PASSWORD`
 แอปที่ส่งทาง HTTP ตั้ง `LOG_HTTP_URL=https://engine.<DOMAIN>` และ `LOG_HTTP_TOKEN=<ENGINE_INGEST_TOKEN>`
-
-## 5. อัปเดต / rollback / คำสั่งอื่น
-
-```sh
-# อัปเดตเป็น commit ใหม่
-cd ~/skilllane-monitoring-deploy/skilllane-monitoring-engine && git pull --ff-only
-# แล้วทำข้อ 3 และ docker compose up -d --no-build
-
-# rollback: ตั้ง IMAGE_TAG กลับเป็น tag เดิม (docker images | grep skilllane-monitoring)
-docker compose up -d --no-build
-
-# แก้ .env แล้วให้มีผล
-docker compose up -d
-
-docker compose logs -f engine        # ดู log
-docker compose down                  # หยุด (ข้อมูลยังอยู่) · ห้ามใส่ -v ถ้าไม่ตั้งใจลบข้อมูล
-```
-
-ทางลัดทำข้อ 1–4 ด้วยสคริปต์เดียว: `DOMAIN=example.com bash deploy/setup-vm.sh` (ดู [README.md](README.md))
