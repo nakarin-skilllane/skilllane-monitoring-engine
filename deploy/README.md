@@ -1,6 +1,6 @@
 # Deploy: skilllane-monitoring on one VM
 
-คู่มือภาษาไทยแบบทำมือทีละคำสั่ง (เตรียม VM, clone, .env, docker build, compose, อัปเดต, แก้ปัญหา): [DEPLOY.md](DEPLOY.md)
+คู่มือภาษาไทยแบบสั้น (clone, .env ทุกตัว, build, run, อัปเดต): [DEPLOY.md](DEPLOY.md)
 
 ClickHouse + engine + monitor behind Caddy (HTTPS) on a single Ubuntu VM. **Everything is
 built on the VM from git**: one script clones this repo, builds the two images there and runs
