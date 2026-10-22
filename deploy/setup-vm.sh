@@ -111,6 +111,7 @@ else
   say ".env kept; IMAGE_TAG=$TAG"
 fi
 env_get() { grep -E "^$1=" .env | cut -d= -f2-; }
+[ -n "$(env_get CLICKHOUSE_S3_ENDPOINT)" ] || say "CLICKHOUSE_S3_ENDPOINT not set: cold storage off, everything stays on this disk"
 
 # ---- 4. build + up -------------------------------------------------------------------------
 say "building images on this machine (first time: several minutes)"

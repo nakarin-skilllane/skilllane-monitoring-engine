@@ -32,6 +32,12 @@ export interface EngineConfig {
     readerUser: string
     readerPassword: string
     database: string
+    /**
+     * CLICKHOUSE_COLD_STORAGE_POLICY (empty = off): logs / spans use this storage policy and move
+     * to CLICKHOUSE_COLD_VOLUME (default `cold`) after CLICKHOUSE_COLD_AFTER_DAYS (default 14).
+     * The policy must exist in the ClickHouse config (deploy/clickhouse-config/storage-s3.xml).
+     */
+    coldStorage?: { policy: string; volume: string; afterDays: number }
   }
   /** LOG_EXPORT, resolved like the SDK does (contract resolveExportMode). */
   transport: ExportMode
@@ -134,6 +140,13 @@ export function loadConfig(env: Env = process.env): EngineConfig {
       readerUser: str(env, 'CLICKHOUSE_READER_USER') ?? 'skilllane_monitoring_reader',
       readerPassword: str(env, 'CLICKHOUSE_READER_PASSWORD') ?? 'skilllane_monitoring_reader',
       database: str(env, 'CLICKHOUSE_DATABASE') ?? 'skilllane_monitoring',
+      coldStorage: str(env, 'CLICKHOUSE_COLD_STORAGE_POLICY')
+        ? {
+            policy: str(env, 'CLICKHOUSE_COLD_STORAGE_POLICY')!,
+            volume: str(env, 'CLICKHOUSE_COLD_VOLUME') ?? 'cold',
+            afterDays: int(env, 'CLICKHOUSE_COLD_AFTER_DAYS', 14),
+          }
+        : undefined,
     },
     transport: mode,
     transportInvalid: invalid,

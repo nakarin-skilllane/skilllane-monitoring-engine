@@ -3,6 +3,9 @@ import { type ClickHouseClient, createClient } from '@clickhouse/client'
 import { config } from '../config'
 import { readSchema } from './schema'
 
+/** Tables whose old parts go to cold storage. */
+export const COLD_TABLES = ['logs', 'spans'] as const
+
 /**
  * Two ClickHouse clients:
  * - `writer` (CLICKHOUSE_USER): inserts and schema. Inserts use JSONEachRow;
@@ -88,8 +91,32 @@ export class ClickhouseService implements OnModuleInit, OnApplicationShutdown {
         await admin.command({ query })
       }
       this.logger.log(`Schema applied: ${statements.length} statements from ${file}`)
+      await this.applyColdStorage(admin)
     } finally {
       await admin.close()
+    }
+  }
+
+  /**
+   * CLICKHOUSE_COLD_STORAGE_POLICY: logs and spans get the storage policy. No move TTL: with one,
+   * an insert of rows already past it writes straight to S3 and fails while the bucket is
+   * missing. ColdStorageMover moves the old parts instead.
+   */
+  private async applyColdStorage(admin: ClickHouseClient): Promise<void> {
+    const cold = config.clickhouse.coldStorage
+    if (!cold) return
+    if (!/^\w+$/.test(cold.policy)) throw new Error('CLICKHOUSE_COLD_STORAGE_POLICY must be a plain name')
+    const db = this.database
+    for (const table of COLD_TABLES) {
+      const result = await admin.query({
+        query: 'SELECT storage_policy FROM system.tables WHERE database = {db:String} AND name = {table:String}',
+        query_params: { db, table },
+        format: 'JSONEachRow',
+      })
+      const [current] = await result.json<{ storage_policy: string }>()
+      if (!current || current.storage_policy === cold.policy) continue
+      await admin.command({ query: `ALTER TABLE ${db}.${table} MODIFY SETTING storage_policy = '${cold.policy}'` })
+      this.logger.log(`${db}.${table}: storage policy ${current.storage_policy} → ${cold.policy}`)
     }
   }
 

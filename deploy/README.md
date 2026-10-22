@@ -1,5 +1,7 @@
 # Deploy: skilllane-monitoring on one VM
 
+คู่มือภาษาไทยแบบทำมือทีละคำสั่ง (เตรียม VM, clone, .env, docker build, compose, อัปเดต, แก้ปัญหา): [DEPLOY.md](DEPLOY.md)
+
 ClickHouse + engine + monitor behind Caddy (HTTPS) on a single Ubuntu VM. **Everything is
 built on the VM from git**: one script clones this repo, builds the two images there and runs
 `docker compose up`. The SDK and its wire contract are the npm package `skilllane-monitoring`
@@ -19,7 +21,7 @@ with the bearer token `ENGINE_INGEST_TOKEN`).
 |---|---|
 | `setup-vm.sh` | the whole deploy: Docker, firewall, clone/pull the repo, `.env`, build, up. Re-run to update. |
 | `push-to-vm.sh` | runs `setup-vm.sh` on the VM over ssh |
-| `docker-compose.yml`, `Caddyfile`, `clickhouse-init/` | what runs |
+| `docker-compose.yml`, `Caddyfile`, `clickhouse-init/`, `clickhouse-config/` | what runs; `clickhouse-config/storage-s3.xml` moves log / span parts older than 14 days to S3 when `CLICKHOUSE_S3_*` is set in `.env` (optional) |
 | `Dockerfile.engine`, `Dockerfile.monitor` | the images; build context = this repo's root (`.dockerignore` there) |
 | `.env.example` | every setting; `setup-vm.sh` turns it into `.env` with random secrets |
 | `build-push.sh` | optional: build on your Mac and push to GHCR, for a VM too small to build |
@@ -28,6 +30,8 @@ with the bearer token `ENGINE_INGEST_TOKEN`).
 
 - **Commit and push this repo.** The VM clones `main`; uncommitted work is not deployed. A new
   contract or SDK change must be published to npm first (`skilllane-monitoring`), then referenced here.
+- **Optional: an S3 bucket** (or any S3-compatible store) and a key with read / write / delete on it: log / span
+  parts older than 14 days move there (`CLICKHOUSE_S3_*` in `.env`). Without it everything stays on the VM disk.
 - **Oracle console**
   1. Instance: VM.Standard.A1.Flex 2 OCPU / 12 GB, Canonical Ubuntu 24.04 (aarch64), boot volume 100 GB,
      your SSH public key, public subnet with a public IPv4.

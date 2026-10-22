@@ -25,8 +25,15 @@ services:
       # Read by clickhouse-init/01-reader.sh at first start.
       CLICKHOUSE_READER_USER: ${CLICKHOUSE_READER_USER:-skilllane_monitoring_reader}
       CLICKHOUSE_READER_PASSWORD: ${CLICKHOUSE_READER_PASSWORD:?set CLICKHOUSE_READER_PASSWORD in .env}
+      # Cold storage (clickhouse-config/storage-s3.xml), optional. Unset: a placeholder disk nothing
+      # uses (ClickHouse does not start with an empty endpoint). A missing bucket only stops the moves.
+      CLICKHOUSE_S3_ENDPOINT: ${CLICKHOUSE_S3_ENDPOINT:-http://s3-not-configured.invalid/none/}
+      CLICKHOUSE_S3_ACCESS_KEY_ID: ${CLICKHOUSE_S3_ACCESS_KEY_ID:-none}
+      CLICKHOUSE_S3_SECRET_ACCESS_KEY: ${CLICKHOUSE_S3_SECRET_ACCESS_KEY:-none}
+      CLICKHOUSE_S3_REGION: ${CLICKHOUSE_S3_REGION:-us-east-1}
     volumes:
       - ./clickhouse-init/01-reader.sh:/docker-entrypoint-initdb.d/01-reader.sh:ro
+      - ./clickhouse-config/storage-s3.xml:/etc/clickhouse-server/config.d/storage-s3.xml:ro
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
     ulimits:
@@ -56,6 +63,8 @@ services:
       CLICKHOUSE_URL: http://clickhouse:8123
       ENGINE_PORT: "5100"
       ENGINE_CORS_ORIGIN: ${ENGINE_CORS_ORIGIN:-https://monitor.${DOMAIN}}
+      # Only with an S3 endpoint: without one the tables keep the default policy.
+      CLICKHOUSE_COLD_STORAGE_POLICY: ${CLICKHOUSE_S3_ENDPOINT:+tiered}
     depends_on:
       clickhouse:
         condition: service_healthy
