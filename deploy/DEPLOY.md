@@ -22,7 +22,6 @@ nano .env
 
 | ตัวแปร | คืออะไร | หมายเหตุ |
 |---|---|---|
-| `DOMAIN` | โดเมนหลัก เช่น `example.com` (ไม่ใส่ `monitor.`/`engine.`) | ทดสอบบนเครื่องใช้ `localhost` |
 | `IMAGE_TAG` | tag ของ image ที่ build (ใช้ git sha) | เปลี่ยนทุกครั้งที่ build ใหม่ (ข้อ 3) |
 | `CLICKHOUSE_PASSWORD` | รหัส user เขียนของ ClickHouse (engine ใช้) | ค่าสุ่ม |
 | `CLICKHOUSE_READER_PASSWORD` | รหัส user อ่านอย่างเดียว (query API, AI) | ค่าสุ่ม · **ถูกสร้างตอน start ครั้งแรกเท่านั้น** เปลี่ยนใน `.env` ทีหลังไม่มีผล |
@@ -34,12 +33,13 @@ nano .env
 
 | ตัวแปร | default | คืออะไร / ใส่เมื่อไหร่ |
 |---|---|---|
+| `BIND_ADDRESS` | `127.0.0.1` | IP ที่ monitor (:3300) และ engine (:5100) รับ · `127.0.0.1` = เข้าได้จากเครื่องนี้เท่านั้น (HTTP ไม่เข้ารหัส อย่าเปิดออก network โดยไม่มี proxy ที่ทำ HTTPS) |
 | `ENGINE_IMAGE`, `MONITOR_IMAGE` | build บนเครื่อง | ใส่เมื่อดึง image จาก registry แทนการ build |
 | `CLICKHOUSE_DATABASE` | `skilllane_monitoring` | ชื่อ database · ตั้งก่อน start ครั้งแรก |
 | `CLICKHOUSE_USER`, `CLICKHOUSE_READER_USER` | `skilllane_monitoring`, `skilllane_monitoring_reader` | ชื่อ user เขียน / อ่าน · ตั้งก่อน start ครั้งแรก |
 | `SKILLLANE_MONITORING_ADMIN_USERNAME` | `admin` | ชื่อ login ของ admin |
 | `SKILLLANE_MONITORING_SESSION_HOURS` | `8` | อายุ session ของหน้า monitor (ชั่วโมง) |
-| `ENGINE_INGEST_HTTP` | `true` | รับ log ทาง HTTP (`POST https://engine.<DOMAIN>/api/ingest/<stream>`) · `false` เมื่อใช้ queue อย่างเดียว |
+| `ENGINE_INGEST_HTTP` | `true` | รับ log ทาง HTTP (`POST http://localhost:5100/api/ingest/<stream>`) · `false` เมื่อใช้ queue อย่างเดียว |
 | `ENGINE_INGEST_MAX_BYTES` | `2000000` | ขนาด request สูงสุดต่อครั้ง |
 | `ENGINE_INGEST_MAX_INFLIGHT` | `64` | request ที่เขียนพร้อมกันได้ เกินนี้ตอบ 503 |
 | `ENGINE_ROLE` | `all` | `ingest` / `api` / `all` · เครื่องเดียวใช้ `all` |
@@ -47,7 +47,7 @@ nano .env
 | `ENGINE_CONSUMER_GROUP` | `skilllane-monitoring-engine` | consumer group ของ Kafka |
 | `ENGINE_CONCURRENCY` | `50` | จำนวน message ที่ประมวลผลพร้อมกัน |
 | `ENGINE_FLUSH_MS`, `ENGINE_FLUSH_ROWS` | `1000`, `5000` | เขียน ClickHouse ทุกกี่ ms หรือครบกี่แถว |
-| `ENGINE_CORS_ORIGIN` | `https://monitor.<DOMAIN>` | ใส่เมื่อหน้าเว็บอยู่โดเมนอื่น |
+| `ENGINE_CORS_ORIGIN` | `http://localhost:3300` | ใส่เมื่อหน้าเว็บอยู่ที่อื่น |
 | `CLICKHOUSE_MEMORY_LIMIT`, `ENGINE_MEMORY_LIMIT`, `MONITOR_MEMORY_LIMIT` | `6g`, `1500m`, `1g` | สำหรับ VM 12 GB · VM 4 GB ใช้ `2g`, `1g`, `768m` |
 
 ### Queue ของแอป (ใส่เมื่อให้ engine อ่าน queue แทน HTTP)
@@ -97,8 +97,8 @@ docker build -f deploy/Dockerfile.monitor -t skilllane-monitoring-monitor:$TAG .
 cd deploy
 docker compose up -d --no-build
 docker compose ps                                   # ทุกตัว healthy
-curl https://engine.<DOMAIN>/api/health             # {"ok":true,"clickhouse":true,...}
+curl http://localhost:5100/api/health               # {"ok":true,"clickhouse":true,...}
 ```
 
-เปิด `https://monitor.<DOMAIN>` แล้ว login ด้วย `SKILLLANE_MONITORING_ADMIN_USERNAME` / `SKILLLANE_MONITORING_ADMIN_PASSWORD`
-แอปที่ส่งทาง HTTP ตั้ง `LOG_HTTP_URL=https://engine.<DOMAIN>` และ `LOG_HTTP_TOKEN=<ENGINE_INGEST_TOKEN>`
+เปิด `http://localhost:3300` แล้ว login ด้วย `SKILLLANE_MONITORING_ADMIN_USERNAME` / `SKILLLANE_MONITORING_ADMIN_PASSWORD`
+แอปที่ส่งทาง HTTP ตั้ง `LOG_HTTP_URL=http://localhost:5100` และ `LOG_HTTP_TOKEN=<ENGINE_INGEST_TOKEN>`

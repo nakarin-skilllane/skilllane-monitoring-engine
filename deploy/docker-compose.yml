@@ -1,16 +1,17 @@
-# skilllane-monitoring on one VM: ClickHouse + engine + monitor behind Caddy (HTTPS).
+# skilllane-monitoring on one machine: ClickHouse + engine + monitor, no reverse proxy.
 # The engine and monitor images are built here from this repo (setup-vm.sh clones it,
 # builds and starts); the SDK and its wire contract come from npm (skilllane-monitoring).
 #
-#   cp .env.example .env   # fill DOMAIN + secrets
+#   cp .env.example .env   # fill the secrets
 #   docker compose build && docker compose up -d
 #
 # Set ENGINE_IMAGE / MONITOR_IMAGE / IMAGE_TAG to run images pulled from a registry
 # instead (deploy/build-push.sh pushes them to GHCR); `docker compose pull` then.
 #
-# Only Caddy publishes ports (80/443). ClickHouse, the engine and the monitor are
-# reachable on the compose network only. The engine's queue is the customer's
-# (LOG_* in .env); with none set it is HTTP ingest only.
+# The monitor (http://localhost:3300) and the engine (http://localhost:5100) are published on
+# BIND_ADDRESS (default 127.0.0.1: this machine only; plain HTTP, no TLS). ClickHouse is on the
+# compose network only. The engine's queue is the customer's (LOG_* in .env); with none set it
+# is HTTP ingest only.
 name: skilllane-monitoring
 
 services:
@@ -62,9 +63,12 @@ services:
       # Inside the compose network; these win over anything in .env.
       CLICKHOUSE_URL: http://clickhouse:8123
       ENGINE_PORT: "5100"
-      ENGINE_CORS_ORIGIN: ${ENGINE_CORS_ORIGIN:-https://monitor.${DOMAIN}}
+      ENGINE_CORS_ORIGIN: ${ENGINE_CORS_ORIGIN:-http://localhost:3300}
       # Only with an S3 endpoint: without one the tables keep the default policy.
       CLICKHOUSE_COLD_STORAGE_POLICY: ${CLICKHOUSE_S3_ENDPOINT:+tiered}
+    # HTTP ingest + query API. 127.0.0.1 by default: no TLS, so keep it off the network.
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:5100:5100"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -87,6 +91,8 @@ services:
       dockerfile: deploy/Dockerfile.monitor
     environment:
       ENGINE_URL: http://engine:5100
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:3300:3300"
     depends_on:
       engine:
         condition: service_healthy
@@ -102,25 +108,6 @@ services:
           memory: ${MONITOR_MEMORY_LIMIT:-1g}
     restart: unless-stopped
 
-  caddy:
-    image: caddy:2-alpine
-    environment:
-      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - monitor
-      - engine
-    restart: unless-stopped
-
 volumes:
   clickhouse-data:
   clickhouse-logs:
-  caddy-data:
-  caddy-config:

@@ -4,11 +4,9 @@
 # runs the same steps without the Docker install / firewall part, as a local rehearsal.
 # Idempotent: run it again to pull the latest commits and rebuild.
 #
-#   DOMAIN=monitor.example.com-less-domain bash setup-vm.sh      # on the VM (asks when unset)
-#   bash setup-vm.sh                                              # on a Mac: DOMAIN=localhost
+#   bash setup-vm.sh
 #
 # Settings (env):
-#   DOMAIN        public domain: monitor.<DOMAIN> and engine.<DOMAIN> must point at this machine
 #   WORKDIR       where the repo is checked out   (default $HOME/skilllane-monitoring-deploy)
 #   ENGINE_REPO   git URL of this repo            (default github nakarin-skilllane/skilllane-monitoring-engine)
 #   BRANCH        branch to deploy                (default main)
@@ -16,8 +14,7 @@
 #                 instead of cloning: for checking uncommitted work, never for a VM
 #
 # What it does:
-#   1. [Linux] Docker Engine + compose plugin; open 80/443 in the host iptables (Oracle's
-#      Ubuntu image rejects everything but 22 there — the VCN security list is separate)
+#   1. [Linux] Docker Engine + compose plugin
 #   2. clone or pull the repo into WORKDIR
 #   3. deploy/.env from .env.example with random secrets (kept when it exists)
 #   4. docker compose build (both images, on this machine) and docker compose up -d
@@ -32,7 +29,7 @@ OS="$(uname -s)"
 say() { printf '\n\033[1m[setup] %s\033[0m\n' "$*"; }
 rand() { openssl rand -hex "$1"; }
 
-# ---- 1. host: Docker + firewall (Linux only) -------------------------------------------
+# ---- 1. host: Docker (Linux only) ---------------------------------------------------------
 DOCKER="docker"
 if [ "$OS" = Linux ]; then
   if ! command -v docker >/dev/null 2>&1; then
@@ -46,18 +43,8 @@ if [ "$OS" = Linux ]; then
   docker info >/dev/null 2>&1 || DOCKER="sudo docker"
   command -v git >/dev/null 2>&1 || sudo apt-get install -y git
 
-  if sudo iptables -S INPUT | grep -q -- '-j REJECT'; then
-    for port in 80 443; do
-      sudo iptables -C INPUT -p tcp --dport "$port" -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT 2>/dev/null \
-        || sudo iptables -I INPUT 5 -p tcp --dport "$port" -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-    done
-    sudo iptables -C INPUT -p udp --dport 443 -j ACCEPT 2>/dev/null || sudo iptables -I INPUT 5 -p udp --dport 443 -j ACCEPT
-    if command -v netfilter-persistent >/dev/null 2>&1; then sudo netfilter-persistent save >/dev/null
-    else sudo mkdir -p /etc/iptables && sudo sh -c 'iptables-save > /etc/iptables/rules.v4'; fi
-    say "host firewall: 80/tcp 443/tcp 443/udp open"
-  fi
 else
-  say "$OS: skipping Docker install and firewall (local rehearsal)"
+  say "$OS: skipping Docker install (local rehearsal)"
   docker info >/dev/null 2>&1 || { echo "Docker is not running"; exit 1; }
 fi
 
@@ -87,15 +74,8 @@ else TAG="$(git -C "$WORKDIR/skilllane-monitoring-engine" rev-parse --short HEAD
 
 # ---- 3. .env -----------------------------------------------------------------------------
 if [ ! -f .env ]; then
-  domain="${DOMAIN:-}"
-  if [ -z "$domain" ]; then
-    if [ "$OS" = Darwin ]; then domain=localhost
-    else read -rp "DOMAIN (monitor.<DOMAIN> and engine.<DOMAIN> point at this VM): " domain; fi
-  fi
-  [ -n "$domain" ] || { echo "DOMAIN is required"; exit 1; }
-  awk -v d="$domain" -v t="$TAG" \
+  awk -v t="$TAG" \
       -v p1="$(rand 24)" -v p2="$(rand 24)" -v p3="$(rand 12)" -v p4="$(rand 32)" -v p5="$(rand 32)" '
-    /^DOMAIN=/                               { print "DOMAIN=" d; next }
     /^IMAGE_TAG=/                            { print "IMAGE_TAG=" t; next }
     /^CLICKHOUSE_PASSWORD=/                  { print "CLICKHOUSE_PASSWORD=" p1; next }
     /^CLICKHOUSE_READER_PASSWORD=/           { print "CLICKHOUSE_READER_PASSWORD=" p2; next }
@@ -126,20 +106,12 @@ for _ in $(seq 1 60); do
 done
 $DOCKER compose ps --format 'table {{.Service}}\t{{.Status}}'
 
-domain="$(env_get DOMAIN)"
 cat <<MSG
 
-  monitor   https://monitor.$domain      sign in: $(env_get SKILLLANE_MONITORING_ADMIN_USERNAME) / $(env_get SKILLLANE_MONITORING_ADMIN_PASSWORD)
-  engine    https://engine.$domain/api/health
-  apps      LOG_HTTP_URL=https://engine.$domain  LOG_HTTP_TOKEN=$(env_get ENGINE_INGEST_TOKEN)
+  monitor   http://localhost:3300      sign in: $(env_get SKILLLANE_MONITORING_ADMIN_USERNAME) / $(env_get SKILLLANE_MONITORING_ADMIN_PASSWORD)
+  engine    http://localhost:5100/api/health
+  apps      LOG_HTTP_URL=http://localhost:5100  LOG_HTTP_TOKEN=$(env_get ENGINE_INGEST_TOKEN)
 
-  logs      cd $DEPLOY && docker compose logs -f engine caddy
+  logs      cd $DEPLOY && docker compose logs -f engine
   update    bash $DEPLOY/setup-vm.sh      (pulls $BRANCH, rebuilds, restarts what changed)
 MSG
-if [ "$domain" = localhost ]; then
-  cat <<MSG
-  localhost: Caddy signs *.localhost with its own CA, so:
-    curl -k --resolve engine.localhost:443:127.0.0.1 https://engine.localhost/api/health
-    open https://monitor.localhost   (accept the certificate warning)
-MSG
-fi
