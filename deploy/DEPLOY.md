@@ -53,7 +53,8 @@ nano .env
 | `ENGINE_CONCURRENCY` | `50` | จำนวน message ที่ประมวลผลพร้อมกัน |
 | `ENGINE_FLUSH_MS`, `ENGINE_FLUSH_ROWS` | `1000`, `5000` | เขียน ClickHouse ทุกกี่ ms หรือครบกี่แถว |
 | `ENGINE_CORS_ORIGIN` | `http://localhost:3300` | ใส่เมื่อหน้าเว็บอยู่ที่อื่น |
-| `CLICKHOUSE_MEMORY_LIMIT`, `ENGINE_MEMORY_LIMIT`, `MONITOR_MEMORY_LIMIT` | `6g`, `1500m`, `1g` | สำหรับ VM 12 GB · VM 4 GB ใช้ `2g`, `1g`, `768m` |
+| `CLICKHOUSE_MEMORY_LIMIT` | `0` | `0` = ไม่จำกัด (ClickHouse จำกัดตัวเองที่ 90% ของ RAM เครื่อง) · ใส่ขนาด เช่น `6g` เมื่อมีงานอื่นบนเครื่องเดียวกัน |
+| `ENGINE_MEMORY_LIMIT`, `MONITOR_MEMORY_LIMIT` | `1500m`, `1g` | เครื่อง 4 GB ใช้ `1g`, `768m` |
 
 ### Queue ของแอป (ใส่เมื่อให้ engine อ่าน queue แทน HTTP)
 
