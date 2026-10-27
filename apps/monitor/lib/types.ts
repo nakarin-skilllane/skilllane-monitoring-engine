@@ -815,7 +815,7 @@ export interface ReportFigures {
   baselineWindows: number; errorGroups: { new: number; up: number }
 }
 export interface ReportTrendPoint { reportDate: string; hasData: boolean; usersAffected: number; orgsAffected: number; errorRate: number; p95Ms: number; requests: number }
-export interface ReportFeature { featureId: string; name: string; successRate: number; successRate7d: number | null; volume: number; note: string }
+export interface ReportFeature { featureId: string; name: string; successRate: number | null; successRate7d: number | null; volume: number; state: 'ok' | 'below' | 'bad' | 'idle'; note: string }
 export interface ReportIncident {
   id: string; source: 'dependency.down' | 'error_spike' | 'job.failed'; startedAtMs: number; endedAtMs: number | null
   what: string; usersAffected: number | null; state: 'ongoing' | 'resolved'
