@@ -5,5 +5,6 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     // the integration test seeds ClickHouse and builds a report
     testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 })

@@ -68,6 +68,12 @@ describe.skipIf(!process.env.REPORT_IT)('daily report on ClickHouse (REPORT_IT=1
     expect(p.slowRoutes.map((s) => s.route)).toEqual(['GET /classes/:id'])
   })
 
+  it('main features from usage: the classes routes as one feature, no health probe', () => {
+    expect(p.features).toEqual([
+      { featureId: 'school-core-api:classes', name: 'ห้องเรียน', successRate: 0.975, successRate7d: 0.975, volume: 960, state: 'ok', note: '' },
+    ])
+  })
+
   it('no PII in the payload', () => {
     expect(JSON.stringify(p)).not.toMatch(/"u1\d?"|"org\d"|user_id|organization_id/)
   })

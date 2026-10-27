@@ -8,6 +8,7 @@ import type {
   OutageWindow,
   ReportDependency,
   ReportError,
+  ReportFeature,
   ReportFigures,
   ReportFollowup,
   ReportIncident,
@@ -355,8 +356,8 @@ const FIGURE_LABELS: Array<[keyof Pick<ReportFigures, 'usersAffected' | 'orgsAff
   ['p95Ms', 'ความเร็ว (p95)'],
 ]
 
-/** "ต้องติดตาม": new errors with users, errors in ≥ 3 of 7 windows, figures > 20 % over normal, dependency problems. */
-export function followups(errors: ClassifiedError[], figures: ReportFigures, dependencies: ReportDependency[]): ReportFollowup[] {
+/** "ต้องติดตาม": new errors with users, errors in ≥ 3 of 7 windows, figures > 20 % over normal, dependency problems, features below normal or the bar. */
+export function followups(errors: ClassifiedError[], figures: ReportFigures, dependencies: ReportDependency[], features: ReportFeature[] = []): ReportFollowup[] {
   const out: ReportFollowup[] = []
   const what = (e: ClassifiedError) => e.errorHint || e.errorType || 'error'
   const where = (e: ClassifiedError) => e.route || e.service
@@ -374,6 +375,9 @@ export function followups(errors: ClassifiedError[], figures: ReportFigures, dep
   }
   for (const d of dependencies) {
     if (d.problem) out.push({ kind: 'threshold', key: d.key, text: `${d.name} ล่มรวม ${d.downMinutes} นาที` })
+  }
+  for (const f of features) {
+    if (f.state === 'bad' || f.state === 'below') out.push({ kind: 'threshold', key: f.featureId, text: `ฟีเจอร์ ${f.name} ${f.note}` })
   }
   return out.slice(0, 10)
 }

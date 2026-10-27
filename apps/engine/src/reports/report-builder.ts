@@ -5,6 +5,7 @@
 import { Injectable } from '@nestjs/common'
 import { config } from '../config'
 import { type Deploy, ReleasesService } from '../query/releases.service'
+import { activeFeatures, type FeatureSlot, featureValues, type RankedGroup, rankDay, rankDays, SCORE_DAYS } from './features'
 import { type ErrorDb, ReportQueries, type RouteDb } from './report-queries'
 import {
   addDays,
@@ -69,6 +70,9 @@ export interface RawReportData {
   cronStarts: Array<{ type: string; starts: number[] }>
   deploys: Deploy[]
   routes: RouteDb[]
+  /** Main features (features.ts activeFeatures) and their slots; none = the card says it is still learning. */
+  featureGroups?: RankedGroup[]
+  featureSlots?: FeatureSlot[]
 }
 
 const minutesText = (ms: number): string => `${round(ms / 60_000, 1)} นาที`
@@ -206,12 +210,13 @@ export function assembleReport(raw: RawReportData, r: ReportRules): DailyPayload
     ...jobIncidents(raw.jobs),
   ].sort((a, b) => a.startedAtMs - b.startedAtMs)
 
+  const features = featureValues(raw.featureGroups ?? [], raw.featureSlots ?? [], r)
   const { status, reasons } = decideStatus(
     {
       errorRate: figures.errorRate.value,
       errorRateBaseline: figures.errorRate.baseline,
       outageMinutes: dependencies.reduce((sum, d) => sum + d.downMinutes, 0),
-      features: [],
+      features: features.flatMap((f) => (f.successRate === null ? [] : [{ name: f.name, successRate: f.successRate }])),
       incidents: incidents.length,
     },
     r,
@@ -250,9 +255,9 @@ export function assembleReport(raw: RawReportData, r: ReportRules): DailyPayload
     headline: { statusAuto: status, reasons, ...headlines({ status, reasons, figures }) },
     figures,
     trend,
-    features: [],
+    features,
     incidents,
-    followups: followups(classified, figures, dependencies),
+    followups: followups(classified, figures, dependencies, features),
     topErrors,
     dependencies,
     jobs: jobs.slice(0, 20),
@@ -270,6 +275,11 @@ export class ReportBuilder {
   ) {}
 
   async build(env: string, reportDate: string, nowMs = Date.now()): Promise<DailyPayload> {
+    return (await this.buildWithFeatures(env, reportDate, nowMs)).payload
+  }
+
+  /** The payload and the feature groups behind payload.features (FeatureStore keeps them). */
+  async buildWithFeatures(env: string, reportDate: string, nowMs = Date.now()): Promise<{ payload: DailyPayload; featureGroups: RankedGroup[] }> {
     const r = config.report.rules
     const { fromMs, toMs } = reportWindow(reportDate)
     const originMs = fromMs - BASELINE_WINDOWS * DAY_MS
@@ -286,12 +296,17 @@ export class ReportBuilder {
       this.releases.releases({ env }),
       this.queries.routes({ env, fromMs: originMs, toMs, windowFromMs: fromMs }),
     ])
-    const errorHistory = await this.queries.errorHistory(
-      { env, fromMs: fromMs - r.newLookbackDays * DAY_MS, toMs: fromMs, originMs },
-      errors.map((e) => e.fingerprint),
-    )
+    const d0 = rankDay(reportDate, 0)
+    const usageFrom = addDays(d0, -SCORE_DAYS)
+    const [errorHistory, usage, uniq] = await Promise.all([
+      this.queries.errorHistory({ env, fromMs: fromMs - r.newLookbackDays * DAY_MS, toMs: fromMs, originMs }, errors.map((e) => e.fingerprint)),
+      this.queries.usageDays(env, usageFrom, reportDate),
+      this.queries.usageUniq(env, d0, usageFrom, reportDate),
+    ])
+    const featureGroups = activeFeatures(rankDays(usage, uniq, reportDate))
+    const featureSlots = await this.queries.featureSlots(seven, featureGroups.map((g) => g.featureId))
     const payload = assembleReport(
-      { env, reportDate, fromMs, toMs, nowMs, figureSlots, userSlots, errors, errorHistory, spikeBuckets, dependencyEvents, jobs, cronStarts, deploys: releases.deploys, routes },
+      { env, reportDate, fromMs, toMs, nowMs, figureSlots, userSlots, errors, errorHistory, spikeBuckets, dependencyEvents, jobs, cronStarts, deploys: releases.deploys, routes, featureGroups, featureSlots },
       r,
     )
     // users per incident: one small query each, outages and spikes only
@@ -303,6 +318,6 @@ export class ReportBuilder {
           i.usersAffected = await this.queries.usersBetween({ env, fromMs: i.startedAtMs, toMs: i.endedAtMs ?? toMs })
         }),
     )
-    return payload
+    return { payload, featureGroups }
   }
 }

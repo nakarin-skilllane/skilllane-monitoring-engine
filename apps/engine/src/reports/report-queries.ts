@@ -5,10 +5,14 @@
  */
 import { Injectable } from '@nestjs/common'
 import { msParam, Reader } from '../query/sql'
+import { type FeatureSlot, RANK_DAYS, RESOURCE_RE, type UsageDay, type UsageUniq } from './features'
 import type { DependencyEvent, JobDb, SpikeBucket } from './rules'
 
 const LOGS = 'skilllane_monitoring.logs'
 const STATS = 'skilllane_monitoring.route_stats_1m'
+const USAGE = 'skilllane_monitoring.route_usage_1d'
+/** The feature resource of a `METHOD /path` route (features.ts resourceOf). */
+const RESOURCE = `extract(route, {re:String})`
 /** Lines that count toward "users affected": the SDK logs a 5xx request at level error. */
 const ERROR_LINE = `level IN ('error', 'fatal')`
 /** Where an error happened, as route_stats_1m names HTTP routes. */
@@ -159,6 +163,47 @@ export class ReportQueries {
        FROM ${STATS} WHERE ${MINUTE_RANGE}
        GROUP BY route HAVING requests > 0 ORDER BY requests DESC LIMIT 1000`,
       r,
+    )
+  }
+
+  /** Per Bangkok day and feature group in [fromDay, toDay): sums, busy-hour share, routes. */
+  usageDays(env: string, fromDay: string, toDay: string) {
+    return this.reader.rows<UsageDay>(
+      'report.usage_days',
+      `SELECT toString(day) AS day, service, ${RESOURCE} AS resource,
+              sum(requests) AS requests, sum(ok) AS ok, sum(with_user) AS withUser, sum(writes) AS writes,
+              length(arrayFilter(h -> h >= 8 AND h <= 17, groupUniqArrayArray(hours))) / 10 AS peak,
+              groupUniqArray(route) AS routes
+       FROM ${USAGE} AS u WHERE u.env = {env:String} AND u.day >= {fromDay:Date} AND u.day < {toDay:Date}
+       GROUP BY day, service, resource HAVING resource != ''`,
+      { env, fromDay, toDay, re: RESOURCE_RE },
+    )
+  }
+
+  /** Distinct users / orgs per group over the 30 days before each rank day d0 + k (k < RANK_DAYS). */
+  usageUniq(env: string, d0: string, fromDay: string, toDay: string) {
+    return this.reader.rows<UsageUniq>(
+      'report.usage_uniq',
+      `SELECT k, service, resource, uniqMerge(users) AS users, uniqMerge(orgs) AS orgs
+       FROM (SELECT day, service, ${RESOURCE} AS resource, users, orgs FROM ${USAGE}
+             WHERE env = {env:String} AND day >= {fromDay:Date} AND day < {toDay:Date})
+       ARRAY JOIN range({n:UInt8}) AS k
+       WHERE resource != '' AND day >= toDate({d0:Date}) + k - 30 AND day < toDate({d0:Date}) + k
+       GROUP BY k, service, resource`,
+      { env, d0, fromDay, toDay, n: RANK_DAYS, re: RESOURCE_RE },
+    )
+  }
+
+  /** Requests / errors per slot of the features `ids` (`service:resource`) from route_stats_1m. */
+  featureSlots(r: Slotted, ids: string[]) {
+    if (!ids.length) return Promise.resolve([])
+    return this.reader.rows<FeatureSlot>(
+      'report.feature_slots',
+      `SELECT concat(service, ':', ${RESOURCE}) AS featureId, ${SLOT('minute')} AS slot,
+              sum(requests) AS requests, sum(errors) AS errors
+       FROM ${STATS} WHERE ${MINUTE_RANGE} AND featureId IN {ids:Array(String)}
+       GROUP BY featureId, slot`,
+      { ...slotted(r), ids, re: RESOURCE_RE },
     )
   }
 

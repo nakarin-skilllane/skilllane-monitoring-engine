@@ -74,10 +74,21 @@ describe('assembleReport', () => {
     expect(p.slowRoutes).toEqual([{ route: 'GET /a', service: 'core', requests: 100, p95Ms: 300, p95_7dMs: 200 }])
   })
 
-  it('jobs; no features or AI notes yet', () => {
+  it('jobs; no features without usage; no AI notes yet', () => {
     expect(p.jobs).toEqual([{ job: 'SendMail', kind: 'queue', service: 'core', total: 4, failed: 3, missed: 0, note: '' }])
     expect(p.features).toEqual([])
     expect(p.aiNotes).toEqual([])
+  })
+
+  it('a feature under 95 % makes it bad and needs a look', () => {
+    const group = { featureId: 'core:classes', service: 'core', resource: 'classes', routes: ['GET /classes/:id'], requests: 0, score: 1, rank: 1 }
+    const q = assembleReport(
+      raw({ dependencyEvents: [], jobs: [], featureGroups: [group], featureSlots: [{ featureId: 'core:classes', slot: 6, requests: 100, errors: 10 }] }),
+      R,
+    )
+    expect(q.features).toEqual([{ featureId: 'core:classes', name: 'ห้องเรียน', successRate: 0.9, successRate7d: null, volume: 100, state: 'bad', note: 'ต่ำกว่าเกณฑ์ 95%' }])
+    expect(q.headline).toMatchObject({ statusAuto: 'bad', reasons: ['ฟีเจอร์ ห้องเรียน ใช้งานสำเร็จ 90.0%'] })
+    expect(q.followups.at(-1)).toEqual({ kind: 'threshold', key: 'core:classes', text: 'ฟีเจอร์ ห้องเรียน ต่ำกว่าเกณฑ์ 95%' })
   })
 
   it('fewer than 3 windows with data: no baseline, no rate rule, no spikes', () => {
