@@ -161,6 +161,11 @@ SDK and engine read the same `.env`; `LOG_EXPORT` picks the queue for both.
 | `SKILLLANE_MONITORING_AUTH_SECRET` | engine | random per process | HS256 key of sessions (set it for more than one api engine, or sessions end at restart) |
 | `SKILLLANE_MONITORING_SESSION_HOURS` | engine | `8` | session lifetime |
 | `CLICKHOUSE_CONFIG_DATABASE` | engine | `<CLICKHOUSE_DATABASE>_config` | users and roles; the writer user reads and writes it, `skilllane_monitoring_reader` has no grant |
+| `REPORT_ENVS` | engine | `prod` | envs whose daily report is built at `REPORT_CRON` (comma list; set but empty = none, the page can still build one) |
+| `REPORT_CRON` | engine | `0 9 * * *` | when the daily report is built, Asia/Bangkok (`@nestjs/schedule`); the window is always 09:00 to 09:00 |
+| `REPORT_BAD_ERROR_RATE_X` · `REPORT_BAD_OUTAGE_MIN` · `REPORT_BAD_FEATURE_SUCCESS` · `REPORT_WARN_ERROR_RATE_X` | engine | `2` · `30` · `0.95` · `1.5` | report status: "มีปัญหา" when error rate > normal × X, dependency outages > N min, or a feature under the success rate; "มีปัญหาบางช่วง" when error rate > normal × X or any incident |
+| `REPORT_NEW_LOOKBACK_DAYS` · `REPORT_INCREASE_X` · `REPORT_INCREASE_MIN` | engine | `14` · `1.5` · `10` | error group "ใหม่" = not seen in N days; "เพิ่มขึ้น" = count > 6-window average × X and > N |
+| `REPORT_FEATURE_DROP_PT` · `REPORT_DEPENDENCY_MIN` · `REPORT_SLOW_X` · `REPORT_SPIKE_X` · `REPORT_SPIKE_MIN_REQ` | engine | `0.5` · `5` · `1.2` · `3` · `50` | feature below normal by N points (stage 2); dependency problem from N outage minutes; endpoint slower when p95 > p95 of the 6 windows before × X; error spike = a 5-minute bucket over the normal rate × X with ≥ N requests |
 
 ## 6. Ports and credentials (host side)
 
@@ -289,6 +294,23 @@ Modules: `ClickhouseModule` (clients, schema apply), `IngestModule` (when role i
 - Ban, reset, delete and a password change bump `token_version`: older sessions fail at once on this engine and within
   10 s (cache) on others. Storage: ReplacingMergeTree(updated_at) tables `users`, `roles` in the config database,
   read with FINAL, written by the writer user.
+
+### Daily report (`apps/engine/src/reports`, roles `api` / `all`)
+
+- One snapshot per env + report date D = `[D-1 09:00, D 09:00)` Asia/Bangkok, built at `REPORT_CRON` for `REPORT_ENVS`
+  on the instance with `ENGINE_APPLY_SCHEMA` (missing ones of the last 7 dates are built 30 s after boot too) or on demand.
+  Telemetry is read with the reader user only; the snapshot is written by the writer user to
+  `<config db>.daily_reports` (ReplacingMergeTree(updated_at), ORDER BY (env, report_date), read with FINAL, no TTL).
+- Normal = the average of the 6 windows before with requests; fewer than 3 = no normal (`baseline: null`). Users and
+  orgs affected = distinct `user_id` / `organization_id` of `level IN ('error','fatal')` lines (the SDK logs a 5xx at error).
+- `GET /api/reports/daily?env&date` (`reports` on the env; no date = the latest) → `StoredReport = { env, reportDate,
+  windowStartMs, windowEndMs, generatedAt, status, payload, aiStatus, aiMessage }`, 404 `{ message, reportDate, canGenerate }`
+  when missing. `GET /api/reports/daily/dates?env` → `{ env, dates: [{ reportDate, status }] }`.
+  `POST /api/reports/daily/generate { env, date? }` (`reports_manage` + `reports` on the env; date within the logs' 90 days).
+- `payload` (schema 2): `rulesUsed`, `headline { statusAuto, reasons, summaryOverview, summaryDetail }`, `figures`
+  (5 × `{ value, baseline, changePct }`), `trend` (7 windows), `features` (stage 2), `incidents`, `followups`, `topErrors`
+  (new / increased only, ≤ 5), `dependencies`, `jobs`, `deploys`, `slowRoutes` (≤ 5), `aiNotes` (stage 4). No user ids, no bodies.
+  Shapes: `apps/engine/src/reports/types.ts`; the page: `/reports/daily?env&date&tab=overview|detail`.
 
 ### Query API (`/api`, JSON, camelCase)
 
@@ -425,3 +447,4 @@ Agents append one line per deviation from this spec: date, who, what, why.
 - 2026-10-22 · nakarin + Claude · deploy without Caddy: `deploy/docker-compose.yml` has no reverse proxy (Caddyfile, `DOMAIN` and the 80/443 firewall step of `setup-vm.sh` removed); the monitor and the engine publish `:3300` / `:5100` on `BIND_ADDRESS` (default `127.0.0.1`, plain HTTP), `ENGINE_CORS_ORIGIN` defaults to `http://localhost:3300`, apps on the machine use `LOG_HTTP_URL=http://localhost:5100`. A VM is reached over an ssh tunnel; opening it to a network needs a TLS proxy in front (`X-Forwarded-Proto: https`, 16 MB bodies). Why: the stack is used from the machine it runs on.
 - 2026-10-22 · nakarin + Claude · S3 settings split: `deploy/.env` takes `CLICKHOUSE_S3_URL` (service URL, no bucket) and `CLICKHOUSE_S3_BUCKET` (default `skilllane-monitoring`); `deploy/docker-compose.yml` builds ClickHouse's `CLICKHOUSE_S3_ENDPOINT` as `<URL>/<BUCKET>/clickhouse/` (path style) and turns cold storage on when the URL is set. Nothing creates the bucket. Why: the endpoint with the bucket inside was easy to get wrong.
 - 2026-10-22 · nakarin + Claude · one `.env`: `deploy/.env.example` is merged into the root `.env.example` (a "Deploy" block: `IMAGE_TAG`, `BIND_ADDRESS`, S3, memory limits) and `deploy/.env` is a link to the root `.env` (`ln -s ../.env deploy/.env`), so `docker compose` in `deploy/` runs as before. `setup-vm.sh` writes the root `.env` with random secrets and empty dev queues / CORS, links it, and moves an older `deploy/.env` file to the root (stops when both exist). Why: one file to keep, the deploy's `.env` is made on the machine anyway.
+- 2026-10-27 · nakarin + Claude · daily report v2 stage 1 (`apps/engine/src/reports`, `/reports/daily`): a snapshot per env of `[D-1 09:00, D 09:00)` Asia/Bangkok in `<config db>.daily_reports`, built by `@nestjs/schedule` 6.1.3 at `REPORT_CRON` (12.x is ESM-only, the engine is CommonJS on Node 20.12) on the schema instance with a 7-day catch-up after boot, or by `POST /api/reports/daily/generate`; normal = average of the 6 windows before with data (null under 3), every threshold an env var and copied into `payload.rulesUsed`; users affected from `level IN ('error','fatal')` (no `http_status` filter: the SDK logs a 5xx at error and `level` is in the ORDER BY); `topErrors` = new / increased only, `dependency.*` lines left to the dependency card; incidents from dependency outages ≥ `REPORT_DEPENDENCY_MIN`, 5-minute error spikes and failed jobs; payload fields camelCase. The monitor page reads the snapshot only (tabs ภาพรวม / รายละเอียด, กฎ / AI labels, no feedback controls); features, Infographic, export and AI come in stages 2–4. Integration test (15-window fixture in env `production`): build 218 ms on the dev ClickHouse. Why: a morning summary of logs and systems from one page, the same numbers for every view and export.
