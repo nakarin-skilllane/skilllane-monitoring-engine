@@ -1,8 +1,10 @@
-import { Body, Controller, ForbiddenException, Get, Header, HttpCode, NotFoundException, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, ForbiddenException, Get, Header, HttpCode, NotFoundException, Post, Query, Req, Res } from '@nestjs/common'
+import type { Response } from 'express'
 import { type AuthedRequest, RequirePermission } from '../auth/auth.guard'
 import { allows } from '../auth/permissions'
 import { bad, optEnum, optName, optString, type QueryString } from '../query/params'
 import { reportDocument } from './render/document'
+import { ReportExport } from './report-export'
 import { ReportsService } from './reports.service'
 import { latestReportDate, reportDateProblem } from './rules'
 
@@ -31,7 +33,10 @@ function buildDateOf(q: QueryString): string {
 /** Daily report API. Reading needs `reports` on the env; building needs `reports_manage` and `reports` on that env. */
 @Controller('api/reports/daily')
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    private readonly exporter: ReportExport,
+  ) {}
 
   @RequirePermission('reports')
   @Get()
@@ -61,6 +66,22 @@ export class ReportsController {
     const report = await this.reports.get(env, date)
     if (!report) throw new NotFoundException(date ? `ยังไม่มีรายงานของวันที่ ${date}` : 'ยังไม่มีรายงาน')
     return reportDocument(report, [{ tab, view }], 'screen')
+  }
+
+  /** PNG (infographic of one tab) or PDF (one tab, or tab=all: both tabs, picture + data) as a download. */
+  @RequirePermission('reports')
+  @Get('export')
+  async export(@Query() q: QueryString, @Res() res: Response) {
+    const env = envOf(q)
+    const date = readDateOf(q)
+    const tab = optEnum(q, 'tab', ['overview', 'detail', 'all'] as const) ?? 'overview'
+    const view = optEnum(q, 'view', ['infographic', 'data'] as const) ?? 'infographic'
+    const format = optEnum(q, 'format', ['png', 'pdf'] as const) ?? 'pdf'
+    const file = await this.exporter.file(env, date, tab, view, format)
+    res.setHeader('Content-Type', file.contentType)
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`)
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    res.send(file.body)
   }
 
   @RequirePermission('reports')

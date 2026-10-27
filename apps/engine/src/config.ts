@@ -89,6 +89,8 @@ export interface EngineConfig {
     /** REPORT_CRON, Asia/Bangkok (default 09:00 every day). */
     cron: string
     rules: ReportRules
+    /** GOTENBERG_URL: HTML → PNG / PDF for the export; unset = export answers 503. */
+    gotenbergUrl?: string
   }
 }
 
@@ -207,6 +209,7 @@ export function loadConfig(env: Env = process.env): EngineConfig {
         .map((s) => s.trim())
         .filter(Boolean),
       cron: str(env, 'REPORT_CRON') ?? '0 9 * * *',
+      gotenbergUrl: str(env, 'GOTENBERG_URL')?.replace(/\/+$/, ''),
       rules: {
         badErrorRateX: float(env, 'REPORT_BAD_ERROR_RATE_X', 2),
         badOutageMin: float(env, 'REPORT_BAD_OUTAGE_MIN', 30),

@@ -32,6 +32,14 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # HTML → PNG / PDF for the daily report export (GOTENBERG_URL=http://localhost:3030).
+  gotenberg:
+    image: gotenberg/gotenberg:8.37.0-chromium
+    command: ["gotenberg", "--chromium-start-timeout=60s", "--api-timeout=60s"]
+    ports:
+      - "127.0.0.1:3030:3000"
+    restart: unless-stopped
+
   kafka:
     image: apache/kafka:4.3.1
     hostname: kafka

@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule'
 import { QueryModule } from '../query/query.module'
 import { FeatureStore } from './feature-store'
 import { ReportBuilder } from './report-builder'
+import { ReportExport } from './report-export'
 import { ReportQueries } from './report-queries'
 import { ReportScheduler } from './report-scheduler'
 import { ReportStore } from './report-store'
@@ -14,6 +15,6 @@ import { UsageBackfill } from './usage-backfill'
 @Module({
   imports: [ScheduleModule.forRoot(), QueryModule],
   controllers: [ReportsController],
-  providers: [ReportQueries, ReportBuilder, ReportStore, FeatureStore, ReportsService, ReportScheduler, UsageBackfill],
+  providers: [ReportQueries, ReportBuilder, ReportStore, FeatureStore, ReportsService, ReportExport, ReportScheduler, UsageBackfill],
 })
 export class ReportsModule {}

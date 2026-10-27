@@ -118,7 +118,7 @@ export function reportDocument(r: StoredReport, parts: ReportPart[], mode: Rende
   return `<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>${fontFaceCss()}${CSS}</style></head><body class="${mode}">${body}</body></html>`
 }
 
-const MARGIN_CSS = `<style>${fontFaceCss()}*{font-family:'IBM Plex Sans Thai',system-ui,sans-serif}div{width:100%;font-size:8.5px;color:#6b716e;padding:0 12mm;display:flex;justify-content:space-between;-webkit-print-color-adjust:exact}</style>`
+const MARGIN_CSS = `<style>${fontFaceCss()}*{font-family:'IBM Plex Sans Thai',system-ui,sans-serif}div{box-sizing:border-box;width:100%;font-size:8.5px;color:#6b716e;padding:0 12mm;display:flex;justify-content:space-between;-webkit-print-color-adjust:exact}</style>`
 
 /** PDF page header: title · env · date. */
 export const pdfHeader = (r: StoredReport): string =>

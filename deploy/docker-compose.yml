@@ -67,6 +67,8 @@ services:
       ENGINE_CORS_ORIGIN: ${ENGINE_CORS_ORIGIN:-http://localhost:3300}
       # Only with an S3 URL: without one the tables keep the default policy.
       CLICKHOUSE_COLD_STORAGE_POLICY: ${CLICKHOUSE_S3_URL:+tiered}
+      # Daily report export (PNG / PDF).
+      GOTENBERG_URL: http://gotenberg:3000
     # HTTP ingest + query API. 127.0.0.1 by default: no TLS, so keep it off the network.
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:5100:5100"
@@ -107,6 +109,16 @@ services:
       resources:
         limits:
           memory: ${MONITOR_MEMORY_LIMIT:-1g}
+    restart: unless-stopped
+
+  # HTML → PNG / PDF for the daily report export; only the engine calls it (compose network).
+  gotenberg:
+    image: gotenberg/gotenberg:8.37.0-chromium
+    command: ["gotenberg", "--chromium-start-timeout=60s", "--api-timeout=60s"]
+    deploy:
+      resources:
+        limits:
+          memory: ${GOTENBERG_MEMORY_LIMIT:-1g}
     restart: unless-stopped
 
 volumes:

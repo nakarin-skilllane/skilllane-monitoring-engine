@@ -1,3 +1,6 @@
+import { writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createClient } from '@clickhouse/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ClickhouseService } from '../src/clickhouse/clickhouse.service'
@@ -5,9 +8,12 @@ import { config } from '../src/config'
 import { ReleasesService } from '../src/query/releases.service'
 import { Reader } from '../src/query/sql'
 import { ReportBuilder } from '../src/reports/report-builder'
+import { ReportExport } from '../src/reports/report-export'
 import { ReportQueries } from '../src/reports/report-queries'
+import { GotenbergClient } from '../src/reports/render/gotenberg'
+import type { ReportsService } from '../src/reports/reports.service'
 import { latestReportDate } from '../src/reports/rules'
-import type { DailyPayload } from '../src/reports/types'
+import type { DailyPayload, StoredReport } from '../src/reports/types'
 // CommonJS fixture shared with scripts/seed-report.js
 import { FIXTURE_ENV, resetReportFixture, seedReportFixture } from '../scripts/report-fixture.js'
 
@@ -81,5 +87,24 @@ describe.skipIf(!process.env.REPORT_IT)('daily report on ClickHouse (REPORT_IT=1
   it('builds in under 30 s', () => {
     console.log(`daily report build: ${ms} ms`)
     expect(ms).toBeLessThan(30_000)
+  })
+
+  // GOTENBERG_URL=http://localhost:3030 (docker compose up -d gotenberg)
+  it.skipIf(!process.env.GOTENBERG_URL)('exports through Gotenberg: PNG 1520 px wide, whole-report PDF of ≥ 4 pages, no PII', async () => {
+    const report: StoredReport = {
+      env: FIXTURE_ENV, reportDate: DATE, windowStartMs: p.windowStartMs, windowEndMs: p.windowEndMs,
+      generatedAt: new Date().toISOString(), status: p.headline.statusAuto, payload: p, aiStatus: 'disabled', aiMessage: '',
+    }
+    const exporter = new ReportExport({ get: async () => report } as unknown as ReportsService, new GotenbergClient(process.env.GOTENBERG_URL))
+    const started = Date.now()
+    const png = await exporter.file(FIXTURE_ENV, DATE, 'overview', 'infographic', 'png')
+    expect(png.body.subarray(1, 4).toString()).toBe('PNG')
+    expect(png.body.readUInt32BE(16)).toBe(1520)
+    const pdf = await exporter.file(FIXTURE_ENV, DATE, 'all', 'data', 'pdf')
+    expect(pdf.body.subarray(0, 5).toString()).toBe('%PDF-')
+    expect(pdf.body.toString('latin1').match(/\/Type\s*\/Page[^s]/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+    writeFileSync(join(tmpdir(), `${pdf.filename}`), pdf.body)
+    writeFileSync(join(tmpdir(), `${png.filename}`), png.body)
+    console.log(`export png + pdf: ${Date.now() - started} ms → ${tmpdir()}`)
   })
 })
