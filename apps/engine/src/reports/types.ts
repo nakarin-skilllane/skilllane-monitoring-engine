@@ -1,5 +1,5 @@
 /**
- * Shapes of the daily report (docs/superpowers/specs/2026-10-27-daily-report-v2-draft.md).
+ * Shapes of the daily report (SPEC.md section 8, "Daily report").
  * A report date D covers [D-1 09:00, D 09:00) Asia/Bangkok. Times are milliseconds since
  * the epoch (UTC); dates are YYYY-MM-DD. Ratios are fractions: 0.25 = 25 %.
  */

@@ -82,7 +82,7 @@ export interface EngineConfig {
     /** Users and roles (CLICKHOUSE_CONFIG_DATABASE, default `<CLICKHOUSE_DATABASE>_config`); skilllane_monitoring_reader has no grant on it. */
     database: string
   }
-  /** Daily report (docs/superpowers/specs/2026-10-27-daily-report-v2-draft.md). */
+  /** Daily report (SPEC.md section 8, "Daily report"). */
   report: {
     /** REPORT_ENVS (comma list, default prod; empty = no scheduled report, the page can still build one). */
     envs: string[]

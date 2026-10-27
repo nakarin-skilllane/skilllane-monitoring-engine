@@ -1,7 +1,7 @@
 'use strict'
 /**
- * 15 report windows of telemetry for the daily report (docs/superpowers/plans/2026-10-27-daily-report-v2-stage1.md,
- * Task 7): steady traffic and one old error every window, an hourly cron, and in the report window a
+ * 15 report windows of telemetry for the daily report (test/report.it.test.ts, scripts/seed-report.js):
+ * steady traffic and one old error every window, an hourly cron, and in the report window a
  * deploy, a new error after it, a missed cron stretch, a 40-minute Redis outage, a failing mail job
  * and a slower endpoint. A window of report date D = [D-1 09:00, D 09:00) Asia/Bangkok.
  * Rows carry labels['seed'] = 'report' (logs) and resource['seed'] = 'report' (spans).
