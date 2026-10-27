@@ -15,6 +15,7 @@ import { cache } from 'react'
 import { type QueryInput, toSearch } from './url'
 import type {
   CommonQuery,
+  DailyReport,
   Me,
   DependenciesResponse,
   EngineErrorBody,
@@ -27,6 +28,7 @@ import type {
   LogsResponse,
   Meta,
   Overview,
+  ReportDateItem,
   Topology,
   TraceDetail,
   TracesQuery,
@@ -128,6 +130,9 @@ export const engine = {
   dependencies: (q: CommonQuery) => engineGet<DependenciesResponse>('/api/dependencies', q),
   /** 3D system map: nodes + edges with calls/min (lib/topology.ts → <SystemMap3D>). */
   topology: (q: CommonQuery) => engineGet<Topology>('/api/topology', q),
+  /** Daily report snapshot; no date = the latest one of the env. */
+  dailyReport: (q: { env: string; date?: string }) => engineGet<DailyReport>('/api/reports/daily', q),
+  reportDates: (q: { env: string }) => engineGet<{ env: string; dates: ReportDateItem[] }>('/api/reports/daily/dates', q),
   /** The signed-in user: permissions per permission ('all' or envs) and the envs they reach. */
   me: () => engineGet<Me>('/api/auth/me'),
 }

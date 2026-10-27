@@ -79,7 +79,7 @@ export interface Meta {
 
 // ---------- users ----------
 
-export type PermissionId = 'overview' | 'logs' | 'traces' | 'errors' | 'jobs' | 'topology' | 'users' | 'roles'
+export type PermissionId = 'overview' | 'logs' | 'traces' | 'errors' | 'jobs' | 'topology' | 'reports' | 'users' | 'roles' | 'reports_manage'
 /** Per permission: 'all' = every env, else the envs; absent = not granted. */
 export type Effective = Partial<Record<PermissionId, 'all' | string[]>>
 
@@ -804,3 +804,45 @@ export interface Dependency {
    */
   lastRecoveredAt?: string | null
 }
+
+// ---------- daily report (engine src/reports/types.ts; keep in step) ----------
+
+export type ReportStatus = 'ok' | 'partial' | 'bad'
+export type ReportAiStatus = 'ok' | 'unavailable' | 'quota' | 'error' | 'disabled'
+export interface ReportCompare { value: number; baseline: number | null; changePct: number | null }
+export interface ReportFigures {
+  usersAffected: ReportCompare; orgsAffected: ReportCompare; errorRate: ReportCompare; p95Ms: ReportCompare; requests: ReportCompare
+  baselineWindows: number; errorGroups: { new: number; up: number }
+}
+export interface ReportTrendPoint { reportDate: string; hasData: boolean; usersAffected: number; orgsAffected: number; errorRate: number; p95Ms: number; requests: number }
+export interface ReportFeature { featureId: string; name: string; successRate: number; successRate7d: number | null; volume: number; note: string }
+export interface ReportIncident {
+  id: string; source: 'dependency.down' | 'error_spike' | 'job.failed'; startedAtMs: number; endedAtMs: number | null
+  what: string; usersAffected: number | null; state: 'ongoing' | 'resolved'
+}
+export interface ReportFollowup { kind: 'new' | 'recurring' | 'threshold'; key: string; text: string }
+export interface ReportError {
+  fingerprint: string; service: string; errorType: string; errorHint: string; route: string; location: string
+  count: number; count7dAvg: number | null; changePct: number | null; users: number; firstSeenMs: number; trend: 'new' | 'up'; sampleTraceId: string
+}
+export interface ReportDependency {
+  key: string; name: string; host: string; port: number; downMinutes: number; downEvents: number
+  windows: Array<{ fromMs: number; toMs: number; ongoing: boolean }>; lastError: string; problem: boolean; note: string
+}
+export interface ReportJob { job: string; kind: 'cron' | 'queue'; service: string; total: number; failed: number; missed: number; note: string }
+export interface ReportDeploy { service: string; version: string; previousVersion: string; deployedAtMs: number; relatedFingerprints: string[] }
+export interface ReportSlowRoute { route: string; service: string; requests: number; p95Ms: number; p95_7dMs: number }
+export interface ReportAiNote { target: string; text: string }
+export interface DailyPayload {
+  schemaVersion: number; env: string; reportDate: string; windowStartMs: number; windowEndMs: number
+  rulesUsed: Record<string, number>
+  headline: { statusAuto: ReportStatus; reasons: string[]; summaryOverview: string; summaryDetail: string }
+  figures: ReportFigures; trend: ReportTrendPoint[]; features: ReportFeature[]; incidents: ReportIncident[]
+  followups: ReportFollowup[]; topErrors: ReportError[]; dependencies: ReportDependency[]; jobs: ReportJob[]
+  deploys: ReportDeploy[]; slowRoutes: ReportSlowRoute[]; aiNotes: ReportAiNote[]
+}
+export interface DailyReport {
+  env: string; reportDate: string; windowStartMs: number; windowEndMs: number; generatedAt: string
+  status: ReportStatus; payload: DailyPayload; aiStatus: ReportAiStatus; aiMessage: string
+}
+export interface ReportDateItem { reportDate: string; status: ReportStatus }

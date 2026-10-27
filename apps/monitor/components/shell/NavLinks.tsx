@@ -19,6 +19,7 @@ const ITEMS: Array<{ href: string; label: string; icon: IconName; screens: Scree
   { href: '/traces', label: 'Trace', icon: 'traces', screens: ['traces', 'trace'], permission: 'traces' },
   { href: '/errors', label: 'Error', icon: 'errors', screens: ['errors', 'error'], permission: 'errors' },
   { href: '/jobs', label: 'งานเบื้องหลัง', icon: 'jobs', screens: ['jobs'], permission: 'jobs' },
+  { href: '/reports/daily', label: 'รายงาน', icon: 'panel', screens: [], permission: 'reports' },
 ]
 
 /** Managing the monitor (users / roles permission). */
@@ -46,7 +47,7 @@ export function NavLinks({ permissions }: { permissions?: Effective }) {
           className="nav-item"
           href={buildHref(item.href, keep)}
           prefetch={false}
-          aria-current={screen && item.screens.includes(screen) ? 'page' : undefined}
+          aria-current={(screen && item.screens.includes(screen)) || pathname?.startsWith(item.href) ? 'page' : undefined}
         >
           <Icon name={item.icon} />
           {item.label}

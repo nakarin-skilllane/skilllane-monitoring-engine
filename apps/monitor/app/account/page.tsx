@@ -15,8 +15,10 @@ const LABELS: Record<PermissionId, string> = {
   errors: 'Errors',
   jobs: 'Jobs',
   topology: 'แผนที่ระบบ',
+  reports: 'รายงาน',
   users: 'จัดการผู้ใช้',
   roles: 'จัดการ role',
+  reports_manage: 'จัดการรายงาน',
 }
 
 /** Who I am, what I can see, and my password. */
