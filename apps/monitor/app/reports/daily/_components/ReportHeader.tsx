@@ -7,7 +7,7 @@ import { DatePicker } from './DatePicker'
 import { GenerateButton } from './GenerateButton'
 
 /** Title, env, ‹ previous · date · next ›, the window, when it was built. The same on every tab. */
-export function ReportHeader({ report, dates, tab, canManage }: { report: DailyReport; dates: ReportDateItem[]; tab: string; canManage: boolean }) {
+export function ReportHeader({ report, dates, tab, view, canManage }: { report: DailyReport; dates: ReportDateItem[]; tab: string; view: string; canManage: boolean }) {
   const { prev, next } = neighbours(dates, report.reportDate)
   return (
     <header className="page-head rp-head">
@@ -20,9 +20,9 @@ export function ReportHeader({ report, dates, tab, canManage }: { report: DailyR
         <p className="page-sub">สร้างทุกวัน 09:00 · ฉบับนี้สร้างเมื่อ {fmtDateTime(report.generatedAt)}</p>
       </div>
       <nav className="page-actions rp-nav" aria-label="เลือกวันรายงาน">
-        {prev ? <Link href={reportHref({ env: report.env, date: prev, tab })}>‹ วันก่อน</Link> : <span className="rp-muted">‹ วันก่อน</span>}
-        <DatePicker env={report.env} tab={tab} current={report.reportDate} dates={dates} />
-        {next ? <Link href={reportHref({ env: report.env, date: next, tab })}>วันถัดไป ›</Link> : <span className="rp-muted">วันถัดไป ›</span>}
+        {prev ? <Link href={reportHref({ env: report.env, date: prev, tab, view })}>‹ วันก่อน</Link> : <span className="rp-muted">‹ วันก่อน</span>}
+        <DatePicker env={report.env} tab={tab} view={view} current={report.reportDate} dates={dates} />
+        {next ? <Link href={reportHref({ env: report.env, date: next, tab, view })}>วันถัดไป ›</Link> : <span className="rp-muted">วันถัดไป ›</span>}
         {canManage ? <GenerateButton env={report.env} date={report.reportDate} label="สร้างใหม่" /> : null}
       </nav>
     </header>

@@ -69,5 +69,7 @@ export function neighbours(dates: ReportDateItem[], current: string): { prev?: s
 
 export const isDate = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
 
-export const reportHref = (q: { env: string; date?: string; tab?: string }): string =>
+export type ReportView = 'data' | 'infographic'
+
+export const reportHref = (q: { env: string; date?: string; tab?: string; view?: string }): string =>
   `/reports/daily?${new URLSearchParams(Object.entries(q).filter((e): e is [string, string] => !!e[1]))}`
