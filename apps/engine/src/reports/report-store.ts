@@ -89,9 +89,9 @@ export class ReportStore implements OnModuleInit {
       query: `SELECT env, toString(report_date) AS report_date,
                      toUnixTimestamp64Milli(window_start) AS window_start_ms, toUnixTimestamp64Milli(window_end) AS window_end_ms,
                      toString(generated_at) AS generated_at, status, payload, ai_status, ai_message
-              FROM ${this.db}.daily_reports FINAL
-              WHERE env = {env:String} ${reportDate ? 'AND report_date = {date:Date}' : ''}
-              ORDER BY report_date DESC LIMIT 1`,
+              FROM ${this.db}.daily_reports AS t FINAL
+              WHERE t.env = {env:String} ${reportDate ? 'AND t.report_date = {date:Date}' : ''}
+              ORDER BY t.report_date DESC LIMIT 1`,
       query_params: reportDate ? { env, date: reportDate } : { env },
       format: 'JSONEachRow',
       clickhouse_settings: { output_format_json_quote_64bit_integers: 0 },

@@ -10,6 +10,7 @@ import { Reader } from '../src/query/sql'
 import { ReportBuilder } from '../src/reports/report-builder'
 import { ReportExport } from '../src/reports/report-export'
 import { ReportQueries } from '../src/reports/report-queries'
+import { ReportStore } from '../src/reports/report-store'
 import { GotenbergClient } from '../src/reports/render/gotenberg'
 import type { ReportsService } from '../src/reports/reports.service'
 import { latestReportDate } from '../src/reports/rules'
@@ -87,6 +88,20 @@ describe.skipIf(!process.env.REPORT_IT)('daily report on ClickHouse (REPORT_IT=1
   it('builds in under 30 s', () => {
     console.log(`daily report build: ${ms} ms`)
     expect(ms).toBeLessThan(30_000)
+  })
+
+  it('daily_reports: save, then read by date, the latest, and the date list', async () => {
+    const store = new ReportStore(ch)
+    await store.onModuleInit()
+    const report: StoredReport = {
+      env: FIXTURE_ENV, reportDate: DATE, windowStartMs: p.windowStartMs, windowEndMs: p.windowEndMs,
+      generatedAt: new Date().toISOString(), status: p.headline.statusAuto, payload: p, aiStatus: 'disabled', aiMessage: '',
+    }
+    await store.save(report)
+    expect(await store.get(FIXTURE_ENV, DATE)).toMatchObject({ reportDate: DATE, windowStartMs: p.windowStartMs, status: 'bad' })
+    expect((await store.get(FIXTURE_ENV))?.reportDate).toBe(DATE)
+    expect(await store.get(FIXTURE_ENV, '2000-01-01')).toBeUndefined()
+    expect((await store.dates(FIXTURE_ENV))[0]).toEqual({ reportDate: DATE, status: 'bad' })
   })
 
   // GOTENBERG_URL=http://localhost:3030 (docker compose up -d gotenberg)
