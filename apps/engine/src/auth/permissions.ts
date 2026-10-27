@@ -5,9 +5,9 @@
  */
 
 /** Data a user can read: one per kind of data the query API returns. */
-export const VIEW_PERMISSIONS = ['overview', 'logs', 'traces', 'errors', 'jobs', 'topology'] as const
+export const VIEW_PERMISSIONS = ['overview', 'logs', 'traces', 'errors', 'jobs', 'topology', 'reports'] as const
 /** Managing the monitor itself. */
-export const MANAGE_PERMISSIONS = ['users', 'roles'] as const
+export const MANAGE_PERMISSIONS = ['users', 'roles', 'reports_manage'] as const
 export const PERMISSIONS = [...VIEW_PERMISSIONS, ...MANAGE_PERMISSIONS] as const
 export type Permission = (typeof PERMISSIONS)[number]
 
@@ -24,6 +24,7 @@ export const PERMISSION_CATALOG = [
       { id: 'errors', label: 'Errors', detail: 'กลุ่ม error และรายละเอียด' },
       { id: 'jobs', label: 'Jobs', detail: 'งานเบื้องหลัง, คิว, สถานะ dependency' },
       { id: 'topology', label: 'แผนที่ระบบ', detail: 'service, DB, Redis, คิว และ host:port' },
+      { id: 'reports', label: 'รายงาน', detail: 'รายงานประจำวัน' },
     ],
   },
   {
@@ -33,6 +34,7 @@ export const PERMISSION_CATALOG = [
     items: [
       { id: 'users', label: 'ผู้ใช้', detail: 'สร้าง แก้ไข ระงับ ลบ รีเซ็ตรหัสผ่าน' },
       { id: 'roles', label: 'Role', detail: 'สร้าง แก้ไข ลบ role และสิทธิ์' },
+      { id: 'reports_manage', label: 'จัดการรายงาน', detail: 'สร้างรายงานใหม่ / ย้อนหลัง' },
     ],
   },
 ] as const

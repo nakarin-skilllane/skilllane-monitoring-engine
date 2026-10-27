@@ -16,5 +16,6 @@ import { TracesService } from './traces.service'
 @Module({
   controllers: [QueryController],
   providers: [Reader, ReleasesService, LogsService, TracesService, ErrorsService, OpsService, OverviewService, TopologyService],
+  exports: [Reader, ReleasesService],
 })
 export class QueryModule {}

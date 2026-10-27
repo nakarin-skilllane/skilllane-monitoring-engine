@@ -5,11 +5,12 @@ import { config } from './config'
 import { HealthController } from './health.controller'
 import { IngestModule } from './ingest/ingest.module'
 import { QueryModule } from './query/query.module'
+import { ReportsModule } from './reports/reports.module'
 
 /** ENGINE_ROLE: ingest → IngestModule, api → QueryModule + AuthModule (sessions on every route), all → both. */
 const roleModules: Array<Type | DynamicModule> = [
   ...(config.role === 'ingest' || config.role === 'all' ? [IngestModule] : []),
-  ...(config.role === 'api' || config.role === 'all' ? [AuthModule, QueryModule] : []),
+  ...(config.role === 'api' || config.role === 'all' ? [AuthModule, QueryModule, ReportsModule] : []),
 ]
 
 @Module({

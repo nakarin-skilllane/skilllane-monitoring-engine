@@ -176,7 +176,8 @@ export class AuthStore implements OnModuleInit {
   private async seedRoles(): Promise<void> {
     const roles = await this.listRoles(true)
     const now = new Date().toISOString()
-    if (!roles.some((r) => r.id === ADMIN_ROLE_ID)) {
+    const admin = roles.find((r) => r.id === ADMIN_ROLE_ID)
+    if (!admin) {
       await this.saveRole({
         id: ADMIN_ROLE_ID,
         name: 'admin',
@@ -186,6 +187,9 @@ export class AuthStore implements OnModuleInit {
         createdAt: now,
         deleted: false,
       })
+    } else if (ALL_GRANTS.some((g) => !admin.grants.some((a) => a.permission === g.permission))) {
+      // a permission added after the role was seeded (reports, reports_manage): admin always holds every one
+      await this.saveRole({ ...admin, grants: ALL_GRANTS })
     }
     if (!roles.some((r) => r.id === VIEWER_ROLE_ID)) {
       await this.saveRole({
