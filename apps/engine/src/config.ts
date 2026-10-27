@@ -14,6 +14,7 @@ import {
   resolveExportMode,
   topicName,
 } from 'skilllane-monitoring/contract'
+import type { ReportRules } from './reports/types'
 
 export type EngineRole = 'ingest' | 'api' | 'all'
 export type KafkaSaslMechanism = 'plain' | 'scram-sha-256' | 'scram-sha-512'
@@ -81,6 +82,14 @@ export interface EngineConfig {
     /** Users and roles (CLICKHOUSE_CONFIG_DATABASE, default `<CLICKHOUSE_DATABASE>_config`); skilllane_monitoring_reader has no grant on it. */
     database: string
   }
+  /** Daily report (docs/superpowers/specs/2026-10-27-daily-report-v2-draft.md). */
+  report: {
+    /** REPORT_ENVS (comma list, default prod; empty = no scheduled report, the page can still build one). */
+    envs: string[]
+    /** REPORT_CRON, Asia/Bangkok (default 09:00 every day). */
+    cron: string
+    rules: ReportRules
+  }
 }
 
 type Env = Record<string, string | undefined>
@@ -92,6 +101,12 @@ function str(env: Env, name: string): string | undefined {
 
 function int(env: Env, name: string, fallback: number): number {
   const value = Number.parseInt(str(env, name) ?? '', 10)
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+/** A positive number (decimals allowed), else the fallback. */
+function float(env: Env, name: string, fallback: number): number {
+  const value = Number(str(env, name) ?? '')
   return Number.isFinite(value) && value > 0 ? value : fallback
 }
 
@@ -184,6 +199,28 @@ export function loadConfig(env: Env = process.env): EngineConfig {
       secretFromEnv: str(env, 'SKILLLANE_MONITORING_AUTH_SECRET') !== undefined,
       sessionHours: int(env, 'SKILLLANE_MONITORING_SESSION_HOURS', 8),
       database: str(env, 'CLICKHOUSE_CONFIG_DATABASE') ?? `${str(env, 'CLICKHOUSE_DATABASE') ?? 'skilllane_monitoring'}_config`,
+    },
+    report: {
+      // unset = prod; set but empty = none (str() would turn empty into unset)
+      envs: (env.REPORT_ENVS ?? 'prod')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      cron: str(env, 'REPORT_CRON') ?? '0 9 * * *',
+      rules: {
+        badErrorRateX: float(env, 'REPORT_BAD_ERROR_RATE_X', 2),
+        badOutageMin: float(env, 'REPORT_BAD_OUTAGE_MIN', 30),
+        badFeatureSuccess: float(env, 'REPORT_BAD_FEATURE_SUCCESS', 0.95),
+        warnErrorRateX: float(env, 'REPORT_WARN_ERROR_RATE_X', 1.5),
+        newLookbackDays: int(env, 'REPORT_NEW_LOOKBACK_DAYS', 14),
+        increaseX: float(env, 'REPORT_INCREASE_X', 1.5),
+        increaseMin: int(env, 'REPORT_INCREASE_MIN', 10),
+        featureDropPt: float(env, 'REPORT_FEATURE_DROP_PT', 0.5),
+        dependencyMin: float(env, 'REPORT_DEPENDENCY_MIN', 5),
+        slowX: float(env, 'REPORT_SLOW_X', 1.2),
+        spikeX: float(env, 'REPORT_SPIKE_X', 3),
+        spikeMinReq: int(env, 'REPORT_SPIKE_MIN_REQ', 50),
+      },
     },
   }
 }
