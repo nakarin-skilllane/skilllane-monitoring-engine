@@ -229,3 +229,41 @@ SELECT
 FROM skilllane_monitoring.spans
 WHERE is_entry = 1
 GROUP BY minute, env, service, role, kind, route;
+
+-- Usage per HTTP route per Bangkok day, from the SDK's http.request lines (the daily report picks
+-- its main features from it: users, orgs, success, write share, busy hours over 30 days).
+CREATE TABLE IF NOT EXISTS skilllane_monitoring.route_usage_1d
+(
+    `day`       Date,
+    `env`       LowCardinality(String),
+    `service`   LowCardinality(String),
+    `route`     LowCardinality(String),
+    `requests`  SimpleAggregateFunction(sum, UInt64),
+    `ok`        SimpleAggregateFunction(sum, UInt64),
+    `with_user` SimpleAggregateFunction(sum, UInt64),
+    `writes`    SimpleAggregateFunction(sum, UInt64),
+    `hours`     SimpleAggregateFunction(groupUniqArrayArray, Array(UInt8)),
+    `users`     AggregateFunction(uniq, String),
+    `orgs`      AggregateFunction(uniq, String)
+)
+ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(day)
+ORDER BY (env, service, route, day)
+TTL day + INTERVAL 90 DAY;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS skilllane_monitoring.route_usage_1d_mv TO skilllane_monitoring.route_usage_1d AS
+SELECT
+    toDate(timestamp, 'Asia/Bangkok') AS day,
+    env,
+    service,
+    concat(http_method, ' ', http_route) AS route,
+    count() AS requests,
+    countIf(http_status < 500) AS ok,
+    countIf(user_id != '') AS with_user,
+    countIf(http_method IN ('POST', 'PUT', 'PATCH', 'DELETE')) AS writes,
+    groupUniqArray(toUInt8(toHour(timestamp, 'Asia/Bangkok'))) AS hours,
+    uniqStateIf(user_id, user_id != '') AS users,
+    uniqStateIf(organization_id, organization_id != '') AS orgs
+FROM skilllane_monitoring.logs
+WHERE event_code = 'http.request' AND http_route != ''
+GROUP BY day, env, service, route;

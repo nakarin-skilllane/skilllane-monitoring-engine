@@ -7,11 +7,12 @@ import { ReportScheduler } from './report-scheduler'
 import { ReportStore } from './report-store'
 import { ReportsController } from './reports.controller'
 import { ReportsService } from './reports.service'
+import { UsageBackfill } from './usage-backfill'
 
 /** Daily report (roles api / all): snapshots, the 09:00 @Cron, /api/reports/daily*. */
 @Module({
   imports: [ScheduleModule.forRoot(), QueryModule],
   controllers: [ReportsController],
-  providers: [ReportQueries, ReportBuilder, ReportStore, ReportsService, ReportScheduler],
+  providers: [ReportQueries, ReportBuilder, ReportStore, ReportsService, ReportScheduler, UsageBackfill],
 })
 export class ReportsModule {}

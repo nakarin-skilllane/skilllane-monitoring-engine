@@ -43,15 +43,30 @@ function buildReportFixture({ env = FIXTURE_ENV, date }) {
       http_method: method, http_route: route, http_status: status, url_path: route, resource: { seed: SEED }, events: '[]',
     })
 
+  // the SDK's request line (route_usage_1d reads it); a 500 is at level error, by u0–u4 of org1 like the old error
+  const request = (ms, method, route, status, durMs, user, org) =>
+    log(ms, {
+      level: status >= 500 ? 'error' : 'info', logger: 'HttpRequest', event_code: 'http.request',
+      http_method: method, http_route: route, url_path: route, http_status: status, duration_ms: durMs,
+      user_id: user, organization_id: org,
+    })
+
   for (let d = -14; d <= 0; d++) {
     const { fromMs } = windowOf(addDays(date, d))
     for (let h = 0; h < 24; h++) {
       const hourMs = fromMs + h * HOUR
       for (let i = 0; i < 20; i++) {
         const ms = hourMs + i * 3 * MIN
-        span(ms, 'GET', '/classes/:id', 200, d === 0 ? 300 : 80)
-        span(ms + 1000, 'POST', '/classes/:id/exams/:examId/submit', i === 0 ? 500 : 201, i === 0 ? 900 : 200)
+        const getMs = d === 0 ? 300 : 80
+        span(ms, 'GET', '/classes/:id', 200, getMs)
+        request(ms, 'GET', '/classes/:id', 200, getMs, `u${20 + i}`, `org${1 + (i % 2)}`)
+        const failed = i === 0
+        span(ms + 1000, 'POST', '/classes/:id/exams/:examId/submit', failed ? 500 : 201, failed ? 900 : 200)
+        request(ms + 1000, 'POST', '/classes/:id/exams/:examId/submit', failed ? 500 : 201, failed ? 900 : 200,
+          failed ? `u${h % 5}` : `u${40 + i}`, failed ? 'org1' : `org${3 + (i % 2)}`)
       }
+      // a probe without users: never a feature
+      for (let i = 0; i < 4; i++) request(hourMs + i * 15 * MIN, 'GET', '/health', 200, 2, '', '')
       if (h < 10) {
         log(hourMs + 30 * MIN, {
           level: 'error', event_code: 'app.error', message: 'value too large for column',
@@ -104,6 +119,7 @@ async function resetReportFixture(client, env = FIXTURE_ENV) {
   // the materialized views' rows of this env: the env is reserved for the fixture
   await client.command({ query: `ALTER TABLE route_stats_1m DELETE WHERE env = '${e}'`, ...sync })
   await client.command({ query: `ALTER TABLE trace_index DELETE WHERE env = '${e}'`, ...sync })
+  await client.command({ query: `ALTER TABLE route_usage_1d DELETE WHERE env = '${e}'`, ...sync })
 }
 
 async function seedReportFixture(client, { env = FIXTURE_ENV, date }) {
