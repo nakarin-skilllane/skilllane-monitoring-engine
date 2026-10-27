@@ -56,6 +56,8 @@ nano .env
 | `ENGINE_CORS_ORIGIN` | `http://localhost:3300` | ใส่เมื่อหน้าเว็บอยู่ที่อื่น |
 | `CLICKHOUSE_MEMORY_LIMIT` | `0` | `0` = ไม่จำกัด (ClickHouse จำกัดตัวเองที่ 90% ของ RAM เครื่อง) · ใส่ขนาด เช่น `6g` เมื่อมีงานอื่นบนเครื่องเดียวกัน |
 | `ENGINE_MEMORY_LIMIT`, `MONITOR_MEMORY_LIMIT` | `1500m`, `1g` | เครื่อง 4 GB ใช้ `1g`, `768m` |
+| `GOTENBERG_MEMORY_LIMIT` | `1g` | service `gotenberg` (Chromium) ที่แปลงรายงานเป็น PNG / PDF · engine เรียกผ่าน network ของ compose (`GOTENBERG_URL` ตั้งให้แล้ว) |
+| `REPORT_ENVS`, `REPORT_CRON` | `prod`, `0 9 * * *` | env ที่สร้างรายงานประจำวันอัตโนมัติ และเวลาที่สร้าง (เวลาไทย) · ค่ากฎอื่น `REPORT_*` ดู `.env.example` |
 
 ### Queue ของแอป (ใส่เมื่อให้ engine อ่าน queue แทน HTTP)
 
@@ -97,6 +99,7 @@ sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/" .env && rm .env.bak   # ใช้�
 
 docker build -f deploy/Dockerfile.engine  -t skilllane-monitoring-engine:$TAG  .
 docker build -f deploy/Dockerfile.monitor -t skilllane-monitoring-monitor:$TAG .
+docker pull gotenberg/gotenberg:8.37.0-chromium     # export PNG / PDF ของรายงาน (~500 MB)
 ```
 
 ## 4. Run และตรวจ

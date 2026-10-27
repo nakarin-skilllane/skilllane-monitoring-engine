@@ -165,7 +165,8 @@ SDK and engine read the same `.env`; `LOG_EXPORT` picks the queue for both.
 | `REPORT_CRON` | engine | `0 9 * * *` | when the daily report is built, Asia/Bangkok (`@nestjs/schedule`); the window is always 09:00 to 09:00 |
 | `REPORT_BAD_ERROR_RATE_X` · `REPORT_BAD_OUTAGE_MIN` · `REPORT_BAD_FEATURE_SUCCESS` · `REPORT_WARN_ERROR_RATE_X` | engine | `2` · `30` · `0.95` · `1.5` | report status: "มีปัญหา" when error rate > normal × X, dependency outages > N min, or a feature under the success rate; "มีปัญหาบางช่วง" when error rate > normal × X or any incident |
 | `REPORT_NEW_LOOKBACK_DAYS` · `REPORT_INCREASE_X` · `REPORT_INCREASE_MIN` | engine | `14` · `1.5` · `10` | error group "ใหม่" = not seen in N days; "เพิ่มขึ้น" = count > 6-window average × X and > N |
-| `REPORT_FEATURE_DROP_PT` · `REPORT_DEPENDENCY_MIN` · `REPORT_SLOW_X` · `REPORT_SPIKE_X` · `REPORT_SPIKE_MIN_REQ` | engine | `0.5` · `5` · `1.2` · `3` · `50` | feature below normal by N points (stage 2); dependency problem from N outage minutes; endpoint slower when p95 > p95 of the 6 windows before × X; error spike = a 5-minute bucket over the normal rate × X with ≥ N requests |
+| `REPORT_FEATURE_DROP_PT` · `REPORT_DEPENDENCY_MIN` · `REPORT_SLOW_X` · `REPORT_SPIKE_X` · `REPORT_SPIKE_MIN_REQ` | engine | `0.5` · `5` · `1.2` · `3` · `50` | feature below normal by N points; dependency problem from N outage minutes; endpoint slower when p95 > p95 of the 6 windows before × X; error spike = a 5-minute bucket over the normal rate × X with ≥ N requests |
+| `GOTENBERG_URL` | engine | – | Gotenberg (Chromium) for the report's PNG / PDF export (`deploy/docker-compose.yml` sets `http://gotenberg:3000`, dev `http://localhost:3030`); unset = export answers 503 |
 
 ## 6. Ports and credentials (host side)
 
@@ -185,7 +186,7 @@ Images: `clickhouse/clickhouse-server:25.8`, `apache/kafka:4.3.1`, `rabbitmq:4.1
 
 ## 7. ClickHouse
 
-Database `skilllane_monitoring`; tables `logs`, `spans`, `trace_index` (+ MV), `route_stats_1m` (+ MV). See `clickhouse/schema.sql`.
+Database `skilllane_monitoring`; tables `logs`, `spans`, `trace_index` (+ MV), `route_stats_1m` (+ MV), `route_usage_1d` (+ MV: usage per HTTP route per Bangkok day from `http.request` lines, the daily report's feature picker; the engine fills the 30 days before its first start once). See `clickhouse/schema.sql`.
 Insert with `@clickhouse/client`, `format: 'JSONEachRow'`, setting `date_time_input_format: 'best_effort'`.
 Logs `timestamp` = the ISO `@timestamp`. Spans `timestamp` = `nanosToDateTime64(startTimeUnixNano, 6)` from the contract.
 
@@ -307,10 +308,19 @@ Modules: `ClickhouseModule` (clients, schema apply), `IngestModule` (when role i
   windowStartMs, windowEndMs, generatedAt, status, payload, aiStatus, aiMessage }`, 404 `{ message, reportDate, canGenerate }`
   when missing. `GET /api/reports/daily/dates?env` → `{ env, dates: [{ reportDate, status }] }`.
   `POST /api/reports/daily/generate { env, date? }` (`reports_manage` + `reports` on the env; date within the logs' 90 days).
+- `GET /api/reports/daily/render?env&date&tab=overview|detail&view=infographic|data` (`reports`) → a whole HTML page (fonts
+  inlined, no script): the monitor's Infographic view shows it in an iframe. `GET /api/reports/daily/export?env&date&tab=overview|detail|all&view&format=png|pdf`
+  → the same HTML through Gotenberg: PNG = one tab's infographic, 760 px at 2×; PDF = A4 with header / footer / page
+  numbers, `tab=all` = overview (picture, data) then detail (picture, data); `Content-Disposition` file
+  `skilllane-report_{env}_{date}_{tab}_{view}.{ext}`; 20 s per render; the last 64 files cached per snapshot (`generatedAt`).
+- Main features (`payload.features`): groups of HTTP routes by service + first path segment, ranked daily from
+  `route_usage_1d` (30 days: users .30, orgs .15, success .25, days used .10, write share .10, busy hours .10); the list is
+  replayed over the 28 days before the report (enter: top 6 for 7 days running, leave: outside the top 8 for 14, at most 8),
+  so a rebuild gives the same list. `<config db>.features_auto` keeps the latest list per env (since, routes, score).
 - `payload` (schema 2): `rulesUsed`, `headline { statusAuto, reasons, summaryOverview, summaryDetail }`, `figures`
   (5 × `{ value, baseline, changePct }`), `trend` (7 windows), `features` (stage 2), `incidents`, `followups`, `topErrors`
   (new / increased only, ≤ 5), `dependencies`, `jobs`, `deploys`, `slowRoutes` (≤ 5), `aiNotes` (stage 4). No user ids, no bodies.
-  Shapes: `apps/engine/src/reports/types.ts`; the page: `/reports/daily?env&date&tab=overview|detail`.
+  Shapes: `apps/engine/src/reports/types.ts`; the page: `/reports/daily?env&date&tab=overview|detail&view=data|infographic`.
 
 ### Query API (`/api`, JSON, camelCase)
 
@@ -448,3 +458,4 @@ Agents append one line per deviation from this spec: date, who, what, why.
 - 2026-10-22 · nakarin + Claude · S3 settings split: `deploy/.env` takes `CLICKHOUSE_S3_URL` (service URL, no bucket) and `CLICKHOUSE_S3_BUCKET` (default `skilllane-monitoring`); `deploy/docker-compose.yml` builds ClickHouse's `CLICKHOUSE_S3_ENDPOINT` as `<URL>/<BUCKET>/clickhouse/` (path style) and turns cold storage on when the URL is set. Nothing creates the bucket. Why: the endpoint with the bucket inside was easy to get wrong.
 - 2026-10-22 · nakarin + Claude · one `.env`: `deploy/.env.example` is merged into the root `.env.example` (a "Deploy" block: `IMAGE_TAG`, `BIND_ADDRESS`, S3, memory limits) and `deploy/.env` is a link to the root `.env` (`ln -s ../.env deploy/.env`), so `docker compose` in `deploy/` runs as before. `setup-vm.sh` writes the root `.env` with random secrets and empty dev queues / CORS, links it, and moves an older `deploy/.env` file to the root (stops when both exist). Why: one file to keep, the deploy's `.env` is made on the machine anyway.
 - 2026-10-27 · nakarin + Claude · daily report v2 stage 1 (`apps/engine/src/reports`, `/reports/daily`): a snapshot per env of `[D-1 09:00, D 09:00)` Asia/Bangkok in `<config db>.daily_reports`, built by `@nestjs/schedule` 6.1.3 at `REPORT_CRON` (12.x is ESM-only, the engine is CommonJS on Node 20.12) on the schema instance with a 7-day catch-up after boot, or by `POST /api/reports/daily/generate`; normal = average of the 6 windows before with data (null under 3), every threshold an env var and copied into `payload.rulesUsed`; users affected from `level IN ('error','fatal')` (no `http_status` filter: the SDK logs a 5xx at error and `level` is in the ORDER BY); `topErrors` = new / increased only, `dependency.*` lines left to the dependency card; incidents from dependency outages ≥ `REPORT_DEPENDENCY_MIN`, 5-minute error spikes and failed jobs; payload fields camelCase. The monitor page reads the snapshot only (tabs ภาพรวม / รายละเอียด, กฎ / AI labels, no feedback controls); features, Infographic, export and AI come in stages 2–4. Integration test (15-window fixture in env `production`): build 218 ms on the dev ClickHouse. Why: a morning summary of logs and systems from one page, the same numbers for every view and export.
+- 2026-10-27 · nakarin + Claude · daily report stages 2–3: MV `route_usage_1d` (+ one-time 30-day backfill on the schema instance) and main features picked from it without anyone listing them (HTTP route groups only: cron / queue stay in the jobs card; membership replayed over 28 ranked days so the leave rule can act and rebuilds match); `features_auto` in the config database; the infographic and a printable data view rendered by the engine as HTML with IBM Plex Sans Thai inlined (`@fontsource/ibm-plex-sans-thai` 5.3.0), shown in the monitor through `/render` in an iframe and exported to PNG / PDF by Gotenberg `8.37.0-chromium` (`gotenberg` service in both composes, `--chromium-start-timeout=60s`); export files cached in memory (64). Fixed: reading a report by date failed since stage 1 (the `report_date` alias shadowed the Date column in WHERE). Why: the report's features card, a one-picture summary and files to pass on, all from the same snapshot.
