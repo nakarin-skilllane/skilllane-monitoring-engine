@@ -60,13 +60,19 @@ export interface TrendPoint {
   requests: number
 }
 
-/** Stage 2 (automatic features). Stage 1 writes []. */
+/** A main feature, picked from usage (features.ts). */
 export interface ReportFeature {
+  /** `service:resource`. */
   featureId: string
   name: string
-  successRate: number
+  /** 1 − errors / requests in the window; null without requests. */
+  successRate: number | null
+  /** The same over the 6 windows before; null without requests there. */
   successRate7d: number | null
+  /** Requests in the window. */
   volume: number
+  /** ok · below = under its 7-day rate by more than featureDropPt points · bad = under badFeatureSuccess · idle = no requests. */
+  state: 'ok' | 'below' | 'bad' | 'idle'
   note: string
 }
 
