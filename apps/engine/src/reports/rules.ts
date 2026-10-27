@@ -2,7 +2,18 @@
  * Pure rules of the daily report: no ClickHouse, no config. Every threshold comes in as
  * ReportRules so tests can pin them. A report date D covers [D-1 09:00, D 09:00) Bangkok.
  */
-import type { Compare, ErrorTrend, ReportRules, ReportStatus } from './types'
+import type {
+  Compare,
+  ErrorTrend,
+  OutageWindow,
+  ReportDependency,
+  ReportError,
+  ReportFigures,
+  ReportFollowup,
+  ReportIncident,
+  ReportRules,
+  ReportStatus,
+} from './types'
 
 export const DAY_MS = 86_400_000
 const HOUR_MS = 3_600_000
@@ -121,4 +132,248 @@ export function decideStatus(s: StatusInput, r: ReportRules): { status: ReportSt
   if (s.incidents >= 1) warn.push(`มีเหตุการณ์สำคัญ ${s.incidents} ครั้ง`)
   const status: ReportStatus = bad.length ? 'bad' : warn.length ? 'partial' : 'ok'
   return { status, reasons: [...bad, ...warn] }
+}
+
+// ---------- incidents ----------
+
+export interface SpikeBucket {
+  /** Bucket start (ms). */
+  t: number
+  requests: number
+  errors: number
+}
+
+export interface Spike {
+  fromMs: number
+  toMs: number
+  requests: number
+  errors: number
+  peakRate: number
+}
+
+/** 5-minute windows with error rate > baselineRate × spikeX and requests ≥ spikeMinReq; adjacent ones join. No baseline = none. */
+export function spikeIncidents(buckets: SpikeBucket[], baselineRate: number | null, r: ReportRules, stepMs = 5 * 60_000): Spike[] {
+  if (baselineRate === null) return []
+  const out: Spike[] = []
+  for (const b of [...buckets].sort((a, z) => a.t - z.t)) {
+    const rate = b.requests ? b.errors / b.requests : 0
+    if (b.requests < r.spikeMinReq || rate <= baselineRate * r.spikeX) continue
+    const last = out[out.length - 1]
+    if (last && last.toMs === b.t) {
+      last.toMs = b.t + stepMs
+      last.requests += b.requests
+      last.errors += b.errors
+      last.peakRate = Math.max(last.peakRate, round(rate, 5))
+    } else {
+      out.push({ fromMs: b.t, toMs: b.t + stepMs, requests: b.requests, errors: b.errors, peakRate: round(rate, 5) })
+    }
+  }
+  return out
+}
+
+export interface DependencyEvent {
+  /** `service/host`: whose lines these are; each process has its own down / up sequence. */
+  process: string
+  type: string
+  name: string
+  host: string
+  port: number
+  code: 'dependency.down' | 'dependency.still_down' | 'dependency.up'
+  atMs: number
+  /** dependency.up: the outage length. */
+  durationMs: number | null
+  reason: string
+  message: string
+}
+
+export interface OutageTarget {
+  key: string
+  type: string
+  name: string
+  host: string
+  port: number
+  windows: OutageWindow[]
+  /** Union of the windows (1 decimal). */
+  minutes: number
+  downEvents: number
+  message: string
+}
+
+function mergeWindows(windows: OutageWindow[]): OutageWindow[] {
+  const out: OutageWindow[] = []
+  for (const w of [...windows].sort((a, b) => a.fromMs - b.fromMs)) {
+    const last = out[out.length - 1]
+    if (last && w.fromMs <= last.toMs) {
+      last.toMs = Math.max(last.toMs, w.toMs)
+      last.ongoing = last.ongoing || w.ongoing
+    } else out.push({ ...w })
+  }
+  return out
+}
+
+/**
+ * Outage windows of each target (type:name@host:port) in [fromMs, toMs), the union over
+ * every process that reported it. dependency.up (not reason `connected`) closes a window
+ * of its duration; a down that never comes up runs to the end of the window (ongoing); a
+ * process whose first line is still_down was down since the start of the window.
+ */
+export function outageTargets(events: DependencyEvent[], fromMs: number, toMs: number): OutageTarget[] {
+  const targets = new Map<string, { e: DependencyEvent; windows: OutageWindow[]; message: string; downEvents: number }>()
+  const open = new Map<string, number>()
+  const seen = new Set<string>()
+  for (const e of [...events].sort((a, b) => a.atMs - b.atMs)) {
+    const key = `${e.type}:${e.name}@${e.host}:${e.port}`
+    const pk = `${e.process}\u0000${key}`
+    let target = targets.get(key)
+    if (!target) targets.set(key, (target = { e, windows: [], message: '', downEvents: 0 }))
+    const first = !seen.has(pk)
+    seen.add(pk)
+    if (e.code === 'dependency.up') {
+      if (e.reason === 'connected') continue
+      const opened = open.get(pk)
+      const start = Math.min(e.durationMs ? e.atMs - e.durationMs : (opened ?? e.atMs), opened ?? Number.POSITIVE_INFINITY)
+      target.windows.push({ fromMs: Math.max(fromMs, start), toMs: Math.min(toMs, e.atMs), ongoing: false })
+      open.delete(pk)
+      continue
+    }
+    if (e.code === 'dependency.down') target.downEvents++
+    if (!open.has(pk)) open.set(pk, e.code === 'dependency.still_down' && first ? fromMs : e.atMs)
+    if (e.message) target.message = e.message
+  }
+  for (const [pk, start] of open) {
+    targets.get(pk.split('\u0000')[1])!.windows.push({ fromMs: start, toMs, ongoing: true })
+  }
+  return [...targets.entries()]
+    .map(([key, { e, windows, message, downEvents }]) => {
+      const merged = mergeWindows(windows)
+      const minutes = round(merged.reduce((sum, w) => sum + (w.toMs - w.fromMs), 0) / 60_000, 1)
+      return { key, type: e.type, name: e.name, host: e.host, port: e.port, windows: merged, minutes, downEvents, message }
+    })
+    .filter((d) => d.windows.length)
+    .sort((a, b) => b.minutes - a.minutes || a.key.localeCompare(b.key))
+}
+
+export interface MissedCron {
+  /** Job type (`Class.method`). */
+  key: string
+  medianGapMin: number
+  longestGapMin: number
+  missedRuns: number
+}
+
+/**
+ * Cron jobs (`Class.method`) with at least 3 starts before the window: each gap ending in the
+ * window (and the gap from the last start to the end of the window, or now) longer than the
+ * median gap before the window × 2 counts round(gap / median) − 1 missed runs. A guess from history.
+ */
+export function missedCrons(rows: Array<{ type: string; starts: number[] }>, fromMs: number, toMs: number, nowMs: number): MissedCron[] {
+  const out: MissedCron[] = []
+  for (const row of rows) {
+    const starts = [...row.starts].sort((a, b) => a - b).filter((ms) => ms < toMs)
+    const before = starts.filter((ms) => ms < fromMs)
+    if (before.length < 3) continue
+    const gaps = before.slice(1).map((ms, i) => ms - before[i]).sort((a, b) => a - b)
+    const median = gaps.length % 2 ? gaps[(gaps.length - 1) / 2] : (gaps[gaps.length / 2 - 1] + gaps[gaps.length / 2]) / 2
+    if (median <= 0) continue
+    const inWindow: number[] = []
+    starts.forEach((ms, i) => {
+      if (i > 0 && ms >= fromMs) inWindow.push(ms - starts[i - 1])
+    })
+    inWindow.push(Math.min(toMs, nowMs) - starts[starts.length - 1])
+    const long = inWindow.filter((g) => g > median * 2)
+    if (!long.length) continue
+    out.push({
+      key: row.type,
+      medianGapMin: round(median / 60_000, 1),
+      longestGapMin: round(Math.max(...long) / 60_000, 1),
+      missedRuns: long.reduce((sum, g) => sum + Math.round(g / median) - 1, 0),
+    })
+  }
+  return out.sort((a, b) => a.key.localeCompare(b.key))
+}
+
+/** One row per job_type of the window (report-queries `jobs`). */
+export interface JobDb {
+  job: string
+  /** event_module of its lines: cron, bullmq, kafka, rabbitmq, task. */
+  kind: string
+  service: string
+  total: number
+  failed: number
+  first_failed_ms: number
+  last_failed_ms: number
+  /** Last job.finished; 0 when none. */
+  last_ok_ms: number
+}
+
+/** A job.failed incident per failing job: resolved when a run finished after its last failure. */
+export function jobIncidents(rows: JobDb[]): ReportIncident[] {
+  return rows
+    .filter((j) => j.failed > 0)
+    .map((j) => {
+      const resolved = j.last_ok_ms > j.last_failed_ms
+      return {
+        id: `job:${j.job}`,
+        source: 'job.failed' as const,
+        startedAtMs: j.first_failed_ms,
+        endedAtMs: resolved ? j.last_failed_ms : null,
+        what: `งาน ${j.job} ล้มเหลว ${j.failed} ครั้ง`,
+        usersAffected: null,
+        state: resolved ? ('resolved' as const) : ('ongoing' as const),
+      }
+    })
+}
+
+// ---------- wording ----------
+
+const fmtInt = (n: number): string => n.toLocaleString('en-US')
+
+/** Summaries without AI. */
+export function headlines(p: { status: ReportStatus; reasons: string[]; figures: ReportFigures }): { summaryOverview: string; summaryDetail: string } {
+  const label = STATUS_TEXT[p.status]
+  const why = p.reasons[0] ? ` · ${p.reasons[0]}` : ''
+  const f = p.figures
+  return {
+    summaryOverview: `${label} · ผู้ใช้ที่เจอปัญหา ${fmtInt(f.usersAffected.value)} คน${why}`,
+    summaryDetail: `${label} · error rate ${pct(f.errorRate.value)} · error กลุ่มใหม่ ${f.errorGroups.new} · เพิ่มขึ้น ${f.errorGroups.up}`,
+  }
+}
+
+/** An error group with its trend before the topErrors cut (any trend). */
+export type ClassifiedError = Omit<ReportError, 'trend'> & {
+  trend: ErrorTrend
+  /** Windows with this error among this one and the 6 before. */
+  seenWindows: number
+}
+
+/** A figure that went up by more than this against its normal needs a look. */
+const FIGURE_WORSE = 0.2
+const FIGURE_LABELS: Array<[keyof Pick<ReportFigures, 'usersAffected' | 'orgsAffected' | 'errorRate' | 'p95Ms'>, string]> = [
+  ['usersAffected', 'ผู้ใช้ที่เจอปัญหา'],
+  ['orgsAffected', 'โรงเรียนที่ได้รับผลกระทบ'],
+  ['errorRate', 'อัตราที่ใช้งานไม่สำเร็จ'],
+  ['p95Ms', 'ความเร็ว (p95)'],
+]
+
+/** "ต้องติดตาม": new errors with users, errors in ≥ 3 of 7 windows, figures > 20 % over normal, dependency problems. */
+export function followups(errors: ClassifiedError[], figures: ReportFigures, dependencies: ReportDependency[]): ReportFollowup[] {
+  const out: ReportFollowup[] = []
+  const what = (e: ClassifiedError) => e.errorHint || e.errorType || 'error'
+  const where = (e: ClassifiedError) => e.route || e.service
+  for (const e of errors) {
+    if (e.trend === 'new' && e.users > 0) out.push({ kind: 'new', key: e.fingerprint, text: `ปัญหาใหม่ ${what(e)} ที่ ${where(e)} กระทบผู้ใช้ ${fmtInt(e.users)} คน` })
+  }
+  for (const e of errors) {
+    if (e.trend !== 'new' && e.seenWindows >= 3) out.push({ kind: 'recurring', key: e.fingerprint, text: `${what(e)} ที่ ${where(e)} เกิดซ้ำ ${e.seenWindows} ใน 7 ช่วงล่าสุด` })
+  }
+  for (const [key, label] of FIGURE_LABELS) {
+    const k: Compare = figures[key]
+    if (k.changePct !== null && k.changePct > FIGURE_WORSE) {
+      out.push({ kind: 'threshold', key, text: `${label} สูงกว่าค่าปกติ ${Math.round(k.changePct * 100)}%` })
+    }
+  }
+  for (const d of dependencies) {
+    if (d.problem) out.push({ kind: 'threshold', key: d.key, text: `${d.name} ล่มรวม ${d.downMinutes} นาที` })
+  }
+  return out.slice(0, 10)
 }
