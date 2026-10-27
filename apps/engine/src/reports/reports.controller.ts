@@ -1,7 +1,8 @@
-import { Body, Controller, ForbiddenException, Get, HttpCode, NotFoundException, Post, Query, Req } from '@nestjs/common'
+import { Body, Controller, ForbiddenException, Get, Header, HttpCode, NotFoundException, Post, Query, Req } from '@nestjs/common'
 import { type AuthedRequest, RequirePermission } from '../auth/auth.guard'
 import { allows } from '../auth/permissions'
-import { bad, optName, optString, type QueryString } from '../query/params'
+import { bad, optEnum, optName, optString, type QueryString } from '../query/params'
+import { reportDocument } from './render/document'
 import { ReportsService } from './reports.service'
 import { latestReportDate, reportDateProblem } from './rules'
 
@@ -45,6 +46,21 @@ export class ReportsController {
       reportDate: date ?? null,
       canGenerate: !!req.principal && allows(req.principal.effective, 'reports_manage'),
     })
+  }
+
+  /** The infographic (default) or the data view of a tab as a whole HTML page: the monitor's iframe. */
+  @RequirePermission('reports')
+  @Get('render')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Header('Cache-Control', 'no-store')
+  async render(@Query() q: QueryString) {
+    const env = envOf(q)
+    const date = readDateOf(q)
+    const tab = optEnum(q, 'tab', ['overview', 'detail'] as const) ?? 'overview'
+    const view = optEnum(q, 'view', ['infographic', 'data'] as const) ?? 'infographic'
+    const report = await this.reports.get(env, date)
+    if (!report) throw new NotFoundException(date ? `ยังไม่มีรายงานของวันที่ ${date}` : 'ยังไม่มีรายงาน')
+    return reportDocument(report, [{ tab, view }], 'screen')
   }
 
   @RequirePermission('reports')
