@@ -1,7 +1,7 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReportView } from '../_lib/model'
 
 type Option = { label: string; tab: 'overview' | 'detail' | 'all'; view: ReportView; format: 'png' | 'pdf' }
@@ -23,6 +23,30 @@ export function ExportMenu({ env, date, view }: { env: string; date: string; vie
   const menu = useRef<HTMLDetailsElement>(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [open, setOpen] = useState(false)
+
+  // a <details> stays open on a click elsewhere: close it on a click outside, Esc, or a click in the
+  // infographic iframe (which reaches this page only as the window losing focus)
+  useEffect(() => {
+    if (!open) return
+    const close = () => {
+      if (menu.current) menu.current.open = false
+    }
+    const onPointer = (e: PointerEvent) => {
+      if (!menu.current?.contains(e.target as Node)) close()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('blur', close)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('blur', close)
+    }
+  }, [open])
 
   async function download(o: Option) {
     if (menu.current) menu.current.open = false
@@ -50,7 +74,7 @@ export function ExportMenu({ env, date, view }: { env: string; date: string; vie
 
   return (
     <span className="rp-export">
-      <details ref={menu} className="rp-export__menu">
+      <details ref={menu} className="rp-export__menu" onToggle={(e) => setOpen(e.currentTarget.open)}>
         <summary className="btn btn--sm" aria-busy={!!busy}>{busy ? `กำลังสร้าง ${busy}…` : 'Export ▾'}</summary>
         <ul role="menu">
           {options.map((o) => (
