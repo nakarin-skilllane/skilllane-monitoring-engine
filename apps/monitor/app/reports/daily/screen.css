@@ -26,6 +26,7 @@
 .rp-toolbar .rp-legend { margin: 0; flex: 1 1 320px; }
 .rp-toolbar__actions { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; }
 .rp-frame { display: block; width: 100%; max-width: 800px; height: 900px; margin: var(--sp-4) auto 0; border: 0; background: transparent; }
+.rp-panelbar { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; justify-content: space-between; margin: var(--sp-3) 0; }
 .rp-export { display: inline-flex; gap: var(--sp-2); align-items: center; position: relative; }
 .rp-export__menu { position: relative; }
 .rp-export__menu > summary { list-style: none; cursor: pointer; }

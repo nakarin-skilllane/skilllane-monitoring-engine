@@ -48,6 +48,13 @@ export default async function DailyReportPage({ searchParams }: { searchParams: 
   }
 
   const report = reportRes.data
+  // under each tab: its view (data / infographic) and its files
+  const panelBar = (key: 'overview' | 'detail') => (
+    <div className="rp-panelbar">
+      <ViewSwitch env={report.env} date={report.reportDate} tab={key} view={view} />
+      <ExportMenu env={report.env} date={report.reportDate} tab={key} view={view} />
+    </div>
+  )
   return (
     <>
       <ReportHeader report={report} dates={dates} tab={tab} view={view} canManage={canManage} />
@@ -58,8 +65,6 @@ export default async function DailyReportPage({ searchParams }: { searchParams: 
           ป้ายบอกที่มา: <SourceTag kind="rule" /> คำนวณจาก query ตามเกณฑ์ ผลเหมือนกันทุกครั้ง · <SourceTag kind="ai" /> ข้อความวิเคราะห์โดย AI เป็นข้อสันนิษฐาน ถ้า AI ไม่พร้อม ส่วนนี้จะหายไป ตัวเลขยังครบ
         </p>
         <div className="rp-toolbar__actions">
-          <ViewSwitch env={report.env} date={report.reportDate} tab={tab} view={view} />
-          <ExportMenu env={report.env} date={report.reportDate} view={view} />
           {/* the AI notes arrive a little after the numbers */}
           {report.aiStatus === 'pending' ? <AutoRefresh seconds={10} /> : canManage ? <AnalyzeButton env={report.env} date={report.reportDate} /> : null}
         </div>
@@ -72,12 +77,22 @@ export default async function DailyReportPage({ searchParams }: { searchParams: 
           {
             key: 'overview',
             label: 'ภาพรวม',
-            panel: view === 'infographic' ? <InfographicFrame env={report.env} date={report.reportDate} tab="overview" /> : <OverviewTab report={report} />,
+            panel: (
+              <>
+                {panelBar('overview')}
+                {view === 'infographic' ? <InfographicFrame env={report.env} date={report.reportDate} tab="overview" /> : <OverviewTab report={report} />}
+              </>
+            ),
           },
           {
             key: 'detail',
             label: 'รายละเอียด',
-            panel: view === 'infographic' ? <InfographicFrame env={report.env} date={report.reportDate} tab="detail" /> : <DetailTab report={report} nowMs={Date.now()} />,
+            panel: (
+              <>
+                {panelBar('detail')}
+                {view === 'infographic' ? <InfographicFrame env={report.env} date={report.reportDate} tab="detail" /> : <DetailTab report={report} nowMs={Date.now()} />}
+              </>
+            ),
           },
         ]}
       />

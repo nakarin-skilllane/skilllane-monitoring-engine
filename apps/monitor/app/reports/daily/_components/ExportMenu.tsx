@@ -1,19 +1,16 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import type { ReportView } from '../_lib/model'
 
 type Option = { label: string; tab: 'overview' | 'detail' | 'all'; view: ReportView; format: 'png' | 'pdf' }
 
 /**
- * Export ▾: the files of the current view (Infographic: PNG, PDF; data: PDF) of the open tab, and
+ * Export ▾: the files of the current view (Infographic: PNG, PDF; data: PDF) of its tab, and
  * the whole report as one PDF. Fetched, not linked, so an engine error (503 without Gotenberg)
  * shows here instead of a JSON page.
  */
-export function ExportMenu({ env, date, view }: { env: string; date: string; view: ReportView }) {
-  const sp = useSearchParams()
-  const tab = sp.get('tab') === 'detail' ? 'detail' : 'overview'
+export function ExportMenu({ env, date, tab, view }: { env: string; date: string; tab: 'overview' | 'detail'; view: ReportView }) {
   const tabName = tab === 'detail' ? 'รายละเอียด' : 'ภาพรวม'
   const options: Option[] = [
     ...(view === 'infographic' ? [{ label: `PNG · ${tabName}`, tab, view, format: 'png' } as const] : []),
