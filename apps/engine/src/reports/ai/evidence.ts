@@ -57,9 +57,6 @@ export function buildEvidence(r: StoredReport, featureRoutes: Record<string, str
   } else {
     add('fig:users', 'figure', { name: 'ผู้ใช้ที่เจอปัญหา', value: count(f.usersAffected.value), change: change(f.usersAffected), normal: normal(f.usersAffected.baseline, count) })
   }
-  if (f.activeOrgs) {
-    add('fig:orgs', 'figure', { name: 'โรงเรียนที่ใช้งาน', value: count(f.activeOrgs.value), change: change(f.activeOrgs), affected: share(f.orgsAffected.value, f.activeOrgs.value) })
-  }
   add('fig:errorRate', 'figure', { name: 'อัตราที่ใช้งานไม่สำเร็จ', value: pct(f.errorRate.value), change: change(f.errorRate), normal: normal(f.errorRate.baseline, (v) => pct(v)) })
   add('fig:p95', 'figure', { name: 'ความเร็ว (p95)', value: ms(f.p95Ms.value), change: change(f.p95Ms), normal: normal(f.p95Ms.baseline, ms) })
   for (const i of p.incidents) {

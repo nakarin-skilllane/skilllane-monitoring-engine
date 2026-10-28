@@ -126,11 +126,10 @@ describe('headlines', () => {
 })
 
 describe('followups', () => {
-  it('new errors with users, recurring errors, figures over the normal by > 20 %, dependency problems', () => {
+  it('new errors with users, recurring errors, figures over the normal by > 20 % (not orgs), dependency problems', () => {
     expect(followups([err({}), err({ fingerprint: '2', trend: 'same', seenWindows: 4, errorHint: 'Value too large', route: 'POST /b' })], FIGURES, [DEP])).toEqual([
       { kind: 'new', key: '1', text: 'ปัญหาใหม่ Null read ที่ GET /a กระทบผู้ใช้ 8 คน' },
       { kind: 'recurring', key: '2', text: 'Value too large ที่ POST /b เกิดซ้ำ 4 ใน 7 ช่วงล่าสุด' },
-      { kind: 'threshold', key: 'orgsAffected', text: 'โรงเรียนที่ได้รับผลกระทบ สูงกว่าค่าปกติ 200%' },
       { kind: 'threshold', key: 'errorRate', text: 'อัตราที่ใช้งานไม่สำเร็จ สูงกว่าค่าปกติ 110%' },
       { kind: 'threshold', key: 'redis:cache@r:6379', text: 'redis cache ล่มรวม 40 นาที' },
     ])

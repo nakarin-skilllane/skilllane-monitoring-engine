@@ -349,9 +349,9 @@ export type ClassifiedError = Omit<ReportError, 'trend'> & {
 
 /** A figure that went up by more than this against its normal needs a look. */
 const FIGURE_WORSE = 0.2
-const FIGURE_LABELS: Array<[keyof Pick<ReportFigures, 'usersAffected' | 'orgsAffected' | 'errorRate' | 'p95Ms'>, string]> = [
+// orgs are not here: a central log serves systems without them
+const FIGURE_LABELS: Array<[keyof Pick<ReportFigures, 'usersAffected' | 'errorRate' | 'p95Ms'>, string]> = [
   ['usersAffected', 'ผู้ใช้ที่เจอปัญหา'],
-  ['orgsAffected', 'โรงเรียนที่ได้รับผลกระทบ'],
   ['errorRate', 'อัตราที่ใช้งานไม่สำเร็จ'],
   ['p95Ms', 'ความเร็ว (p95)'],
 ]

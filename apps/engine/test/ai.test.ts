@@ -25,6 +25,9 @@ describe('buildEvidence', () => {
     expect(pack.items.find((i) => i.id === 'err:111')?.facts).toMatchObject({ count: '30', firstSeen: '19:00', afterDeploy: 'core 1.0.0 → 1.1.0 เวลา 18:00' })
     expect(pack.items.find((i) => i.id === 'feat:core:zzz')?.facts.routes).toBe('GET /zzz/:id')
     expect(JSON.stringify(pack)).not.toMatch(/user_id|organization_id|@[a-z-]+\.[a-z]{2,}/i)
+    // a central log: no SkillLane-only figure (orgs as schools)
+    expect(pack.items.some((i) => i.id === 'fig:orgs')).toBe(false)
+    expect(JSON.stringify(pack)).not.toContain('โรงเรียน')
   })
 })
 

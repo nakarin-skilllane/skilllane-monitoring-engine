@@ -89,7 +89,7 @@ body.png .ig{border-radius:0;border:0}
 .ig-t .ai{color:#5b4a9e;font-size:11.5px;max-width:220px}
 .ig-foot{display:flex;justify-content:space-between;gap:12px;font-size:10.5px;color:#888;padding:8px 18px;background:#f6f8f7;border-top:1px solid #e6ebe8}
 .dv h2{font-size:18px;margin:0 0 8px}
-.dv-figures{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;break-inside:avoid}
+.dv-figures{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;break-inside:avoid}
 .dv-figures div{border:1px solid #e3e8e5;border-radius:8px;padding:6px 8px;display:flex;flex-direction:column}
 .dv-figures span{font-size:10.5px;color:#6b716e}.dv-figures b{font-size:17px;font-weight:600}.dv-figures em{font-style:normal;font-size:10.5px;color:#6b716e}
 .dv-status{margin-bottom:10px;break-inside:avoid}

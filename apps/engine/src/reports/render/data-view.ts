@@ -45,20 +45,18 @@ function figures(r: StoredReport): string {
   const f = p.figures
   const cell = (label: string, value: string, c: typeof f.requests, fmt: (v: number) => string, sub = '') =>
     `<div><span>${esc(label)}</span><b>${esc(value)}</b><em>${esc(changeText(c))}${c.baseline === null ? '' : ` · ปกติ ${esc(fmt(c.baseline))}`}</em>${sub ? `<em class="sub">${esc(sub)}</em>` : ''}</div>`
-  if (f.activeUsers && f.activeOrgs) {
+  if (f.activeUsers) {
     const downMinutes = Math.round(p.dependencies.reduce((sum, d) => sum + d.downMinutes, 0) * 10) / 10
     const ongoing = p.incidents.filter((i) => i.state === 'ongoing').length
     return `<div class="dv-figures">${[
       cell('การใช้งาน', `${count(f.requests.value)} req`, f.requests, count, `ไม่สำเร็จ ${share(f.failedRequests ?? 0, f.requests.value)}`),
       cell('ผู้ใช้งาน', `${count(f.activeUsers.value)} คน`, f.activeUsers, count, `เจอปัญหา ${share(f.usersAffected.value, f.activeUsers.value)}`),
-      cell('โรงเรียนที่ใช้งาน', `${count(f.activeOrgs.value)} แห่ง`, f.activeOrgs, count, `ได้รับผลกระทบ ${share(f.orgsAffected.value, f.activeOrgs.value)}`),
       cell('ความเร็ว (p95)', ms(f.p95Ms.value), f.p95Ms, ms, `ช้าขึ้น ${p.slowRoutes.length} endpoint`),
       `<div><span>เหตุการณ์สำคัญ</span><b>${count(p.incidents.length)} ครั้ง</b><em>${downMinutes ? `ล่มรวม ${downMinutes} นาที` : 'ไม่มีช่วงที่ล่ม'}</em><em class="sub">ยังเกิดอยู่ ${ongoing}</em></div>`,
     ].join('')}</div>`
   }
   return `<div class="dv-figures">${[
     cell('ผู้ใช้ที่เจอปัญหา', `${count(f.usersAffected.value)} คน`, f.usersAffected, count),
-    cell('โรงเรียนที่ได้รับผลกระทบ', `${count(f.orgsAffected.value)} แห่ง`, f.orgsAffected, count),
     cell('อัตราที่ใช้งานไม่สำเร็จ', pct(f.errorRate.value), f.errorRate, (v) => pct(v)),
     cell('ความเร็ว (p95)', ms(f.p95Ms.value), f.p95Ms, ms),
     cell('การใช้งานทั้งหมด', count(f.requests.value), f.requests, count),

@@ -62,14 +62,15 @@ function overview(r: StoredReport): string {
   const downMinutes = Math.round(p.dependencies.reduce((sum, d) => sum + d.downMinutes, 0) * 10) / 10
   const bad = (n: number) => (n > 0 ? 'bad' : 'ok')
   // snapshots from 2026-10-28 on: totals with how many had a problem
-  const kpis = f.activeUsers && f.activeOrgs ? [
-    kpi('ผู้ใช้งาน', `${count(f.activeUsers.value)} คน`, changeText(f.activeUsers), '', p.trend.map((t) => t.activeUsers ?? 0), { text: `เจอปัญหา ${share(f.usersAffected.value, f.activeUsers.value)}`, tone: bad(f.usersAffected.value) }),
-    kpi('โรงเรียนที่ใช้งาน', `${count(f.activeOrgs.value)} แห่ง`, changeText(f.activeOrgs), '', undefined, { text: `ได้รับผลกระทบ ${share(f.orgsAffected.value, f.activeOrgs.value)}`, tone: bad(f.orgsAffected.value) }),
+  const p95 = kpi('ความเร็ว (p95)', ms(f.p95Ms.value), changeText(f.p95Ms), changeTone(f.p95Ms), p.trend.map((t) => t.p95Ms), { text: `ช้าขึ้น ${p.slowRoutes.length} endpoint`, tone: bad(p.slowRoutes.length) })
+  const kpis = f.activeUsers ? [
     kpi('การใช้งาน', `${count(f.requests.value)} req`, changeText(f.requests), '', p.trend.map((t) => t.requests), { text: `ไม่สำเร็จ ${share(f.failedRequests ?? 0, f.requests.value)}`, tone: bad(f.failedRequests ?? 0) }),
+    kpi('ผู้ใช้งาน', `${count(f.activeUsers.value)} คน`, changeText(f.activeUsers), '', p.trend.map((t) => t.activeUsers ?? 0), { text: `เจอปัญหา ${share(f.usersAffected.value, f.activeUsers.value)}`, tone: bad(f.usersAffected.value) }),
+    p95,
     kpi('เหตุการณ์สำคัญ', `${count(p.incidents.length)} ครั้ง`, downMinutes ? `ล่มรวม ${downMinutes} นาที` : 'ไม่มีช่วงที่ล่ม', bad(downMinutes), undefined, { text: `ยังเกิดอยู่ ${p.incidents.filter((i) => i.state === 'ongoing').length}`, tone: bad(p.incidents.filter((i) => i.state === 'ongoing').length) }),
   ].join('') : [
     kpi('ผู้ใช้ที่เจอปัญหา', `${count(f.usersAffected.value)} คน`, changeText(f.usersAffected), changeTone(f.usersAffected), p.trend.map((t) => t.usersAffected)),
-    kpi('โรงเรียนที่ได้รับผลกระทบ', `${count(f.orgsAffected.value)} แห่ง`, changeText(f.orgsAffected), changeTone(f.orgsAffected)),
+    p95,
     kpi('ฟีเจอร์ที่มีปัญหา', p.features.length ? `${problems}/${p.features.length}` : '–', p.features.length ? (problems ? 'ต่ำกว่าปกติหรือเกณฑ์' : 'ทำงานปกติ') : 'กำลังเก็บข้อมูล', problems ? 'bad' : 'ok'),
     kpi('การใช้งานทั้งหมด', count(f.requests.value), changeText(f.requests), '', p.trend.map((t) => t.requests)),
   ].join('')

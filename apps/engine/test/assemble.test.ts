@@ -63,7 +63,9 @@ describe('assembleReport', () => {
     expect(p.topErrors.map((e) => [e.fingerprint, e.trend, e.users])).toEqual([['111', 'new', 8]])
     expect(p.topErrors[0]).toMatchObject({ location: 'src/a.ts › A.b', count7dAvg: 0, firstSeenMs: W.fromMs + 10 * H })
     expect(p.figures.errorGroups).toEqual({ new: 1, up: 0 })
-    expect(p.followups.map((f) => f.kind)).toEqual(['new', 'recurring', 'threshold', 'threshold', 'threshold'])
+    // orgs went 1 → 3 but are no follow-up (a central log serves systems without them)
+    expect(p.followups.map((f) => f.kind)).toEqual(['new', 'recurring', 'threshold', 'threshold'])
+    expect(p.followups.some((f) => f.key === 'orgsAffected')).toBe(false)
   })
 
   it('the deploy links the new error that started within 2 h', () => {
