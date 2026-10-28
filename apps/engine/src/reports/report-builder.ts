@@ -147,7 +147,8 @@ export function assembleReport(raw: RawReportData, r: ReportRules): DailyPayload
   })
   const topErrors: ReportError[] = classified
     .filter((e): e is ClassifiedError & { trend: 'new' | 'up' } => e.trend === 'new' || e.trend === 'up')
-    .sort((a, b) => b.users - a.users || b.count - a.count)
+    // the detail tab is for whoever fixes it: the loudest first (users still break ties)
+    .sort((a, b) => b.count - a.count || b.users - a.users)
     .slice(0, TOP_ERRORS)
     .map(({ seenWindows: _seen, ...e }) => e)
 

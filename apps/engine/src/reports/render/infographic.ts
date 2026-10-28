@@ -110,14 +110,19 @@ function detail(r: StoredReport): string {
         )
         .join('')}</div>`
     : empty
-  const maxUsers = Math.max(...p.topErrors.map((e) => e.users), 1)
+  const maxCount = Math.max(...p.topErrors.slice(0, 3).flatMap((e) => [e.count, e.count7dAvg ?? 0]), 1)
+  const deployOf = (fp: string) => p.deploys.find((d) => d.relatedFingerprints.includes(fp))
   const errors = p.topErrors.length
     ? `<table class="ig-t">${p.topErrors
         .slice(0, 3)
         .map((e) => {
           const ai = r.aiStatus === 'ok' ? p.aiNotes.find((n) => n.target === e.fingerprint) : undefined
           const tag = e.trend === 'new' ? '<span class="ig-tag new">ใหม่</span>' : `<span class="ig-tag up">${e.changePct === null ? 'เพิ่มขึ้น' : `+${Math.round(e.changePct * 100)}%`}</span>`
-          return `<tr><td>${tag}</td><td><b>${esc(e.errorHint || e.errorType || e.message || e.logger)}</b><br><span class="rt">${esc(e.route || e.service)}</span></td><td class="u">${count(e.users)} คน<span class="ig-ubar" style="width:${Math.max(4, (e.users / maxUsers) * 100).toFixed(0)}%"></span></td>${ai ? `<td class="ai"><b>AI</b> ${esc(ai.text)}</td>` : ''}</tr>`
+          const deploy = deployOf(e.fingerprint)
+          const meta = [e.location, `เริ่ม ${clock(e.firstSeenMs)}`, deploy ? `หลัง deploy ${deploy.version}` : ''].filter(Boolean).map(esc).join(' · ')
+          const normal = e.count7dAvg === null ? 'ยังไม่มีค่าปกติ' : `ปกติ ${count(Math.round(e.count7dAvg))}`
+          const bar = `<span class="trk"><i style="width:${(((e.count7dAvg ?? 0) / maxCount) * 100).toFixed(1)}%"></i><i class="now" style="width:${((e.count / maxCount) * 100).toFixed(1)}%"></i></span>`
+          return `<tr><td>${tag}</td><td><b>${esc(e.errorHint || e.errorType || e.message || e.logger)}</b><br><span class="rt">${esc(e.route || e.service)}</span><br><span class="meta">${meta}</span></td><td class="n"><b>${count(e.count)} ครั้ง</b> <span class="meta">${esc(normal)}</span>${bar}</td>${ai ? `<td class="ai"><b>AI</b> ${esc(ai.text)}</td>` : ''}</tr>`
         })
         .join('')}</table>`
     : empty
@@ -127,7 +132,7 @@ function detail(r: StoredReport): string {
     `<div class="ig-kpis">${kpis}</div>`,
     section('ระบบที่พึ่งพา · งานเบื้องหลัง · deploy', chips.length ? `<div class="ig-feats">${chips.join('')}</div>` : empty),
     section('endpoint ที่ช้าขึ้น (p95 เทียบ 7 วัน)', slow),
-    section('error ที่ต้องดูก่อน', errors),
+    section('error ที่ต้องดูก่อน (จำนวนครั้ง เทียบค่าเฉลี่ย 7 วัน)', errors),
   ].join('')
 }
 

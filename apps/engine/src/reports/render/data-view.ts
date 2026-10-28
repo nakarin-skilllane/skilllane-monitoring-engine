@@ -80,7 +80,7 @@ function detail(r: StoredReport): string {
   const p = r.payload
   return [
     status(r, p.headline.summaryDetail, 'summaryDetail'),
-    card('ปัญหาใหม่ / เพิ่มขึ้น', 'ใหม่ = ไม่เคยพบใน 14 วัน · เพิ่มขึ้น = มากกว่าค่าเฉลี่ย 7 วัน × 1.5 · เรียงตามผู้ใช้', ['#', 'ปัญหา', 'เทียบ 7 วัน', 'route', 'จุดในโค้ด', 'ครั้ง', 'ผู้ใช้', 'พบครั้งแรก'],
+    card('ปัญหาใหม่ / เพิ่มขึ้น', 'ใหม่ = ไม่เคยพบใน 14 วัน · เพิ่มขึ้น = มากกว่าค่าเฉลี่ย 7 วัน × 1.5 · เรียงตามจำนวนครั้ง', ['#', 'ปัญหา', 'เทียบ 7 วัน', 'route', 'จุดในโค้ด', 'ครั้ง', 'ผู้ใช้', 'พบครั้งแรก'],
       p.topErrors.map((e, i) => [i + 1, `${e.errorType || e.logger} ${e.errorHint || e.message}`.trim(), e.trend === 'new' ? 'ใหม่' : e.changePct === null ? 'เพิ่มขึ้น' : `+${Math.round(e.changePct * 100)}%`, e.route || '–', e.location || '–', count(e.count), count(e.users), clock(e.firstSeenMs)]), [5, 6]),
     card('ระบบที่พึ่งพา', 'นาทีที่ล่มรวมในช่วงรายงาน', ['ระบบ', 'สถานะ', 'ล่ม (นาที)', 'error ล่าสุด', 'หมายเหตุ'],
       p.dependencies.map((d) => [`${d.name} (${d.host}:${d.port})`, d.problem ? 'มีปัญหา' : 'สะดุดสั้น', d.downMinutes, d.lastError || '–', d.note || '–']), [2]),

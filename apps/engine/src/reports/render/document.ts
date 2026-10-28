@@ -79,8 +79,11 @@ body.png .ig{border-radius:0;border:0}
 .ig-t td{padding:6px;border-top:1px solid #f0f0f0;vertical-align:middle}
 .ig-t tr:first-child td{border-top:0}
 .ig-t .rt{font-size:11px;color:#555}
-.ig-t .u{white-space:nowrap;color:#444;min-width:110px}
-.ig-ubar{display:block;height:6px;border-radius:3px;background:#f2c46b;margin-top:3px}
+.ig-t .meta{font-size:10.5px;color:#888}
+.ig-t .n{white-space:nowrap;color:#444;min-width:170px;text-align:right}
+.ig-t .trk{position:relative;display:block;height:10px;background:#eef2f0;border-radius:5px;margin-top:4px}
+.ig-t .trk i{position:absolute;left:0;top:0;height:100%;border-radius:5px;background:#9cc7b1}
+.ig-t .trk i.now{background:#c0503a;opacity:.85;height:4px;top:3px}
 .ig-t .ai{color:#5b4a9e;font-size:11.5px;max-width:220px}
 .ig-foot{display:flex;justify-content:space-between;gap:12px;font-size:10.5px;color:#888;padding:8px 18px;background:#f6f8f7;border-top:1px solid #e6ebe8}
 .dv h2{font-size:18px;margin:0 0 8px}

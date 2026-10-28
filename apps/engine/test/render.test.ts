@@ -28,6 +28,9 @@ describe('infographic', () => {
     expect(t).toContain('deploy core 1.0.0 → 1.1.0 · 18:00')
     expect(t).toContain('200 ms → 300 ms')
     expect(t).toContain('ใหม่ Null read')
+    expect(t).toContain('src/a.ts › A.b · เริ่ม 19:00 · หลัง deploy 1.1.0')
+    expect(t).toContain('30 ครั้ง ปกติ 0')
+    expect(t).not.toContain('8 คน')
   })
   it('an empty window says so; AI state is shown', () => {
     const quiet = sampleReport({ dependencyEvents: [], jobs: [], errors: [], routes: [], deploys: [] }, { aiStatus: 'quota', aiMessage: '429' })

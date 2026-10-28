@@ -93,6 +93,12 @@ describe('assembleReport', () => {
     expect(q.followups[0].text).toBe('ปัญหาใหม่ Connection error to <email> id <n> ที่ core กระทบผู้ใช้ 2 คน')
   })
 
+  it('topErrors: the most frequent first, users only break ties', () => {
+    const e = (fingerprint: string, count: number, users: number) => ({ fingerprint, service: 'core', error_type: 'E', error_hint: fingerprint, route: '', origin_file: '', origin_function: '', count, users, first_ms: W.fromMs, trace_id: '' })
+    const q = assembleReport(raw({ errors: [e('few-many-users', 5, 9), e('loud', 50, 1), e('tie', 50, 2)], errorHistory: [] }), R)
+    expect(q.topErrors.map((x) => x.fingerprint)).toEqual(['tie', 'loud', 'few-many-users'])
+  })
+
   it('maskMessage hides e-mails, UUIDs and long numbers, and keeps 160 characters', () => {
     expect(maskMessage('user 3fa85f64-5717-4562-b3fc-2c963f66afa6 phone 0812345678 port 6379')).toBe('user <uuid> phone <n> port 6379')
     expect(maskMessage('x'.repeat(200))).toHaveLength(160)

@@ -23,7 +23,7 @@ export function DetailTab({ report, nowMs }: { report: DailyReport; nowMs: numbe
   return (
     <div className="rp-tab">
       <StatusBlock status={p.headline.statusAuto} summary={p.headline.summaryDetail} aiStatus={report.aiStatus} aiMessage={report.aiMessage} />
-      <Panel title={<>ปัญหาใหม่ / เพิ่มขึ้น <SourceTag kind="rule" /></>} meta="จัดกลุ่มด้วย error_fingerprint · เรียงตามผู้ใช้ที่โดน · ใหม่ = ไม่เคยพบใน 14 วัน · เพิ่มขึ้น = มากกว่าค่าเฉลี่ย 7 วัน × 1.5" flush>
+      <Panel title={<>ปัญหาใหม่ / เพิ่มขึ้น <SourceTag kind="rule" /></>} meta="จัดกลุ่มด้วย error_fingerprint · เรียงตามจำนวนครั้ง · ใหม่ = ไม่เคยพบใน 14 วัน · เพิ่มขึ้น = มากกว่าค่าเฉลี่ย 7 วัน × 1.5" flush>
         {p.topErrors.length ? (
           <TableWrap>
             <Table dense caption="ปัญหาใหม่ / เพิ่มขึ้น">
