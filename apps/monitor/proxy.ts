@@ -2,7 +2,7 @@
  * Proxy (Next 16's name for middleware). Sign-in first: a page request without
  * the session cookie (skilllane_monitoring_session, set by the engine at /engine/auth/login)
  * goes to /login?next=…, except /login and /set-password; the request path is
- * passed to the layout as x-skilllane-monitoring-path. The engine still checks every call: an
+ * passed to the layout as x-skilllane-monitoring-path (its query as x-skilllane-monitoring-search). The engine still checks every call: an
  * expired or revoked session is sent to /login by the layout.
  *
  * Unknown detail ids answer HTTP 404.
@@ -77,6 +77,7 @@ export async function proxy(req: NextRequest) {
   }
   const headers = new Headers(req.headers)
   headers.set('x-skilllane-monitoring-path', pathname)
+  headers.set('x-skilllane-monitoring-search', req.nextUrl.search)
   const next = () => NextResponse.next({ request: { headers } })
   if ((req.method !== 'GET' && req.method !== 'HEAD') || req.headers.has('rsc') || req.headers.has('next-router-prefetch')) return next()
   const [, screen, rawId] = req.nextUrl.pathname.split('/')

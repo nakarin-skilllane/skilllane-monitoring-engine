@@ -2,7 +2,7 @@
  * Typed server-side calls to the skilllane-monitoring engine query API. Server components only
  * (it reads ENGINE_URL at request time); client components use lib/engine-client.ts.
  *
- * Every call resolves, never throws: `{ ok: true, data }` or `{ ok: false, error }`
+ * Every call resolves, never throws (but a 401 redirects to /login): `{ ok: true, data }` or `{ ok: false, error }`
  * with a readable EngineError, so a page can render <EngineErrorState error={…} />
  * (Thai panel naming the engine URL) instead of a Next error page.
  *
@@ -10,7 +10,8 @@
  *   if (!res.ok) return <EngineErrorState error={res.error} />
  *   res.data.services …
  */
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { type QueryInput, toSearch } from './url'
 import type {
@@ -76,6 +77,27 @@ async function sessionHeader(): Promise<Record<string, string>> {
 }
 
 export const SESSION_COOKIE = 'skilllane_monitoring_session'
+const AUTH_PAGES = ['/login', '/set-password']
+
+/**
+ * The session ended (expired, banned, reset, a new engine key): to /login and back here after. Every page, also
+ * on a client navigation, where the root layout's own check does not run again and the page would read the 401 as
+ * "no permission". Not on the sign-in pages, which ask /me to see whether someone is signed in.
+ */
+async function toLoginOn401(): Promise<void> {
+  let path: string
+  let search: string
+  try {
+    const h = await headers()
+    path = h.get('x-skilllane-monitoring-path') ?? '/'
+    search = h.get('x-skilllane-monitoring-search') ?? ''
+  } catch {
+    // outside a request (build)
+    return
+  }
+  if (AUTH_PAGES.some((p) => path === p || path.startsWith(`${p}/`))) return
+  redirect(`/login?next=${encodeURIComponent(`${path}${search}`)}`)
+}
 
 /** GET <ENGINE_URL><path>?<query> with no-store and an 8 s timeout, as the signed-in user. */
 export async function engineGet<T>(path: string, query?: QueryInput): Promise<EngineResult<T>> {
@@ -100,6 +122,7 @@ export async function engineGet<T>(path: string, query?: QueryInput): Promise<En
     }
     return fail('unreachable', err.cause?.code ?? err.cause?.message ?? err.message)
   }
+  if (res.status === 401) await toLoginOn401()
   const text = await res.text().catch(() => '')
   let body: unknown = null
   try {

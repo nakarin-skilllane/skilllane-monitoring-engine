@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { toLoginOn401 } from '@/lib/engine-client'
 import type { ReportView } from '../_lib/model'
 
 type Option = { label: string; tab: 'overview' | 'detail' | 'all'; view: ReportView; format: 'png' | 'pdf' }
@@ -51,6 +52,7 @@ export function ExportMenu({ env, date, tab, view }: { env: string; date: string
     setError('')
     try {
       const res = await fetch(`/engine/reports/daily/export?${new URLSearchParams({ env, date, tab: o.tab, view: o.view, format: o.format })}`)
+      toLoginOn401(res.status)
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { message?: string } | null
         throw new Error(body?.message || `export ไม่สำเร็จ (${res.status})`)
