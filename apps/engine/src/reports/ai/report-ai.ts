@@ -60,7 +60,7 @@ export class ReportAi {
         const g = guardNotes(raw, pack)
         for (const d of g.dropped) this.logger.warn(`${r.env} ${r.reportDate}: dropped note ${d.target || '?'}: ${d.why}`)
         const tokens = res.tokens ? ` · ${res.tokens.prompt + res.tokens.completion} token` : ''
-        const dropped = g.dropped.length ? ` · ตัดทิ้ง ${g.dropped.length} ข้อความที่อ้างหลักฐานไม่ได้` : ''
+        const dropped = g.dropped.length ? ` · ตัดทิ้ง ${g.dropped.length} ข้อความที่ไม่ผ่านการตรวจ` : ''
         return { aiStatus: 'ok', aiMessage: `${res.model}${tokens}${dropped}`, aiNotes: g.notes, featureNames: g.names }
       } catch (err) {
         const e = err instanceof AiError ? err : new AiError('error', err instanceof Error ? err.message : String(err))

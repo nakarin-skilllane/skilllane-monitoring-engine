@@ -808,7 +808,7 @@ export interface Dependency {
 // ---------- daily report (engine src/reports/types.ts; keep in step) ----------
 
 export type ReportStatus = 'ok' | 'partial' | 'bad'
-export type ReportAiStatus = 'ok' | 'unavailable' | 'quota' | 'error' | 'disabled'
+export type ReportAiStatus = 'pending' | 'ok' | 'unavailable' | 'quota' | 'error' | 'disabled'
 export interface ReportCompare { value: number; baseline: number | null; changePct: number | null }
 export interface ReportFigures {
   /** Absent in snapshots before 2026-10-28. */

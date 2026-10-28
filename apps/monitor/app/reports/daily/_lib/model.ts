@@ -6,6 +6,7 @@ export const STATUS_STATE: Record<ReportStatus, 'ok' | 'warn' | 'down'> = { ok: 
 export const EMPTY = 'ไม่มีรายการในช่วงนี้'
 
 export const AI_STATUS_TEXT: Record<ReportAiStatus, string> = {
+  pending: 'AI กำลังวิเคราะห์…',
   ok: 'AI พร้อม',
   unavailable: 'AI ต่อไม่ได้',
   quota: 'AI โควตาหมด',
@@ -15,7 +16,9 @@ export const AI_STATUS_TEXT: Record<ReportAiStatus, string> = {
 
 /** The grey bar shown instead of the AI box. */
 export function aiMissingText(status: ReportAiStatus, message: string): string {
-  const why = status === 'disabled' ? 'ยังไม่ได้เปิดใช้ AI' : `${AI_STATUS_TEXT[status]}${message ? ` (${message})` : ''}`
+  if (status === 'pending') return 'AI กำลังวิเคราะห์ · ตัวเลขทั้งหมดพร้อมแล้ว หน้านี้จะอัปเดตเองเมื่อเสร็จ'
+  if (status === 'ok') return 'AI ไม่มีข้อความสำหรับส่วนนี้ · ส่วนนี้มีเฉพาะที่คำนวณจากกฎ'
+  const why = status === 'disabled' ? message || 'ยังไม่ได้เปิดใช้ AI' : `${AI_STATUS_TEXT[status]}${message ? ` (${message})` : ''}`
   return `${why} · รายงานวันนี้มีเฉพาะส่วนที่คำนวณจากกฎ`
 }
 
@@ -70,6 +73,10 @@ export function neighbours(dates: ReportDateItem[], current: string): { prev?: s
 /** `13 (1.0%)` of a total; no % without one (capped at 100 %). */
 export const share = (part: number, total: number): string =>
   total > 0 ? `${part.toLocaleString('en-US')} (${(Math.min(1, part / total) * 100).toFixed(1)}%)` : part.toLocaleString('en-US')
+
+/** The AI's note for a target (summaryOverview, summaryDetail, an error fingerprint, an incident id), when it ran. */
+export const aiNote = (r: { aiStatus: ReportAiStatus; payload: { aiNotes: Array<{ target: string; text: string }> } }, target: string): string | undefined =>
+  r.aiStatus === 'ok' ? r.payload.aiNotes.find((n) => n.target === target)?.text : undefined
 
 export const isDate = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
 

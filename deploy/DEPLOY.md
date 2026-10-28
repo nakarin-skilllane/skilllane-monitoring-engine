@@ -57,6 +57,7 @@ nano .env
 | `CLICKHOUSE_MEMORY_LIMIT` | `0` | `0` = ไม่จำกัด (ClickHouse จำกัดตัวเองที่ 90% ของ RAM เครื่อง) · ใส่ขนาด เช่น `6g` เมื่อมีงานอื่นบนเครื่องเดียวกัน |
 | `ENGINE_MEMORY_LIMIT`, `MONITOR_MEMORY_LIMIT` | `1500m`, `1g` | เครื่อง 4 GB ใช้ `1g`, `768m` |
 | `GOTENBERG_MEMORY_LIMIT` | `1g` | service `gotenberg` (Chromium) ที่แปลงรายงานเป็น PNG / PDF · engine เรียกผ่าน network ของ compose (`GOTENBERG_URL` ตั้งให้แล้ว) |
+| `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | –, `anthropic/claude-sonnet-5.5` | ข้อความ AI ในรายงานประจำวัน · ไม่ใส่ key = ไม่มี AI รายงานยังครบ · เครื่องต้องออก `https://openrouter.ai` ได้ |
 | `REPORT_ENVS`, `REPORT_CRON` | `prod`, `0 9 * * *` | env ที่สร้างรายงานประจำวันอัตโนมัติ และเวลาที่สร้าง (เวลาไทย) · ค่ากฎอื่น `REPORT_*` ดู `.env.example` |
 
 ### Queue ของแอป (ใส่เมื่อให้ engine อ่าน queue แทน HTTP)

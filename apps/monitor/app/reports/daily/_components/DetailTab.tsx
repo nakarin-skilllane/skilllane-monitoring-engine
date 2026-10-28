@@ -4,7 +4,7 @@ import { ServiceChip } from '@/components/badges'
 import { Table, TableWrap } from '@/components/table'
 import { fmtCount, fmtMs } from '@/lib/format'
 import type { DailyReport, ReportError } from '@/lib/types'
-import { clock, EMPTY } from '../_lib/model'
+import { aiNote, clock, EMPTY } from '../_lib/model'
 import { SourceTag } from './SourceTag'
 import { StatusBlock } from './StatusBlock'
 import { TrendCharts } from './TrendCharts'
@@ -22,7 +22,7 @@ export function DetailTab({ report, nowMs }: { report: DailyReport; nowMs: numbe
   const empty = <p className="rp-empty">{EMPTY}</p>
   return (
     <div className="rp-tab">
-      <StatusBlock status={p.headline.statusAuto} summary={p.headline.summaryDetail} aiStatus={report.aiStatus} aiMessage={report.aiMessage} />
+      <StatusBlock status={p.headline.statusAuto} summary={p.headline.summaryDetail} aiStatus={report.aiStatus} aiMessage={report.aiMessage} aiText={aiNote(report, 'summaryDetail')} />
       <Panel title={<>ปัญหาใหม่ / เพิ่มขึ้น <SourceTag kind="rule" /></>} meta="จัดกลุ่มด้วย error_fingerprint · เรียงตามจำนวนครั้ง · ใหม่ = ไม่เคยพบใน 14 วัน · เพิ่มขึ้น = มากกว่าค่าเฉลี่ย 7 วัน × 1.5" flush>
         {p.topErrors.length ? (
           <TableWrap>
@@ -32,7 +32,7 @@ export function DetailTab({ report, nowMs }: { report: DailyReport; nowMs: numbe
                 {p.topErrors.map((e, i) => (
                   <tr key={e.fingerprint} className="is-bad">
                     <td>{i + 1}</td>
-                    <td><Link href={`/errors/${e.fingerprint}?${range}`}><strong>{e.errorType || e.logger}</strong> {e.errorHint || e.message}</Link><br /><ServiceChip service={e.service} /></td>
+                    <td><Link href={`/errors/${e.fingerprint}?${range}`}><strong>{e.errorType || e.logger}</strong> {e.errorHint || e.message}</Link><br /><ServiceChip service={e.service} />{aiNote(report, e.fingerprint) ? <p className="rp-ai-note"><SourceTag kind="ai" /> {aiNote(report, e.fingerprint)}</p> : null}</td>
                     <td>{compareText(e)}</td>
                     <td><code>{e.route || '–'}</code></td>
                     <td><code>{e.location || '–'}</code></td>

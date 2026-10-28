@@ -3,7 +3,7 @@ import { StateChip } from '@/components/badges'
 import { Table, TableWrap } from '@/components/table'
 import { fmtCount, fmtPercent } from '@/lib/format'
 import type { DailyReport } from '@/lib/types'
-import { clock, EMPTY } from '../_lib/model'
+import { aiNote, clock, EMPTY } from '../_lib/model'
 import { SourceTag } from './SourceTag'
 import { StatusBlock } from './StatusBlock'
 import { TrendCharts } from './TrendCharts'
@@ -15,14 +15,15 @@ const FOLLOWUP_TEXT = { new: 'ใหม่', recurring: 'เกิดซ้ำ',
 
 export function OverviewTab({ report }: { report: DailyReport }) {
   const p = report.payload
+  const withAi = p.incidents.some((i) => aiNote(report, i.id))
   return (
     <div className="rp-tab">
-      <StatusBlock status={p.headline.statusAuto} summary={p.headline.summaryOverview} aiStatus={report.aiStatus} aiMessage={report.aiMessage} />
+      <StatusBlock status={p.headline.statusAuto} summary={p.headline.summaryOverview} aiStatus={report.aiStatus} aiMessage={report.aiMessage} aiText={aiNote(report, 'summaryOverview')} />
       <Panel title={<>เหตุการณ์สำคัญ <SourceTag kind="rule" /></>} meta="ช่วงเวลาที่ผู้ใช้ได้รับผลกระทบ (เวลาไทย)" flush>
         {p.incidents.length ? (
           <TableWrap>
             <Table dense caption="เหตุการณ์สำคัญ">
-              <thead><tr><th>เวลา</th><th>เกิดอะไร</th><th className="num">ผู้ใช้</th><th>สถานะ</th><th>ที่มา</th></tr></thead>
+              <thead><tr><th>เวลา</th><th>เกิดอะไร</th><th className="num">ผู้ใช้</th><th>สถานะ</th><th>ที่มา</th>{withAi ? <th>AI วิเคราะห์ <SourceTag kind="ai" /></th> : null}</tr></thead>
               <tbody>
                 {p.incidents.map((i) => (
                   <tr key={i.id}>
@@ -31,6 +32,7 @@ export function OverviewTab({ report }: { report: DailyReport }) {
                     <td className="num">{i.usersAffected === null ? '–' : fmtCount(i.usersAffected)}</td>
                     <td>{i.state === 'ongoing' ? 'ยังเกิดอยู่' : 'จบแล้ว'}</td>
                     <td>{SOURCE_TEXT[i.source]}</td>
+                    {withAi ? <td className="rp-ai-cell">{aiNote(report, i.id) ?? '–'}</td> : null}
                   </tr>
                 ))}
               </tbody>

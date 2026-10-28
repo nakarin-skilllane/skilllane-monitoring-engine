@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { AutoRefresh } from '@/components/AutoRefresh'
 import { Tabs } from '@/components/Tabs'
 import { EmptyState, EngineErrorState } from '@/components/states'
 import { engine, getMe, getMeta } from '@/lib/engine'
 import { Params, type RawSearchParams } from '@/lib/params'
 import { AI_STATUS_TEXT, isDate, pickEnv, type ReportView } from './_lib/model'
+import { AnalyzeButton } from './_components/AnalyzeButton'
 import { DetailTab } from './_components/DetailTab'
 import { ExportMenu } from './_components/ExportMenu'
 import { GenerateButton } from './_components/GenerateButton'
@@ -58,6 +60,8 @@ export default async function DailyReportPage({ searchParams }: { searchParams: 
         <div className="rp-toolbar__actions">
           <ViewSwitch env={report.env} date={report.reportDate} tab={tab} view={view} />
           <ExportMenu env={report.env} date={report.reportDate} view={view} />
+          {/* the AI notes arrive a little after the numbers */}
+          {report.aiStatus === 'pending' ? <AutoRefresh seconds={10} /> : canManage ? <AnalyzeButton env={report.env} date={report.reportDate} /> : null}
         </div>
       </div>
       <Tabs

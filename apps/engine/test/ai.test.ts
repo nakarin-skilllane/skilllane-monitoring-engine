@@ -124,7 +124,7 @@ describe('ReportAi', () => {
     const out = await ai(ok(goodAnswer)).analyze(r)
     expect(out.aiStatus).toBe('ok')
     expect(out.aiNotes.map((n) => n.target)).toEqual(['111'])
-    expect(out.aiMessage).toBe('m · 120 token · ตัดทิ้ง 1 ข้อความที่อ้างหลักฐานไม่ได้')
+    expect(out.aiMessage).toBe('m · 120 token · ตัดทิ้ง 1 ข้อความที่ไม่ผ่านการตรวจ')
   })
 
   it('a normal day is not analysed; a report of a bad day is', async () => {
