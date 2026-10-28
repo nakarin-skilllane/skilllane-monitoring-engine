@@ -7,6 +7,8 @@ import type { ReportFeature } from './types'
 
 interface FeatureRow {
   feature_id: string
+  name: string
+  name_source: string
   since: string
   active: number
 }
@@ -49,7 +51,7 @@ export class FeatureStore implements OnModuleInit {
   /** The list of the latest report: members keep their `since`; those that left get active = 0. */
   async save(env: string, reportDate: string, groups: RankedGroup[], features: ReportFeature[]): Promise<void> {
     const result = await this.clickhouse.writer.query({
-      query: `SELECT feature_id, toString(since) AS since, active FROM ${this.db}.features_auto FINAL WHERE env = {env:String}`,
+      query: `SELECT feature_id, name, name_source, toString(since) AS since, active FROM ${this.db}.features_auto FINAL WHERE env = {env:String}`,
       query_params: { env },
       format: 'JSONEachRow',
     })
@@ -58,11 +60,14 @@ export class FeatureStore implements OnModuleInit {
     const names = new Map(features.map((f) => [f.featureId, f.name]))
     const rows = groups.map((g) => {
       const old = before.get(g.featureId)
+      const dict = featureName(g.resource)
+      // the dictionary wins; else a name the AI gave earlier stays
+      const keepAi = dict.source !== 'dict' && old?.name_source === 'ai'
       return {
         env,
         feature_id: g.featureId,
-        name: names.get(g.featureId) ?? featureName(g.resource).name,
-        name_source: featureName(g.resource).source,
+        name: keepAi ? old.name : dict.source === 'dict' ? (names.get(g.featureId) ?? dict.name) : dict.name,
+        name_source: keepAi ? 'ai' : dict.source,
         routes: g.routes,
         score: g.score,
         since: old && Number(old.active) ? old.since : reportDate,
@@ -92,5 +97,30 @@ export class FeatureStore implements OnModuleInit {
       format: 'JSONEachRow',
       values: [...rows, ...left.map((r) => ({ ...keepBy.get(r.feature_id), ...r }))],
     })
+  }
+
+  /** Names the AI gave (name_source = ai), featureId → name. */
+  async aiNames(env: string): Promise<Record<string, string>> {
+    const result = await this.clickhouse.writer.query({
+      query: `SELECT feature_id, name FROM ${this.db}.features_auto FINAL WHERE env = {env:String} AND name_source = 'ai'`,
+      query_params: { env },
+      format: 'JSONEachRow',
+    })
+    return Object.fromEntries((await result.json<{ feature_id: string; name: string }>()).map((r) => [r.feature_id, r.name]))
+  }
+
+  /** Keeps the AI's names of features (only rows that exist). */
+  async setNames(env: string, names: Record<string, string>): Promise<void> {
+    const ids = Object.keys(names)
+    if (!ids.length) return
+    const result = await this.clickhouse.writer.query({
+      query: `SELECT env, feature_id, routes, score, toString(since) AS since, reason, active FROM ${this.db}.features_auto FINAL
+              WHERE env = {env:String} AND feature_id IN {ids:Array(String)}`,
+      query_params: { env, ids },
+      format: 'JSONEachRow',
+    })
+    const now = new Date().toISOString().replace('T', ' ').replace('Z', '')
+    const rows = (await result.json<Record<string, unknown> & { feature_id: string }>()).map((r) => ({ ...r, name: names[r.feature_id], name_source: 'ai', updated_at: now }))
+    if (rows.length) await this.clickhouse.writer.insert({ table: `${this.db}.features_auto`, format: 'JSONEachRow', values: rows })
   }
 }

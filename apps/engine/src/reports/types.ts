@@ -7,8 +7,11 @@ export const REPORT_SCHEMA_VERSION = 2
 
 export type ReportStatus = 'ok' | 'partial' | 'bad'
 export type ErrorTrend = 'new' | 'up' | 'same' | 'down'
-/** Stage 1 writes `disabled`; the AI layer (stage 4) writes the others. */
-export type AiStatus = 'ok' | 'unavailable' | 'quota' | 'error' | 'disabled'
+/**
+ * pending: the snapshot is saved, AI still running · ok · unavailable: no answer (network, timeout, 5xx)
+ * · quota: 402 / 429 · error: 401, a malformed answer, anything else · disabled: no key, or not asked (aiMessage says why).
+ */
+export type AiStatus = 'pending' | 'ok' | 'unavailable' | 'quota' | 'error' | 'disabled'
 
 export interface ReportRules {
   badErrorRateX: number

@@ -44,11 +44,12 @@ export function changeTone(c: Compare, neutral = false): 'bad' | 'ok' | '' {
   return ''
 }
 
-const AI_TEXT: Record<AiStatus, string> = { ok: 'AI พร้อม', unavailable: 'AI ต่อไม่ได้', quota: 'AI โควตาหมด', error: 'AI ผิดพลาด', disabled: 'AI ปิดอยู่' }
+const AI_TEXT: Record<AiStatus, string> = { pending: 'AI กำลังวิเคราะห์', ok: 'AI พร้อม', unavailable: 'AI ต่อไม่ได้', quota: 'AI โควตาหมด', error: 'AI ผิดพลาด', disabled: 'AI ปิดอยู่' }
 
 /** The grey bar shown instead of the AI box. */
 export function aiMissingText(status: AiStatus, message: string): string {
-  const why = status === 'disabled' ? 'ยังไม่ได้เปิดใช้ AI' : `${AI_TEXT[status]}${message ? ` (${message})` : ''}`
+  if (status === 'pending') return 'AI กำลังวิเคราะห์ · ตัวเลขทั้งหมดพร้อมแล้ว'
+  const why = status === 'disabled' ? message || 'ยังไม่ได้เปิดใช้ AI' : `${AI_TEXT[status]}${message ? ` (${message})` : ''}`
   return `${why} · รายงานวันนี้มีเฉพาะส่วนที่คำนวณจากกฎ`
 }
 

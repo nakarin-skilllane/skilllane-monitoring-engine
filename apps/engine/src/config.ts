@@ -91,6 +91,16 @@ export interface EngineConfig {
     rules: ReportRules
     /** GOTENBERG_URL: HTML → PNG / PDF for the export; unset = export answers 503. */
     gotenbergUrl?: string
+    /** The AI layer (OpenRouter); no key = aiStatus disabled, the report is complete without it. */
+    ai: {
+      apiKey?: string
+      /** OPENROUTER_MODEL (default anthropic/claude-sonnet-5.5). */
+      model: string
+      /** OPENROUTER_URL (default https://openrouter.ai/api/v1). */
+      url: string
+      /** REPORT_AI_ON_OK: also analyse a report whose status is ok (default false). */
+      onOk: boolean
+    }
   }
 }
 
@@ -210,6 +220,12 @@ export function loadConfig(env: Env = process.env): EngineConfig {
         .filter(Boolean),
       cron: str(env, 'REPORT_CRON') ?? '0 9 * * *',
       gotenbergUrl: str(env, 'GOTENBERG_URL')?.replace(/\/+$/, ''),
+      ai: {
+        apiKey: str(env, 'OPENROUTER_API_KEY'),
+        model: str(env, 'OPENROUTER_MODEL') ?? 'anthropic/claude-sonnet-5.5',
+        url: (str(env, 'OPENROUTER_URL') ?? 'https://openrouter.ai/api/v1').replace(/\/+$/, ''),
+        onOk: bool(env, 'REPORT_AI_ON_OK', false),
+      },
       rules: {
         badErrorRateX: float(env, 'REPORT_BAD_ERROR_RATE_X', 2),
         badOutageMin: float(env, 'REPORT_BAD_OUTAGE_MIN', 30),

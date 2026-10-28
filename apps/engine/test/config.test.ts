@@ -6,6 +6,7 @@ describe('report config', () => {
     const c = loadConfig({})
     expect(c.report.envs).toEqual(['prod'])
     expect(c.report.cron).toBe('0 9 * * *')
+    expect(c.report.ai).toEqual({ apiKey: undefined, model: 'anthropic/claude-sonnet-5.5', url: 'https://openrouter.ai/api/v1', onOk: false })
     expect(c.report.rules).toEqual({
       badErrorRateX: 2,
       badOutageMin: 30,

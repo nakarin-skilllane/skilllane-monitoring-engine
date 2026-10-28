@@ -91,6 +91,17 @@ export class ReportsController {
     return { env, dates: await this.reports.dates(env) }
   }
 
+  /** Runs the AI again on a stored report (numbers unchanged); answers at once with aiStatus pending. */
+  @RequirePermission('reports_manage')
+  @Post('analyze')
+  @HttpCode(200)
+  analyze(@Body() body: QueryString, @Req() req: AuthedRequest) {
+    const env = envOf(body ?? {})
+    const date = readDateOf(body ?? {})
+    if (!req.principal || !allows(req.principal.effective, 'reports', env)) throw new ForbiddenException(`ไม่มีสิทธิ์ reports ใน env ${env}`)
+    return this.reports.analyze(env, date)
+  }
+
   @RequirePermission('reports_manage')
   @Post('generate')
   @HttpCode(200)
