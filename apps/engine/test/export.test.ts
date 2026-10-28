@@ -4,12 +4,16 @@ import type { Renderer } from '../src/reports/render/gotenberg'
 import type { ReportsService } from '../src/reports/reports.service'
 import { sampleReport } from './report-sample'
 
-function setup(enabled = true) {
+/** A PDF of n pages as Chromium writes them (one /Type /Page per page, /Pages for the tree). */
+const fakePdf = (n: number) => Buffer.from(`%PDF /Type /Pages /Count ${n} ${'<< /Type /Page >> '.repeat(n)}`)
+
+/** pagesAt: how many pages the document takes at a scale (default: always 1). */
+function setup(enabled = true, pagesAt: (scale: number) => number = () => 1) {
   let report = sampleReport()
   const renderer = {
     enabled,
     png: vi.fn(async (_html: string, _width: number) => Buffer.from('png')),
-    pdf: vi.fn(async (_html: string, _header: string, _footer: string) => Buffer.from('%PDF')),
+    pdf: vi.fn(async (_html: string, _header: string, _footer: string, scale = 1) => fakePdf(pagesAt(scale))),
   } satisfies Renderer
   const reports = { get: async () => report } as unknown as ReportsService
   return { exporter: new ReportExport(reports, renderer), renderer, rebuild: () => (report = { ...report, generatedAt: '2026-10-21T03:00:00.000Z' }) }
@@ -42,6 +46,23 @@ describe('ReportExport', () => {
     rebuild()
     await exporter.file('prod', undefined, 'detail', 'data', 'pdf')
     expect(renderer.pdf).toHaveBeenCalledTimes(2)
+  })
+
+  it('a tab a little over a page is scaled down until it fits one page', async () => {
+    const { exporter, renderer } = setup(true, (scale) => (scale > 0.8 ? 2 : 1))
+    const f = await exporter.file('prod', undefined, 'detail', 'data', 'pdf')
+    expect(renderer.pdf.mock.calls.map((c) => c[3] ?? 1)).toEqual([1, 0.9, 0.8])
+    expect(f.body.toString()).toContain('/Count 1')
+  })
+
+  it('the whole report aims at one page per part; too long even at 75 %: the full-size file', async () => {
+    const fits = setup(true, (scale) => (scale > 0.9 ? 5 : 4))
+    await fits.exporter.file('prod', undefined, 'all', 'data', 'pdf')
+    expect(fits.renderer.pdf.mock.calls.map((c) => c[3] ?? 1)).toEqual([1, 0.9])
+    const long = setup(true, () => 3)
+    const f = await long.exporter.file('prod', undefined, 'detail', 'data', 'pdf')
+    expect(long.renderer.pdf.mock.calls.map((c) => c[3] ?? 1)).toEqual([1, 0.9, 0.8, 0.75])
+    expect(f.body).toEqual(fakePdf(3))
   })
 
   it('PNG only for one infographic; no Gotenberg = 503', async () => {

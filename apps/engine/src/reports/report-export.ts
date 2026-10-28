@@ -18,6 +18,13 @@ export interface ExportFile {
 const CACHE_SIZE = 64
 /** Injection token of a Renderer other than Gotenberg (tests). */
 export const REPORT_RENDERER = 'REPORT_RENDERER'
+/** Print scales tried when a part runs over its page; below 75 % the tables get hard to read. */
+const FIT_SCALES = [0.9, 0.8, 0.75]
+
+/** Pages of a PDF as Chromium writes it: one `/Type /Page` object each (`/Pages` is the tree). */
+export function pdfPages(pdf: Buffer): number {
+  return pdf.toString('latin1').match(/\/Type\s*\/Page(?![a-zA-Z])/g)?.length ?? 0
+}
 /** The whole report: overview (picture, data), then detail (picture, data). */
 const ALL: ReportPart[] = [
   { tab: 'overview', view: 'infographic' },
@@ -62,7 +69,7 @@ export class ReportExport {
     const job = (async (): Promise<ExportFile> => {
       const parts = tab === 'all' ? ALL : [{ tab, view }]
       const html = reportDocument(report, parts, format)
-      const body = format === 'png' ? await this.renderer.png(html, CARD_WIDTH * 2) : await this.renderer.pdf(html, pdfHeader(report), pdfFooter(report))
+      const body = format === 'png' ? await this.renderer.png(html, CARD_WIDTH * 2) : await this.fitPdf(html, pdfHeader(report), pdfFooter(report), parts.length)
       const file = {
         filename: `skilllane-report_${env}_${report.reportDate}_${tab}_${viewName}.${format}`,
         contentType: format === 'png' ? 'image/png' : 'application/pdf',
@@ -74,5 +81,19 @@ export class ReportExport {
     })().finally(() => this.rendering.delete(key))
     this.rendering.set(key, job)
     return job
+  }
+
+  /**
+   * One page per part when it can: a part a little over a page is printed smaller, a step at a time,
+   * down to FIT_SCALES' last; longer than that, the full-size file over more pages (still readable).
+   */
+  private async fitPdf(html: string, header: string, footer: string, parts: number): Promise<Buffer> {
+    const full = await this.renderer.pdf(html, header, footer)
+    if (pdfPages(full) <= parts) return full
+    for (const scale of FIT_SCALES) {
+      const pdf = await this.renderer.pdf(html, header, footer, scale)
+      if (pdfPages(pdf) <= parts) return pdf
+    }
+    return full
   }
 }

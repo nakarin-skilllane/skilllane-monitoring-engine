@@ -110,6 +110,7 @@ body.png .ig{border-radius:0;border:0}
 .dv tr{break-inside:avoid}
 .dv .num{text-align:right;white-space:nowrap}
 .dv-charts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dv-charts .dv-card,.dv>:last-child{margin-bottom:0}
 .dv-chart svg text{font-size:9px;fill:#888}.dv-chart svg text.v{font-size:10px;fill:#c0503a;font-weight:600}
 @media (max-width:620px){body.screen .ig-kpis{grid-template-columns:repeat(2,1fr)}body.screen .ig-sr{grid-template-columns:1fr}}
 `

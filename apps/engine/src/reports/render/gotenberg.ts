@@ -9,7 +9,8 @@ export interface Renderer {
   readonly enabled: boolean
   /** Screenshot of the whole page at `width` CSS px (the document zooms itself). */
   png(html: string, width: number): Promise<Buffer>
-  pdf(html: string, header: string, footer: string): Promise<Buffer>
+  /** `scale` < 1 shrinks the content (Chromium's print scale), not the header and footer. */
+  pdf(html: string, header: string, footer: string, scale?: number): Promise<Buffer>
 }
 
 export class GotenbergClient implements Renderer {
@@ -24,8 +25,8 @@ export class GotenbergClient implements Renderer {
     return this.post('/forms/chromium/screenshot/html', { 'index.html': html }, { width: String(width), height: '10', format: 'png' })
   }
 
-  pdf(html: string, header: string, footer: string): Promise<Buffer> {
-    return this.post('/forms/chromium/convert/html', { 'index.html': html, 'header.html': header, 'footer.html': footer }, { ...A4, printBackground: 'true' })
+  pdf(html: string, header: string, footer: string, scale = 1): Promise<Buffer> {
+    return this.post('/forms/chromium/convert/html', { 'index.html': html, 'header.html': header, 'footer.html': footer }, { ...A4, printBackground: 'true', scale: String(scale) })
   }
 
   private async post(route: string, files: Record<string, string>, fields: Record<string, string>): Promise<Buffer> {
