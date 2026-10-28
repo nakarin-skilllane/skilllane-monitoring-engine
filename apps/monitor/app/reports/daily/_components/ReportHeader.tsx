@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { EnvTag } from '@/components/badges'
 import { fmtDateTime } from '@/lib/format'
 import type { DailyReport, ReportDateItem } from '@/lib/types'
@@ -6,8 +7,8 @@ import { neighbours, reportHref, thaiDate, windowText } from '../_lib/model'
 import { DatePicker } from './DatePicker'
 import { GenerateButton } from './GenerateButton'
 
-/** Title, env, ‹ previous · date · next ›, the window, when it was built. The same on every tab. */
-export function ReportHeader({ report, dates, tab, view, canManage }: { report: DailyReport; dates: ReportDateItem[]; tab: string; view: string; canManage: boolean }) {
+/** Title, env, ‹ previous · date · next ›, the window, when it was built, `actions` (the AI's). The same on every tab. */
+export function ReportHeader({ report, dates, tab, view, canManage, actions }: { report: DailyReport; dates: ReportDateItem[]; tab: string; view: string; canManage: boolean; actions?: ReactNode }) {
   const { prev, next } = neighbours(dates, report.reportDate)
   return (
     <header className="page-head rp-head">
@@ -23,6 +24,7 @@ export function ReportHeader({ report, dates, tab, view, canManage }: { report: 
         {prev ? <Link href={reportHref({ env: report.env, date: prev, tab, view })}>‹ วันก่อน</Link> : <span className="rp-muted">‹ วันก่อน</span>}
         <DatePicker env={report.env} tab={tab} view={view} current={report.reportDate} dates={dates} />
         {next ? <Link href={reportHref({ env: report.env, date: next, tab, view })}>วันถัดไป ›</Link> : <span className="rp-muted">วันถัดไป ›</span>}
+        {actions}
         {canManage ? <GenerateButton env={report.env} date={report.reportDate} label="สร้างใหม่" /> : null}
       </nav>
     </header>

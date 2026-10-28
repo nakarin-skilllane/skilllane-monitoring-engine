@@ -48,27 +48,31 @@ export default async function DailyReportPage({ searchParams }: { searchParams: 
   }
 
   const report = reportRes.data
-  // under each tab: its view (data / infographic) and its files
+  // under each tab: what the tags on its content mean, its view (data / infographic) and its files
   const panelBar = (key: 'overview' | 'detail') => (
     <div className="rp-panelbar">
-      <ViewSwitch env={report.env} date={report.reportDate} tab={key} view={view} />
-      <ExportMenu env={report.env} date={report.reportDate} tab={key} view={view} />
+      <p className="rp-legend">
+        <span className="rp-chip">{AI_STATUS_TEXT[report.aiStatus]}</span>
+        <SourceTag kind="rule" /> คำนวณจาก query ตามเกณฑ์ ผลเหมือนกันทุกครั้ง · <SourceTag kind="ai" /> ข้อสันนิษฐานของ AI ถ้า AI ไม่พร้อม ส่วนนี้จะหายไป ตัวเลขยังครบ
+      </p>
+      <div className="rp-panelbar__actions">
+        <ViewSwitch env={report.env} date={report.reportDate} tab={key} view={view} />
+        <ExportMenu env={report.env} date={report.reportDate} tab={key} view={view} />
+      </div>
     </div>
   )
   return (
     <>
-      <ReportHeader report={report} dates={dates} tab={tab} view={view} canManage={canManage} />
+      <ReportHeader
+        report={report}
+        dates={dates}
+        tab={tab}
+        view={view}
+        canManage={canManage}
+        // the AI notes arrive a little after the numbers
+        actions={report.aiStatus === 'pending' ? <AutoRefresh seconds={10} /> : canManage ? <AnalyzeButton env={report.env} date={report.reportDate} /> : null}
+      />
       <ReportFigures p={report.payload} />
-      <div className="rp-toolbar">
-        <p className="rp-legend">
-          <span className="rp-chip">{AI_STATUS_TEXT[report.aiStatus]}</span>
-          ป้ายบอกที่มา: <SourceTag kind="rule" /> คำนวณจาก query ตามเกณฑ์ ผลเหมือนกันทุกครั้ง · <SourceTag kind="ai" /> ข้อความวิเคราะห์โดย AI เป็นข้อสันนิษฐาน ถ้า AI ไม่พร้อม ส่วนนี้จะหายไป ตัวเลขยังครบ
-        </p>
-        <div className="rp-toolbar__actions">
-          {/* the AI notes arrive a little after the numbers */}
-          {report.aiStatus === 'pending' ? <AutoRefresh seconds={10} /> : canManage ? <AnalyzeButton env={report.env} date={report.reportDate} /> : null}
-        </div>
-      </div>
       <Tabs
         label="ส่วนของรายงาน"
         param="tab"
