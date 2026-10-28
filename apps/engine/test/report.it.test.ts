@@ -52,6 +52,10 @@ describe.skipIf(!process.env.REPORT_IT)('daily report on ClickHouse (REPORT_IT=1
     expect(p.figures.errorRate).toMatchObject({ value: 0.025, baseline: 0.025 })
     expect(p.figures.usersAffected).toMatchObject({ value: 13, baseline: 5 })
     expect(p.figures.orgsAffected).toMatchObject({ value: 3, baseline: 1 })
+    // http.request lines: GET by u20–u39 (20), POST 201 by u41–u59 (19: i = 0 is the 500), the hourly 500 by u0–u4 (5); org1–org4
+    expect(p.figures.activeUsers).toMatchObject({ value: 44, baseline: 44 })
+    expect(p.figures.activeOrgs).toMatchObject({ value: 4, baseline: 4 })
+    expect(p.figures.failedRequests).toBe(24)
     expect(p.trend).toHaveLength(7)
   })
 

@@ -67,6 +67,10 @@ export function neighbours(dates: ReportDateItem[], current: string): { prev?: s
   return { prev: list[i + 1], next: i > 0 ? list[i - 1] : undefined }
 }
 
+/** `13 (1.0%)` of a total; no % without one (capped at 100 %). */
+export const share = (part: number, total: number): string =>
+  total > 0 ? `${part.toLocaleString('en-US')} (${(Math.min(1, part / total) * 100).toFixed(1)}%)` : part.toLocaleString('en-US')
+
 export const isDate = (v: string | undefined): v is string => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
 
 export type ReportView = 'data' | 'infographic'

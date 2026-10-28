@@ -335,7 +335,7 @@ export function headlines(p: { status: ReportStatus; reasons: string[]; figures:
   const why = p.reasons[0] ? ` · ${p.reasons[0]}` : ''
   const f = p.figures
   return {
-    summaryOverview: `${label} · ผู้ใช้ที่เจอปัญหา ${fmtInt(f.usersAffected.value)} คน${why}`,
+    summaryOverview: `${label} · ผู้ใช้ที่เจอปัญหา ${fmtInt(f.usersAffected.value)}${f.activeUsers?.value ? ` จาก ${fmtInt(f.activeUsers.value)}` : ''} คน${why}`,
     summaryDetail: `${label} · error rate ${pct(f.errorRate.value)} · error กลุ่มใหม่ ${f.errorGroups.new} · เพิ่มขึ้น ${f.errorGroups.up}`,
   }
 }

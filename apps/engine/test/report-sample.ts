@@ -13,6 +13,7 @@ export function sampleReport(over: Partial<RawReportData> = {}, report: Partial<
     env: 'prod', reportDate: DATE, fromMs: W.fromMs, toMs: W.toMs, nowMs: W.toMs + 60_000,
     figureSlots: [0, 1, 2, 3, 4, 5, 6].map((slot) => ({ slot, requests: 1000, errors: 10, p95: 200 })),
     userSlots: [0, 1, 2, 3, 4, 5, 6].map((slot) => ({ slot, users: slot === 6 ? 13 : 5, orgs: slot === 6 ? 3 : 1 })),
+    activeSlots: [0, 1, 2, 3, 4, 5, 6].map((slot) => ({ slot, users: slot === 6 ? 1240 : 1200, orgs: 86 })),
     errors: [
       { fingerprint: '111', service: 'core', error_type: 'TypeError', error_hint: 'Null read', route: 'GET /classes/:id/result',
         origin_file: 'src/a.ts', origin_function: 'A.b', count: 30, users: 8, first_ms: W.fromMs + 10 * H, trace_id: 't1' },

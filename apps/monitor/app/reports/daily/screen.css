@@ -3,6 +3,8 @@
 .rp-muted { color: var(--muted); }
 .rp-nav { gap: var(--sp-3); }
 .rp-figures { margin-bottom: var(--sp-4); }
+.rp-sub { display: block; color: var(--ink-2, var(--ink)); font-weight: 600; }
+.rp-sub--bad { color: var(--danger); }
 .rp-legend { display: flex; flex-wrap: wrap; gap: var(--sp-1h); align-items: center; color: var(--muted); font-size: var(--fs-12); margin: 0 0 var(--sp-3); }
 .rp-chip { border: 1px solid var(--line); border-radius: 999px; padding: 0 var(--sp-2); }
 .rp-src { display: inline-block; border-radius: var(--r-1); padding: 0 var(--sp-1h); font-size: var(--fs-12); font-weight: 600; vertical-align: middle; }

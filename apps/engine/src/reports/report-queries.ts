@@ -76,6 +76,17 @@ export class ReportQueries {
     )
   }
 
+  /** Distinct signed-in users / orgs per slot, from the SDK's request lines. */
+  activeSlots(r: Slotted) {
+    return this.reader.rows<{ slot: number; users: number; orgs: number }>(
+      'report.active_slots',
+      `SELECT ${SLOT('timestamp')} AS slot,
+              uniqExactIf(user_id, user_id != '') AS users, uniqExactIf(organization_id, organization_id != '') AS orgs
+       FROM ${LOGS} WHERE ${LOG_RANGE} AND event_code = 'http.request' GROUP BY slot`,
+      slotted(r),
+    )
+  }
+
   /** Error groups of the window; dependency.* lines are left to the dependency card. */
   errors(r: Range) {
     return this.reader.rows<ErrorDb>(

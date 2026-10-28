@@ -53,3 +53,7 @@ export function aiMissingText(status: AiStatus, message: string): string {
 }
 
 export const EMPTY = 'ไม่มีรายการในช่วงนี้'
+
+/** `13 (1.0%)` of a total; no % without a total (capped at 100 %: affected users can come from lines other than requests). */
+export const share = (part: number, total: number): string =>
+  total > 0 ? `${count(part)} (${pct(Math.min(1, part / total), 1)})` : count(part)

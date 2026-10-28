@@ -46,6 +46,8 @@ body.png .ig{border-radius:0;border:0}
 .ig-kpis b{font-size:21px;line-height:1.2;font-weight:600}
 .ig-kpis em{grid-column:1 / span 2;font-style:normal;font-size:11.5px;font-weight:600;color:#6b716e}
 .ig-kpis em.bad{color:#c0503a}.ig-kpis em.ok{color:#2e8b65}
+.ig-kpis em.sub{font-weight:600;color:#444}.ig-kpis em.sub.bad{color:#c0503a}.ig-kpis em.sub.ok{color:#2e8b65}
+.dv-figures em.sub{color:#444;font-weight:600}
 .ig-spark{grid-column:2;grid-row:2;display:flex;align-items:flex-end;gap:2px;height:26px;width:42px;align-self:end}
 .ig-spark i{flex:1;background:#b9d8c7;border-radius:1px 1px 0 0}.ig-spark i.last{background:#c0503a}
 .ig-sec{padding:0 18px 12px}

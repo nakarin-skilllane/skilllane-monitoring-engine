@@ -38,6 +38,11 @@ export interface Compare {
 }
 
 export interface ReportFigures {
+  /** Distinct users / orgs on http.request lines of the window (signed-in requests only). Absent before 2026-10-28. */
+  activeUsers?: Compare
+  activeOrgs?: Compare
+  /** Requests that ended in ERROR or 5xx (route_stats_1m). Absent before 2026-10-28. */
+  failedRequests?: number
   usersAffected: Compare
   orgsAffected: Compare
   errorRate: Compare
@@ -53,6 +58,8 @@ export interface ReportFigures {
 export interface TrendPoint {
   reportDate: string
   hasData: boolean
+  activeUsers?: number
+  activeOrgs?: number
   usersAffected: number
   orgsAffected: number
   errorRate: number

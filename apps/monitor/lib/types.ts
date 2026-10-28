@@ -811,10 +811,12 @@ export type ReportStatus = 'ok' | 'partial' | 'bad'
 export type ReportAiStatus = 'ok' | 'unavailable' | 'quota' | 'error' | 'disabled'
 export interface ReportCompare { value: number; baseline: number | null; changePct: number | null }
 export interface ReportFigures {
+  /** Absent in snapshots before 2026-10-28. */
+  activeUsers?: ReportCompare; activeOrgs?: ReportCompare; failedRequests?: number
   usersAffected: ReportCompare; orgsAffected: ReportCompare; errorRate: ReportCompare; p95Ms: ReportCompare; requests: ReportCompare
   baselineWindows: number; errorGroups: { new: number; up: number }
 }
-export interface ReportTrendPoint { reportDate: string; hasData: boolean; usersAffected: number; orgsAffected: number; errorRate: number; p95Ms: number; requests: number }
+export interface ReportTrendPoint { reportDate: string; hasData: boolean; activeUsers?: number; activeOrgs?: number; usersAffected: number; orgsAffected: number; errorRate: number; p95Ms: number; requests: number }
 export interface ReportFeature { featureId: string; name: string; successRate: number | null; successRate7d: number | null; volume: number; state: 'ok' | 'below' | 'bad' | 'idle'; note: string }
 export interface ReportIncident {
   id: string; source: 'dependency.down' | 'error_spike' | 'job.failed'; startedAtMs: number; endedAtMs: number | null

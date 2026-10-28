@@ -81,7 +81,7 @@ export function OverviewTab({ report }: { report: DailyReport }) {
           )}
         </Panel>
       </div>
-      <TrendCharts trend={p.trend} metrics={['usersAffected', 'p95Ms']} />
+      <TrendCharts trend={p.trend} metrics={[p.figures.activeUsers ? 'users' : 'usersAffected', 'p95Ms']} />
     </div>
   )
 }

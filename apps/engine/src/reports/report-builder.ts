@@ -60,6 +60,8 @@ export interface RawReportData {
   /** Slots 0–6. */
   figureSlots: Array<{ slot: number; requests: number; errors: number; p95: number }>
   userSlots: Array<{ slot: number; users: number; orgs: number }>
+  /** Signed-in users / orgs per slot (http.request lines); absent in older tests. */
+  activeSlots?: Array<{ slot: number; users: number; orgs: number }>
   errors: ErrorDb[]
   /** Slots < 6 back to newLookbackDays before the window. */
   errorHistory: Array<{ fingerprint: string; slot: number; count: number; first_ms: number }>
@@ -93,13 +95,17 @@ export function assembleReport(raw: RawReportData, r: ReportRules): DailyPayload
   // ---------- figures + trend
   const figBy = new Map(raw.figureSlots.map((s) => [Number(s.slot), s]))
   const userBy = new Map(raw.userSlots.map((s) => [Number(s.slot), s]))
+  const activeBy = new Map((raw.activeSlots ?? []).map((s) => [Number(s.slot), s]))
   const trend: TrendPoint[] = Array.from({ length: THIS + 1 }, (_, slot) => {
     const f = figBy.get(slot)
     const u = userBy.get(slot)
+    const a = activeBy.get(slot)
     const requests = f?.requests ?? 0
     return {
       reportDate: addDays(raw.reportDate, slot - THIS),
       hasData: requests > 0,
+      activeUsers: a?.users ?? 0,
+      activeOrgs: a?.orgs ?? 0,
       usersAffected: u?.users ?? 0,
       orgsAffected: u?.orgs ?? 0,
       errorRate: requests ? round((f?.errors ?? 0) / requests, 5) : 0,
@@ -153,6 +159,9 @@ export function assembleReport(raw: RawReportData, r: ReportRules): DailyPayload
     .map(({ seenWindows: _seen, ...e }) => e)
 
   const figures = {
+    activeUsers: compare(now.activeUsers ?? 0, hist((t) => t.activeUsers ?? 0)),
+    activeOrgs: compare(now.activeOrgs ?? 0, hist((t) => t.activeOrgs ?? 0)),
+    failedRequests: figBy.get(THIS)?.errors ?? 0,
     usersAffected: compare(now.usersAffected, hist((t) => t.usersAffected)),
     orgsAffected: compare(now.orgsAffected, hist((t) => t.orgsAffected)),
     errorRate: compare(now.errorRate, hist((t) => t.errorRate)),
@@ -300,9 +309,10 @@ export class ReportBuilder {
     const originMs = fromMs - BASELINE_WINDOWS * DAY_MS
     const window = { env, fromMs, toMs }
     const seven = { env, fromMs: originMs, toMs, originMs }
-    const [figureSlots, userSlots, errors, spikeBuckets, dependencyEvents, jobs, cronStarts, releases, routes] = await Promise.all([
+    const [figureSlots, userSlots, activeSlots, errors, spikeBuckets, dependencyEvents, jobs, cronStarts, releases, routes] = await Promise.all([
       this.queries.figureSlots(seven),
       this.queries.userSlots(seven),
+      this.queries.activeSlots(seven),
       this.queries.errors(window),
       this.queries.spikeBuckets(window),
       this.queries.dependencyEvents(window),
@@ -321,7 +331,7 @@ export class ReportBuilder {
     const featureGroups = activeFeatures(rankDays(usage, uniq, reportDate))
     const featureSlots = await this.queries.featureSlots(seven, featureGroups.map((g) => g.featureId))
     const payload = assembleReport(
-      { env, reportDate, fromMs, toMs, nowMs, figureSlots, userSlots, errors, errorHistory, spikeBuckets, dependencyEvents, jobs, cronStarts, deploys: releases.deploys, routes, featureGroups, featureSlots },
+      { env, reportDate, fromMs, toMs, nowMs, figureSlots, userSlots, activeSlots, errors, errorHistory, spikeBuckets, dependencyEvents, jobs, cronStarts, deploys: releases.deploys, routes, featureGroups, featureSlots },
       r,
     )
     // users per incident: one small query each, outages and spikes only

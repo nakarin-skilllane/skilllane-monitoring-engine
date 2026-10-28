@@ -49,7 +49,7 @@ export default async function DailyReportPage({ searchParams }: { searchParams: 
   return (
     <>
       <ReportHeader report={report} dates={dates} tab={tab} view={view} canManage={canManage} />
-      <ReportFigures f={report.payload.figures} trend={report.payload.trend} />
+      <ReportFigures p={report.payload} />
       <div className="rp-toolbar">
         <p className="rp-legend">
           <span className="rp-chip">{AI_STATUS_TEXT[report.aiStatus]}</span>

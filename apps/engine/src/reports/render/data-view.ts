@@ -3,7 +3,7 @@
  * tables, with the same numbers. The monitor page itself stays React.
  */
 import type { ReportFeature, StoredReport, TrendPoint } from '../types'
-import { aiMissingText, changeText, clock, count, EMPTY, esc, ms, pct, STATUS_TEXT, STATUS_TONE } from './html'
+import { aiMissingText, changeText, clock, count, EMPTY, esc, ms, pct, share, STATUS_TEXT, STATUS_TONE } from './html'
 import type { ReportTab } from './infographic'
 
 type Row = Array<string | number>
@@ -41,9 +41,21 @@ const FOLLOWUP_TEXT = { new: 'ใหม่', recurring: 'เกิดซ้ำ',
 const rate = (v: number | null) => (v === null ? '–' : pct(v, 1))
 
 function figures(r: StoredReport): string {
-  const f = r.payload.figures
-  const cell = (label: string, value: string, c: typeof f.requests, fmt: (v: number) => string) =>
-    `<div><span>${esc(label)}</span><b>${esc(value)}</b><em>${esc(changeText(c))}${c.baseline === null ? '' : ` · ปกติ ${esc(fmt(c.baseline))}`}</em></div>`
+  const p = r.payload
+  const f = p.figures
+  const cell = (label: string, value: string, c: typeof f.requests, fmt: (v: number) => string, sub = '') =>
+    `<div><span>${esc(label)}</span><b>${esc(value)}</b><em>${esc(changeText(c))}${c.baseline === null ? '' : ` · ปกติ ${esc(fmt(c.baseline))}`}</em>${sub ? `<em class="sub">${esc(sub)}</em>` : ''}</div>`
+  if (f.activeUsers && f.activeOrgs) {
+    const downMinutes = Math.round(p.dependencies.reduce((sum, d) => sum + d.downMinutes, 0) * 10) / 10
+    const ongoing = p.incidents.filter((i) => i.state === 'ongoing').length
+    return `<div class="dv-figures">${[
+      cell('การใช้งาน', `${count(f.requests.value)} req`, f.requests, count, `ไม่สำเร็จ ${share(f.failedRequests ?? 0, f.requests.value)}`),
+      cell('ผู้ใช้งาน', `${count(f.activeUsers.value)} คน`, f.activeUsers, count, `เจอปัญหา ${share(f.usersAffected.value, f.activeUsers.value)}`),
+      cell('โรงเรียนที่ใช้งาน', `${count(f.activeOrgs.value)} แห่ง`, f.activeOrgs, count, `ได้รับผลกระทบ ${share(f.orgsAffected.value, f.activeOrgs.value)}`),
+      cell('ความเร็ว (p95)', ms(f.p95Ms.value), f.p95Ms, ms, `ช้าขึ้น ${p.slowRoutes.length} endpoint`),
+      `<div><span>เหตุการณ์สำคัญ</span><b>${count(p.incidents.length)} ครั้ง</b><em>${downMinutes ? `ล่มรวม ${downMinutes} นาที` : 'ไม่มีช่วงที่ล่ม'}</em><em class="sub">ยังเกิดอยู่ ${ongoing}</em></div>`,
+    ].join('')}</div>`
+  }
   return `<div class="dv-figures">${[
     cell('ผู้ใช้ที่เจอปัญหา', `${count(f.usersAffected.value)} คน`, f.usersAffected, count),
     cell('โรงเรียนที่ได้รับผลกระทบ', `${count(f.orgsAffected.value)} แห่ง`, f.orgsAffected, count),
