@@ -117,7 +117,7 @@ function detail(r: StoredReport): string {
         .map((e) => {
           const ai = r.aiStatus === 'ok' ? p.aiNotes.find((n) => n.target === e.fingerprint) : undefined
           const tag = e.trend === 'new' ? '<span class="ig-tag new">ใหม่</span>' : `<span class="ig-tag up">${e.changePct === null ? 'เพิ่มขึ้น' : `+${Math.round(e.changePct * 100)}%`}</span>`
-          return `<tr><td>${tag}</td><td><b>${esc(e.errorHint || e.errorType)}</b><br><span class="rt">${esc(e.route || e.service)}</span></td><td class="u">${count(e.users)} คน<span class="ig-ubar" style="width:${Math.max(4, (e.users / maxUsers) * 100).toFixed(0)}%"></span></td>${ai ? `<td class="ai"><b>AI</b> ${esc(ai.text)}</td>` : ''}</tr>`
+          return `<tr><td>${tag}</td><td><b>${esc(e.errorHint || e.errorType || e.message || e.logger)}</b><br><span class="rt">${esc(e.route || e.service)}</span></td><td class="u">${count(e.users)} คน<span class="ig-ubar" style="width:${Math.max(4, (e.users / maxUsers) * 100).toFixed(0)}%"></span></td>${ai ? `<td class="ai"><b>AI</b> ${esc(ai.text)}</td>` : ''}</tr>`
         })
         .join('')}</table>`
     : empty

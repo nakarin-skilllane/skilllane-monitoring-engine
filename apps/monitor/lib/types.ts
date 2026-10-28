@@ -822,7 +822,7 @@ export interface ReportIncident {
 }
 export interface ReportFollowup { kind: 'new' | 'recurring' | 'threshold'; key: string; text: string }
 export interface ReportError {
-  fingerprint: string; service: string; errorType: string; errorHint: string; route: string; location: string
+  fingerprint: string; service: string; errorType: string; errorHint: string; logger?: string; message?: string; route: string; location: string
   count: number; count7dAvg: number | null; changePct: number | null; users: number; firstSeenMs: number; trend: 'new' | 'up'; sampleTraceId: string
 }
 export interface ReportDependency {

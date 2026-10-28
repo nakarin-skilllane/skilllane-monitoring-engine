@@ -32,7 +32,7 @@ export function DetailTab({ report, nowMs }: { report: DailyReport; nowMs: numbe
                 {p.topErrors.map((e, i) => (
                   <tr key={e.fingerprint} className="is-bad">
                     <td>{i + 1}</td>
-                    <td><Link href={`/errors/${e.fingerprint}?${range}`}><strong>{e.errorType}</strong> {e.errorHint}</Link><br /><ServiceChip service={e.service} /></td>
+                    <td><Link href={`/errors/${e.fingerprint}?${range}`}><strong>{e.errorType || e.logger}</strong> {e.errorHint || e.message}</Link><br /><ServiceChip service={e.service} /></td>
                     <td>{compareText(e)}</td>
                     <td><code>{e.route || '–'}</code></td>
                     <td><code>{e.location || '–'}</code></td>

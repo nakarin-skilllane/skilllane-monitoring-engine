@@ -76,6 +76,18 @@ export interface RawReportData {
 }
 
 const minutesText = (ms: number): string => `${round(ms / 60_000, 1)} นาที`
+const MESSAGE_MAX = 160
+
+/** A log message as a report may keep it: e-mails, long numbers and UUIDs hidden, one line, ≤ 160 characters. */
+export function maskMessage(message: string): string {
+  const masked = message
+    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '<uuid>')
+    .replace(/\d{6,}/g, '<n>')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return masked.length > MESSAGE_MAX ? `${masked.slice(0, MESSAGE_MAX - 1)}…` : masked
+}
 
 export function assembleReport(raw: RawReportData, r: ReportRules): DailyPayload {
   // ---------- figures + trend
@@ -119,6 +131,8 @@ export function assembleReport(raw: RawReportData, r: ReportRules): DailyPayload
       service: e.service,
       errorType: e.error_type,
       errorHint: e.error_hint,
+      logger: e.logger ?? '',
+      message: maskMessage(e.message ?? ''),
       route: e.route,
       location: e.origin_file || e.origin_function ? `${e.origin_file} › ${e.origin_function}` : '',
       count: e.count,

@@ -359,7 +359,7 @@ const FIGURE_LABELS: Array<[keyof Pick<ReportFigures, 'usersAffected' | 'orgsAff
 /** "ต้องติดตาม": new errors with users, errors in ≥ 3 of 7 windows, figures > 20 % over normal, dependency problems, features below normal or the bar. */
 export function followups(errors: ClassifiedError[], figures: ReportFigures, dependencies: ReportDependency[], features: ReportFeature[] = []): ReportFollowup[] {
   const out: ReportFollowup[] = []
-  const what = (e: ClassifiedError) => e.errorHint || e.errorType || 'error'
+  const what = (e: ClassifiedError) => e.errorHint || e.errorType || e.message || e.logger || 'error'
   const where = (e: ClassifiedError) => e.route || e.service
   for (const e of errors) {
     if (e.trend === 'new' && e.users > 0) out.push({ kind: 'new', key: e.fingerprint, text: `ปัญหาใหม่ ${what(e)} ที่ ${where(e)} กระทบผู้ใช้ ${fmtInt(e.users)} คน` })

@@ -104,6 +104,10 @@ export interface ReportError {
   service: string
   errorType: string
   errorHint: string
+  /** Logger of its lines: the heading when there is no errorType (a plain logger.error). */
+  logger: string
+  /** Its message (masked, ≤ 160 characters) when it has neither errorType nor errorHint; else ''. */
+  message: string
   /** `METHOD /route`, `queue type`, or ''. */
   route: string
   /** `origin_file › origin_function`, or ''. */

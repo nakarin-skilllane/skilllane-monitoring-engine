@@ -28,6 +28,10 @@ export interface ErrorDb {
   service: string
   error_type: string
   error_hint: string
+  /** Absent in older test rows. */
+  logger?: string
+  /** Only for groups without error_type and error_hint (their fingerprint is logger + message). */
+  message?: string
   route: string
   origin_file: string
   origin_function: string
@@ -77,11 +81,13 @@ export class ReportQueries {
     return this.reader.rows<ErrorDb>(
       'report.errors',
       `SELECT toString(error_fingerprint) AS fingerprint, any(service) AS service, any(error_type) AS error_type,
-              any(error_hint) AS error_hint, anyIf(${ROUTE}, ${ROUTE} != '') AS route,
+              any(error_hint) AS error_hint, any(logger) AS logger,
+              substring(anyIf(l.message, l.error_type = '' AND l.error_hint = ''), 1, 300) AS message,
+              anyIf(${ROUTE}, ${ROUTE} != '') AS route,
               any(origin_file) AS origin_file, any(origin_function) AS origin_function,
               count() AS count, uniqExactIf(user_id, user_id != '') AS users,
               toUnixTimestamp64Milli(min(timestamp)) AS first_ms, anyIf(trace_id, trace_id != '') AS trace_id
-       FROM ${LOGS} WHERE ${LOG_RANGE} AND error_fingerprint != 0 AND NOT startsWith(event_code, 'dependency.')
+       FROM ${LOGS} AS l WHERE ${LOG_RANGE} AND error_fingerprint != 0 AND NOT startsWith(event_code, 'dependency.')
        GROUP BY error_fingerprint ORDER BY users DESC, count DESC LIMIT 200`,
       r,
     )

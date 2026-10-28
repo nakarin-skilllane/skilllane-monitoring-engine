@@ -35,6 +35,14 @@ describe('infographic', () => {
     expect(t).toContain('ไม่มีรายการในช่วงนี้')
     expect(t).toContain('AI โควตาหมด (429)')
   })
+  it('an error without type or hint shows its logger and message', () => {
+    const plain = sampleReport({
+      errors: [{ fingerprint: '7', service: 'core', error_type: '', error_hint: '', logger: 'RabbitMQService', message: 'Disconnected from RMQ. Trying to reconnect.', route: '', origin_file: '', origin_function: '', count: 3, users: 0, first_ms: 0, trace_id: '' }],
+    })
+    expect(text(infographic(plain, 'detail'))).toContain('Disconnected from RMQ. Trying to reconnect.')
+    expect(text(dataView(plain, 'detail'))).toContain('RabbitMQService Disconnected from RMQ. Trying to reconnect.')
+  })
+
   it('payload text is escaped', () => {
     const evil = sampleReport({
       errors: [{ fingerprint: '9', service: 'core', error_type: 'X', error_hint: '<script>alert(1)</script>', route: '', origin_file: '', origin_function: '', count: 1, users: 1, first_ms: 0, trace_id: '' }],
