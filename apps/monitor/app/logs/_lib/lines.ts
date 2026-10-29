@@ -106,10 +106,15 @@ export function prettyText(row: LogRow): string {
   const head = `${fmtTimeMs(row.timestamp)} ${LEVEL_SHORT[row.level] ?? row.level.toUpperCase()} ${svc.padEnd(width)}  ${kv ? title.toLowerCase().padEnd(27) : title.toLowerCase()}${kv ? ` ${kv}` : ''}`
   const label = (t: string) => `    ${t.padEnd(14)}`
   const lines = [head.trimEnd()]
-  const detail = logDetail(row)
-  if (detail) lines.push(`${label('error detail:')}${detail}`)
-  const actual = actualError(row.error)
-  if (actual) lines.push(`${label('actual error:')}${actual}`)
+  const e = row.error
+  for (const [name, value] of [
+    ['error code:', e?.code],
+    ['error detail:', e?.detail],
+    ['how to fix:', e?.howToFix],
+  ] as const) {
+    if (value) lines.push(`${label(name)}${value}`)
+  }
+  if (e?.message) lines.push(`${label('actual error:')}${e.type || 'Error'}: ${e.message.replace(/\s*\n\s*/g, ' ')}`)
   if (row.traceId) lines.push(`${label('trace id:')}${row.traceId}`)
   return lines.join('\n')
 }
@@ -265,8 +270,8 @@ export function rawRecord(row: LogRow): Record<string, unknown> {
   for (const [k, v] of Object.entries(row.fields)) put(k, fieldValue(v))
   if (e) {
     put('error.hint', e.hint)
-    put('error.hint_detail', e.hintDetail)
-    put('error.fix', e.fix)
+    put('error.detail', e.detail)
+    put('error.how_to_fix', e.howToFix)
   }
   return r
 }

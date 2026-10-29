@@ -11,7 +11,7 @@ export const LOG_SELECT = `
   timestamp, env, service, role, version, host, level, logger, event_code, event_module, message,
   trace_id, span_id, correlation_id, user_id, user_roles, organization_id,
   http_method, http_route, url_path, url_domain, http_status, duration_ms,
-  error_type, error_code, error_message, error_hint, error_hint_detail, error_fix, error_stack, error_cause,
+  error_type, error_code, error_message, error_hint, error_detail, error_how_to_fix, error_stack, error_cause,
   error_category, error_target, origin_function, origin_file, usecase, failed_step, db_statement,
   dependency_type, dependency_name, dependency_host, dependency_port,
   job_queue, job_type, job_id, job_attempt, job_max_attempts, job_final, job_inflight,
@@ -45,8 +45,8 @@ export interface LogDb {
   error_code: string
   error_message: string
   error_hint: string
-  error_hint_detail: string
-  error_fix: string
+  error_detail: string
+  error_how_to_fix: string
   error_stack: string
   error_cause: string
   error_category: string
@@ -107,8 +107,8 @@ export interface LogRow {
     code: string
     message: string
     hint: string
-    hintDetail: string
-    fix: string
+    detail: string
+    howToFix: string
     category: string
     target: string
     stack: string
@@ -171,8 +171,8 @@ export function toLogRow(r: LogDb): LogRow {
           code: r.error_code,
           message: r.error_message,
           hint: r.error_hint,
-          hintDetail: r.error_hint_detail,
-          fix: r.error_fix,
+          detail: r.error_detail,
+          howToFix: r.error_how_to_fix,
           category: r.error_category,
           target: r.error_target,
           stack: r.error_stack,

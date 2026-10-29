@@ -117,9 +117,14 @@ export function logKvs(row: LogRow): Kv[] {
   return out
 }
 
-/** "ต้องแก้อะไร": error_fix (this case), else error_hint_detail. */
+/** One line about a line's error: error_how_to_fix, else error_detail. */
 export function logDetail(row: LogRow): string {
-  return row.error?.fix || row.error?.hintDetail || ''
+  return row.error?.howToFix || row.error?.detail || ''
+}
+
+/** "เกิดอะไรขึ้น" (error_detail) and "ต้องแก้อะไร" (error_how_to_fix) of a line. */
+export function logWhatFix(row: LogRow): { what: string; fix: string } {
+  return { what: row.error?.detail ?? '', fix: row.error?.howToFix ?? '' }
 }
 
 /** "error จริง": `Type [CODE] message`, or `Type: message` without a code. */
@@ -154,9 +159,14 @@ export function groupKvs(g: ErrorGroup): Kv[] {
   return out
 }
 
-/** "ต้องแก้อะไร" of a group = error_fix of its latest occurrence; hint detail is the "what" line. */
+/** One line about a group: how to fix of its latest occurrence, else its detail. */
 export function groupDetail(g: ErrorGroup): string {
-  return g.fix || g.hintDetail
+  return g.howToFix || g.detail
+}
+
+/** "เกิดอะไรขึ้น" and "ต้องแก้อะไร" of a group, from its latest occurrence. */
+export function groupWhatFix(g: ErrorGroup): { what: string; fix: string } {
+  return { what: g.detail, fix: g.howToFix }
 }
 
 /** At most `max` stack frames for Copy for AI: app frames first, short paths (no home directory), no `async`. */
@@ -184,8 +194,8 @@ export interface AiErrorFields {
   request?: string
   /** `bullmq queue report · report:generate #88412 · attempt 2/3 → failed`. */
   job?: string
-  thisCase?: string
   what?: string
+  howToFix?: string
   where?: string
   usecase?: string
   origin?: string
@@ -213,8 +223,8 @@ export function aiErrorMarkdown(f: AiErrorFields): string {
     ['env', f.env],
     ['when', f.when],
     [f.job ? 'job' : 'request', f.job || f.request],
-    ['this_case', f.thisCase],
     ['what', f.what],
+    ['how_to_fix', f.howToFix],
     ['where', where],
     ['origin', origin],
     ['target', f.target],
@@ -275,8 +285,8 @@ export function aiFieldsOfLog(row: LogRow): AiErrorFields {
     when: fmtAiTime(row.timestamp),
     request,
     job,
-    thisCase: e?.fix,
-    what: e?.hintDetail,
+    what: e?.detail,
+    howToFix: e?.howToFix,
     where,
     usecase: row.usecase,
     origin: e?.originFunction,

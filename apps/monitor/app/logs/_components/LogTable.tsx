@@ -7,11 +7,11 @@ import Link from 'next/link'
 import { CategoryChip, LevelBadge, NewBadge, ServiceChip, Tag, Ts } from '@/components/badges'
 import { CopyButton } from '@/components/CopyButton'
 import { DrawerLink } from '@/components/Drawer'
-import { ActualError, ErrorDetailText, IdChip, KvList } from '@/components/ErrorParts'
+import { ActualError, ErrorWhatFix, IdChip, KvList } from '@/components/ErrorParts'
 import { LiveTbody } from '@/components/Motion'
 import { fmtDuration, fmtTimeMs, fmtTimeSec } from '@/lib/format'
 import { buildHref, depAnchor, type Keep } from '@/lib/params'
-import { LEVEL_SHORT, logDetail, logTitle } from '@/lib/readable'
+import { LEVEL_SHORT, logTitle, logWhatFix } from '@/lib/readable'
 import type { LogRow } from '@/lib/types'
 import { actualText, durationText, hasErrorDetail, isHintLine, jobContext, lineKvs, moduleLabel, type Outage, outageOf, prettyText } from '../_lib/lines'
 import { LogLine } from './LogLine'
@@ -64,7 +64,7 @@ function Detail({
           <span className="t-muted"> · บรรทัด {fmtTimeMs(cause.row.timestamp)}</span>
         </p>
       ) : null}
-      <ErrorDetailText text={logDetail(src)} />
+      <ErrorWhatFix {...logWhatFix(src)} />
       <ActualError text={actualText(src)} />
       <div className="err-row__meta">
         <ServiceChip service={row.service} role={row.role} order={order} />

@@ -5,13 +5,13 @@
  * that starts open and by TraceErrorRow on the client for the others.
  */
 import Link from 'next/link'
-import { ActualError, ErrorDetailText, KvList } from '@/components/ErrorParts'
+import { ActualError, ErrorWhatFix, KvList } from '@/components/ErrorParts'
 import { CopyButton } from '@/components/CopyButton'
 import { CategoryChip, LevelBadge, NewBadge, Tag, Ts } from '@/components/badges'
 import { Icon } from '@/components/icons'
 import { fmtTimeSec } from '@/lib/format'
 import { buildHref, type Keep } from '@/lib/params'
-import { actualError, logDetail, logKvs, logTitle } from '@/lib/readable'
+import { actualError, logKvs, logTitle, logWhatFix } from '@/lib/readable'
 import type { TraceDetail } from '@/lib/types'
 import { aiListMarkdown, buildWaterfall, failedSpan, fmtOff, jobFollowUp, namedStep, pickEntryErrorLog, withRequest } from '../_lib/model'
 
@@ -59,7 +59,7 @@ export function TraceErrorBlock({ detail, ctx }: { detail: TraceDetail; ctx: Err
       {log ? (
         <>
           <KvList items={logKvs(log)} />
-          <ErrorDetailText text={logDetail(log)} />
+          <ErrorWhatFix {...logWhatFix(log)} />
           <ActualError text={actualError(log.error)} />
         </>
       ) : failed?.span.exception ? (

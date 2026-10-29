@@ -28,11 +28,12 @@ export interface ErrorGroup {
   errorType: string
   errorCode: string
   hint: string
-  hintDetail: string
+  /** Detail of the latest occurrence (it may name this case's values). */
+  detail: string
   category: string
   target: string
-  /** Fix sentence of the latest occurrence (it names this case's values). */
-  fix: string
+  /** How to fix, from the latest occurrence. */
+  howToFix: string
   originFunction: string
   originFile: string
   count: number
@@ -120,10 +121,10 @@ const GROUP_SELECT = `
   argMax(error_type, timestamp) AS error_type,
   argMax(error_code, timestamp) AS error_code,
   argMax(error_hint, timestamp) AS hint,
-  argMax(error_hint_detail, timestamp) AS hint_detail,
+  argMax(error_detail, timestamp) AS detail,
   argMax(error_category, timestamp) AS category,
   argMax(error_target, timestamp) AS target,
-  argMax(error_fix, timestamp) AS fix,
+  argMax(error_how_to_fix, timestamp) AS how_to_fix,
   argMax(origin_function, timestamp) AS origin_function,
   argMax(origin_file, timestamp) AS origin_file,
   count() AS count,
@@ -161,10 +162,10 @@ interface GroupDb {
   error_type: string
   error_code: string
   hint: string
-  hint_detail: string
+  detail: string
   category: string
   target: string
-  fix: string
+  how_to_fix: string
   origin_function: string
   origin_file: string
   count: number
@@ -230,10 +231,10 @@ function toGroup(r: GroupDb, life: Lifetime | undefined, releases: Map<string, R
     errorType: r.error_type,
     errorCode: r.error_code,
     hint: r.hint,
-    hintDetail: r.hint_detail,
+    detail: r.detail,
     category: r.category,
     target: r.target,
-    fix: r.fix,
+    howToFix: r.how_to_fix,
     originFunction: r.origin_function,
     originFile: r.origin_file,
     count: r.count,

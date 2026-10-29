@@ -113,7 +113,8 @@ export function routeCondition(w: Where, route: string, entryNameColumn?: string
  * request (`GET /classes/:id/students` as the screens write it, and the real path).
  */
 const OTHER_TEXT_COLUMNS = [
-  'error_fix',
+  'error_detail',
+  'error_how_to_fix',
   'error_hint',
   'error_target',
   'error_code',
@@ -200,7 +201,7 @@ export class LogsService {
 
   /**
    * The filters as one or three WHERE variants. With `q`, a row matches when its
-   * message, error_message, error_fix, error_hint, error_target, error_code,
+   * message, error_message, error_detail, error_how_to_fix, error_hint, error_target, error_code,
    * `METHOD /route` or url_path contains the text (case-insensitive). An OR
    * across two skip indexes prunes nothing in ClickHouse 25.8, so the two indexed
    * columns get one branch each (one `lower(col) LIKE` the ngrambf_v1 index uses);

@@ -63,8 +63,8 @@ ORDER BY `(env, toStartOfHour(timestamp), service, level, timestamp)`, PARTITION
 | `error_code` | LowCardinality(String) | code ของ error เช่น `ORA-12899`, `ECONNREFUSED`, `HTTP_404` | `error.code` |
 | `error_message` | String | ข้อความ error ตัวจริง | `error.message` |
 | `error_hint` | LowCardinality(String) | หัวข้อที่อ่านเข้าใจ คงที่ต่อชนิด error เช่น "Value too long for column" | `error.hint` |
-| `error_hint_detail` | String | คำอธิบายทั่วไปของ error ชนิดนี้ | `error.hint_detail` |
-| `error_fix` | String | วิธีแก้ของ **เคสนี้** พร้อมค่าจริง เช่น "QuestionBankEntity.title got 312 (max 255) …" | `error.fix` |
+| `error_detail` | String | เกิดอะไรขึ้น: ของ **เคสนี้** ถ้า SDK อธิบายได้ เช่น "ProductEntity.name got 312 (max 255)." ไม่เช่นนั้นเป็นคำอธิบายทั่วไปของ error ชนิดนี้ | `error.detail` |
+| `error_how_to_fix` | String | ต้องแก้อะไร เช่น "Validate the length of name before saving, or widen the column." | `error.how_to_fix` |
 | `error_stack` | String | stack trace | `error.stack_trace` |
 | `error_cause` | String | ข้อมูลต้นเหตุ (JSON string) เช่น `{"errorNum":12899}` | `error.cause` |
 | `error_category` | LowCardinality(String) | หมวดของ error (ดูหัวข้อ 6) | `labels.error_category` |
@@ -156,7 +156,7 @@ ORDER BY `(env, toStartOfHour(timestamp), service, is_entry, name, timestamp)` �
 
 บรรทัด error ที่อ่านง่ายประกอบด้วย:
 - **หัวข้อ** = `error_hint` (ถ้าไม่มีใช้ชื่อ event หรือ `message`)
-- **รายละเอียดเคสนี้** = `error_fix` (ถ้าไม่มีใช้ `error_hint_detail`)
+- **เกิดอะไรขึ้น** = `error_detail` และ **ต้องแก้อะไร** = `error_how_to_fix`
 - **error จริง** = `error_type [error_code] error_message`
 - **ต้องแก้ที่ไหน** = `origin_function` + `origin_file`, สิ่งที่โดน = `error_target`, ขั้นที่ล้ม = `failed_step`, use case = `usecase`
 - ตามต่อด้วย `trace_id` และ `user_id`
@@ -174,7 +174,7 @@ ORDER BY `(env, toStartOfHour(timestamp), service, is_entry, name, timestamp)` �
 **Error group (`error_fingerprint`)**: บรรทัดที่ไม่ใช่ `http.request` และมี `error_type` หรือ `error_hint` หรือ level เป็น `error`/`fatal`
 จะได้ fingerprint = `cityHash64(env, service, error_type, error_code, error_hint, origin_function, …)`
 ถ้าไม่มีทั้ง type และ hint จะใช้ `logger:message` แทน error ชนิดเดียวกันจากจุดเดียวกันจึงรวมเป็นกลุ่มเดียว
-แม้ค่าใน `error_fix` จะต่างกัน (เช่น ความยาวจริง 312 กับ 288) ส่วน `level` ไม่อยู่ใน fingerprint เช่น job ที่ retry (`warn`) กับ job ที่ล้มจริง (`error`) อยู่กลุ่มเดียวกัน
+แม้ค่าใน `error_detail` จะต่างกัน (เช่น ความยาวจริง 312 กับ 288) ส่วน `level` ไม่อยู่ใน fingerprint เช่น job ที่ retry (`warn`) กับ job ที่ล้มจริง (`error`) อยู่กลุ่มเดียวกัน
 UInt64 ใหญ่เกินตัวเลขของ JavaScript **ส่งต่อหรือแสดงผลให้ใช้ `toString(error_fingerprint)`**
 
 ## 7. `event_code` ที่ใช้บ่อย
@@ -435,7 +435,7 @@ ALTER USER skilllane_monitoring_reader SETTINGS readonly = 2,
 3. ตัวเลข RED ให้ใช้ `route_stats_1m` (`sum` + `quantilesTDigestMerge`) อย่านับจาก `spans` ทั้งตาราง
 4. หา trace ให้ใช้ `trace_index` หาช่วงเวลาก่อน แล้วค้น `spans` และ `logs` ด้วย `trace_id`
 5. error group ให้ `GROUP BY error_fingerprint` และแสดงด้วย `toString(error_fingerprint)`
-6. อ่าน `error_hint` → `error_fix` → `origin_function` / `origin_file` เพื่อตอบว่าเกิดอะไร ต้องแก้ที่ไหน
+6. อ่าน `error_hint` → `error_detail` → `error_how_to_fix` → `origin_function` / `origin_file` เพื่อตอบว่าเกิดอะไร ต้องแก้ที่ไหน
 
 ## 10. ข้อมูลเดียวกันผ่าน query API ของ engine
 
@@ -444,7 +444,7 @@ Monitoring frontend ไม่ได้ต่อ ClickHouse ตรง แต่�
 | Endpoint | อ่านจาก |
 |---|---|
 | `/api/overview` | `route_stats_1m` (services, series, routes) + `logs` (error groups, dependencies, jobs, 4xx ต่อ route) |
-| `/api/logs` | `logs` (rows + histogram ตาม level, cursor `before`); `q` ค้นใน `message`, `error_message`, `error_fix`, `error_hint`, `error_target`, `error_code`, request แบบ `METHOD /route` และ `url_path` (UNION ALL 3 branch) |
+| `/api/logs` | `logs` (rows + histogram ตาม level, cursor `before`); `q` ค้นใน `message`, `error_message`, `error_detail`, `error_how_to_fix`, `error_hint`, `error_target`, `error_code`, request แบบ `METHOD /route` และ `url_path` (UNION ALL 3 branch) |
 | `/api/traces` | `spans` ที่ `is_entry = 1` + `trace_index` (span/error count, services) + `logs` บรรทัด `job.*` ของ span เดียวกัน (`job`) |
 | `/api/traces/:traceId` | `trace_index` (ช่วงเวลา) → `spans` + `logs`; ทุก span มี `io` (ขนาดของ I/O จากคอลัมน์ `*_size` / `*_count` เท่านั้น) |
 | `/api/traces/:traceId/spans/:spanId` | `spans` แถวเดียวพร้อมคอลัมน์ I/O ทั้งหมด: `http` (URL, header, query, body), `db` (คำสั่งเต็ม, `dialect`, ค่า bind), `message` (payload, header), `timing` |

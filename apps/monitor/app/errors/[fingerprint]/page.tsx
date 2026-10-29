@@ -258,8 +258,9 @@ export default async function ErrorDetailPage({ params, searchParams }: Props) {
   const firstVersion = g.firstSeenVersion || [...d.versions].sort((a, b) => toMs(a.firstSeen) - toMs(b.firstSeen))[0]?.version || ''
   const code = g.errorCode || g.errorType
   const title = groupTitle(g)
-  // ต้องแก้อะไร = error_fix of the latest occurrence, else error_hint_detail (DESIGN.md §6).
-  const fix = g.fix || latest?.error?.fix || g.hintDetail
+  // เกิดอะไรขึ้น / ต้องแก้อะไร = error_detail / error_how_to_fix of the latest occurrence (DESIGN.md §6).
+  const what = g.detail || latest?.error?.detail || ''
+  const fix = g.howToFix || latest?.error?.howToFix || ''
   const actual = actualError(latest?.error) || actualError({ type: g.errorType, code: g.errorCode, message: g.sampleMessage })
   const sampleTrace = g.sampleTraceId || latest?.traceId || ''
   const traceHref = (id: string, span?: string) => buildHref(`/traces/${id}`, scope.keep, span ? { span } : undefined)
@@ -430,8 +431,8 @@ export default async function ErrorDetailPage({ params, searchParams }: Props) {
     service: g.service,
     role: rolesText(g),
     env,
-    thisCase: g.fix || latest?.error?.fix || undefined,
-    what: g.hintDetail,
+    what: what || undefined,
+    howToFix: fix || undefined,
     where: groupWhere(g, latest?.eventModule, latest?.dependency?.type),
     usecase: g.usecases[0],
     origin: g.originFunction,
@@ -592,10 +593,10 @@ export default async function ErrorDetailPage({ params, searchParams }: Props) {
               เกิดอะไรขึ้น
             </h2>
             <span className="section__meta">
-              เหมือนกันทุกครั้งของ error ชนิดนี้ · <span className="mono">error_hint_detail</span>
+              <span className="mono">error_detail</span>
             </span>
           </div>
-          <p className={g.hintDetail ? 'ed-what' : 'ed-what t-muted'}>{g.hintDetail || 'error ชนิดนี้ไม่มี error_hint_detail'}</p>
+          <p className={what ? 'ed-what' : 'ed-what t-muted'}>{what || 'error ชนิดนี้ไม่มี error_detail'}</p>
           <p className="ed-what-cat">
             <CategoryChip category={g.category} />
             <span>{CATEGORY_WHY[g.category] ?? ''}</span>
@@ -612,7 +613,7 @@ export default async function ErrorDetailPage({ params, searchParams }: Props) {
                   จากครั้งล่าสุด <Ts value={latest.timestamp} format={sameDay(latest.timestamp, scope.nowMs) ? 'ms' : 'date-ms'} /> ·{' '}
                 </>
               ) : null}
-              <span className="mono">{g.fix || latest?.error?.fix ? 'error_fix' : 'error_hint_detail'}</span>
+              <span className="mono">error_how_to_fix</span>
             </span>
           </div>
           <div className="ed-fix">
@@ -957,7 +958,7 @@ export default async function ErrorDetailPage({ params, searchParams }: Props) {
                 </ul>
               </div>
               <p className="hint">
-                ชื่อ key ชุดเดียวกับทุกหน้า (<span className="mono">this_case</span>, <span className="mono">what</span>, <span className="mono">origin</span>
+                ชื่อ key ชุดเดียวกับทุกหน้า (<span className="mono">what</span>, <span className="mono">how_to_fix</span>, <span className="mono">origin</span>
                 {g.failedStep ? (
                   <>
                     , <span className="mono">failed_step</span>

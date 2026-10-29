@@ -284,12 +284,12 @@ mono prefix (`http.request` → title `request completed`). Then key=value chips
 (always `route=`, never `path=`), `status`, `source` (origin function) or `job` (+ `id`, `attempt`), `file`, `target`,
 `duration` (skip missing ones). An exception-filter error line has no status or duration of its own; they come from
 the `http.request` line of the same trace. The same line renders the same way on every screen. Then
-"ต้องแก้อะไร" = `error_fix` (this case), else `error_hint_detail`. Then "error จริง" = `Type [CODE] message` in mono
+"เกิดอะไรขึ้น" = `error_detail`, then "ต้องแก้อะไร" = `error_how_to_fix`. Then "error จริง" = `Type [CODE] message` in mono
 danger colour. Then service/role, trace id (link + copy) and user id. Category chip after the title. In an error-group
 list, `.err-row__count` shows count and users and the meta shows first/last seen instead of one timestamp.
 An error group has one level badge on every screen: group 3 (Google API rate limited) is ERR with the sub-line
-`38 retry · 3 ล้มเหลวจริง`; a single `job.retry` line of it is still WRN. "ต้องแก้อะไร" for a group is the
-`error_fix` of its latest occurrence; `error_hint_detail` is shown only as the "อธิบายทั่วไป" / "what" line.
+`38 retry · 3 ล้มเหลวจริง`; a single `job.retry` line of it is still WRN. "เกิดอะไรขึ้น" and "ต้องแก้อะไร" for a
+group are the `error_detail` and `error_how_to_fix` of its latest occurrence.
 
 ## 6b. Copy for AI: one template, one PII rule
 
@@ -303,8 +303,8 @@ is dropped, never renamed. Group pages and lists repeat the block per group.
 - env: <env>
 - when: <timestamp ICT>                               one occurrence only
 - request: <METHOD> <route> → <status> in <duration>  or  job: <system> queue <q> · <job_type> #<id> · attempt n/m → <result>
-- this_case: <error_fix>
-- what: <error_hint_detail>
+- what: <error_detail>
+- how_to_fix: <error_how_to_fix>
 - where: <METHOD route | job type | dependency> · usecase <usecase>
 - origin: <origin_function> · <origin_file>
 - target: <error_target>

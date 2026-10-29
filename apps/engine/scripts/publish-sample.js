@@ -117,8 +117,8 @@ function sampleSet(env) {
       'error.code': 'ORA-12899',
       'error.message': ORA_MESSAGE,
       'error.hint': 'Value too long for column',
-      'error.hint_detail': 'A text value exceeds the column size. Common in Excel imports; validate length before saving.',
-      'error.fix': 'QuestionBankEntity.title got 312 (max 255). Validate the length of title before saving, or widen the column.',
+      'error.detail': 'A text value exceeds the column size. Common in Excel imports; validate length before saving.',
+      'error.how_to_fix': 'QuestionBankEntity.title got 312 (max 255). Validate the length of title before saving, or widen the column.',
       'error.stack_trace':
         'QueryFailedError: ' + ORA_MESSAGE + '\n    at OracleQueryRunner.query (node_modules/typeorm/driver/oracle/OracleQueryRunner.js:187:19)\n    at ImportQuestionBankHandler.execute (dist/src/domain/question-bank/commands/import-question-bank.handler.js:41:9)',
       'error.cause': { type: 'Error', message: ORA_MESSAGE, code: 'ORA-12899', errorNum: 12899 },
@@ -216,7 +216,7 @@ function sampleSet(env) {
       'error.code': 'rateLimitExceeded',
       'error.message': 'Rate Limit Exceeded',
       'error.hint': 'Google API rate limit exceeded',
-      'error.fix': 'Back off and retry; ask for a higher quota for the Sheets API project.',
+      'error.how_to_fix': 'Back off and retry; ask for a higher quota for the Sheets API project.',
       labels: { error_category: 'dependency', usecase: 'GenerateReport' },
     },
     {

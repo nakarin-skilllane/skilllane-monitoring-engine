@@ -3,7 +3,7 @@
  * key=value chips, "ต้องแก้อะไร", "error จริง", and id chips with copy.
  *
  *   <KvList items={logKvs(row)} />
- *   <ErrorDetailText text={logDetail(row)} />
+ *   <ErrorWhatFix {...logWhatFix(row)} />
  *   <ActualError text={actualError(row.error)} />
  *   <IdChip label="trace" value={row.traceId} href={buildHref(`/traces/${row.traceId}`, keep)} />
  */
@@ -33,6 +33,16 @@ export function ErrorDetailText({ text, label = 'ต้องแก้อะไ�
       <span className="err-row__detail-label">{label}</span>
       {text}
     </p>
+  )
+}
+
+/** "เกิดอะไรขึ้น" (error_detail) and "ต้องแก้อะไร" (error_how_to_fix), one line each. */
+export function ErrorWhatFix({ what, fix }: { what: string; fix: string }) {
+  return (
+    <>
+      <ErrorDetailText text={what} label="เกิดอะไรขึ้น" />
+      <ErrorDetailText text={fix} />
+    </>
   )
 }
 

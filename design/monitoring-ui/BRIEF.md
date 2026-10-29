@@ -23,7 +23,7 @@ The five requirements the product must visibly satisfy (each screen should make 
 An error line is shown as:
 - **title** = `error.hint` (constant per kind of error, e.g. "Value too long for column"), else the event title, else the message;
 - then key=value chips in this order: method, path(route), status, source/job, file, target, duration;
-- **error detail** = `error.fix` (this specific case) else `error.hint_detail`;
+- **error detail** = `error.detail` (this specific case when the SDK can tell), then **how to fix** = `error.how_to_fix`;
 - **actual error** = `Type [CODE] message`;
 - trace id + user id.
 Category shown as a plain-language chip (Thai): bug "ต้องแก้โค้ด", input "ข้อมูลที่ส่งมาผิด", data "ข้อมูลในระบบขัดกัน", dependency "ระบบที่เรียกใช้มีปัญหา", config "ตั้งค่าผิด".

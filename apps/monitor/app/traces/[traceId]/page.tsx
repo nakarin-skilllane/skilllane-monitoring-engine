@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Fragment, type ReactNode } from 'react'
 import { CopyButton } from '@/components/CopyButton'
-import { ActualError, ErrorDetailText, KvList } from '@/components/ErrorParts'
+import { ActualError, ErrorWhatFix, KvList } from '@/components/ErrorParts'
 import { CategoryChip, HttpStatus, LevelBadge, NewBadge, ServiceChip, Ts } from '@/components/badges'
 import { Icon } from '@/components/icons'
 import { Kpi, Kpis } from '@/components/Kpi'
@@ -11,7 +11,7 @@ import { EmptyState, EngineErrorState, ParamProblems } from '@/components/states
 import { engine, getMeta } from '@/lib/engine'
 import { fmtCount, fmtDuration, fmtMs, fmtNumber, fmtRange, fmtTimeMs, fmtTimeSec, shortId } from '@/lib/format'
 import { buildHref, isTraceId, Params, parseScope, type RawSearchParams, type Scope, withParams } from '@/lib/params'
-import { actualError, type Kv, logDetail, logKvs, logTitle } from '@/lib/readable'
+import { actualError, type Kv, logDetail, logKvs, logTitle, logWhatFix } from '@/lib/readable'
 import { normalizeSpanDetail } from '@/lib/io'
 import { serviceOrder } from '@/lib/services'
 import type { LogRow, SpanDetail } from '@/lib/types'
@@ -629,7 +629,7 @@ function LogLine({
       <KvList items={kvs} />
       {l.error ? (
         <>
-          <ErrorDetailText text={logDetail(row)} />
+          <ErrorWhatFix {...logWhatFix(row)} />
           <ActualError text={actualError(row.error)} />
         </>
       ) : null}

@@ -7,12 +7,12 @@ import Link from 'next/link'
 import { CategoryChip, EnvTag, LevelBadge, ServiceChip } from '@/components/badges'
 import { CopyButton } from '@/components/CopyButton'
 import { Drawer, DrawerLink } from '@/components/Drawer'
-import { ErrorDetailText, KvList } from '@/components/ErrorParts'
+import { ErrorWhatFix, KvList } from '@/components/ErrorParts'
 import { LiveTbody } from '@/components/Motion'
 import { EmptyState } from '@/components/states'
 import { fmtCount, fmtDateTimeMs, fmtDuration, fmtMs } from '@/lib/format'
 import { buildHref, type Keep } from '@/lib/params'
-import { actualError, aiErrorMarkdown, aiFieldsOfLog, logDetail, logKvs, logTitle } from '@/lib/readable'
+import { actualError, aiErrorMarkdown, aiFieldsOfLog, logKvs, logTitle, logWhatFix } from '@/lib/readable'
 import type { ErrorGroup, JobStat, LogRow } from '@/lib/types'
 import { moduleLabel, rangeEnglish } from '../_data'
 import { type Clock, GroupErrorRow, T, TraceChip } from './parts'
@@ -288,7 +288,7 @@ export function JobDrawer({ value, row, rows, complete, stat, keep, order, clock
     >
       <div className="stack">
         <KvList items={kvs} />
-        <ErrorDetailText text={logDetail(row)} />
+        <ErrorWhatFix {...logWhatFix(row)} />
       </div>
       <div>
         {j ? (
@@ -370,9 +370,13 @@ export function JobDrawer({ value, row, rows, complete, stat, keep, order, clock
               </dt>
               <dd>{e.category ? <CategoryChip category={e.category} /> : '–'}</dd>
               <dt>
-                อธิบายทั่วไป<span className="fname">error_hint_detail</span>
+                เกิดอะไรขึ้น<span className="fname">error_detail</span>
               </dt>
-              <dd>{e.hintDetail || '–'}</dd>
+              <dd>{e.detail || '–'}</dd>
+              <dt>
+                ต้องแก้อะไร<span className="fname">error_how_to_fix</span>
+              </dt>
+              <dd>{e.howToFix || '–'}</dd>
               <dt>
                 ประเภท · code<span className="fname">error_type · error_code</span>
               </dt>

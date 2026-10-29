@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS skilllane_monitoring.logs
     `error_code`        LowCardinality(String),
     `error_message`     String CODEC(ZSTD(1)),
     `error_hint`        LowCardinality(String),
-    `error_hint_detail` String CODEC(ZSTD(1)),
-    `error_fix`         String CODEC(ZSTD(1)),
+    `error_detail`      String CODEC(ZSTD(1)),
+    `error_how_to_fix`  String CODEC(ZSTD(1)),
     `error_stack`       String CODEC(ZSTD(3)),
     `error_cause`       String CODEC(ZSTD(3)),
     `error_category`    LowCardinality(String),
@@ -79,6 +79,13 @@ ENGINE = MergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (env, toStartOfHour(timestamp), service, level, timestamp)
 TTL addDays(toDateTime(timestamp), multiIf(env IN ('prod', 'production'), 90, env IN ('staging', 'uat'), 30, 7));
+
+-- SDK 0.5 split error_hint_detail / error_fix into error_detail / error_how_to_fix. Renames the
+-- columns of a logs table created before 28 Oct 2026 (old rows keep their text: the old
+-- case-specific fix reads as how to fix). A no-op on a table created from the CREATE above.
+ALTER TABLE skilllane_monitoring.logs
+    RENAME COLUMN IF EXISTS `error_hint_detail` TO `error_detail`,
+    RENAME COLUMN IF EXISTS `error_fix` TO `error_how_to_fix`;
 
 -- One row per finished span.
 CREATE TABLE IF NOT EXISTS skilllane_monitoring.spans

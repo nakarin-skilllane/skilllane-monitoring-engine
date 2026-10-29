@@ -6,10 +6,10 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { CategoryChip, LevelBadge, ServiceChip } from '@/components/badges'
 import { CopyButton } from '@/components/CopyButton'
-import { ActualError, ErrorDetailText, IdChip, KvList } from '@/components/ErrorParts'
+import { ActualError, ErrorWhatFix, IdChip, KvList } from '@/components/ErrorParts'
 import { fmtCount, fmtDate, fmtDateTime, fmtDateTimeMs, fmtTime, fmtTimeMs, fmtTimeSec, toMs } from '@/lib/format'
 import { buildHref, type Keep } from '@/lib/params'
-import { actualError, groupDetail, groupKvs, groupTitle, type Kv, logDetail, logKvs, logTitle } from '@/lib/readable'
+import { actualError, groupKvs, groupTitle, groupWhatFix, type Kv, logKvs, logTitle, logWhatFix } from '@/lib/readable'
 import type { ErrorGroup, LogRow } from '@/lib/types'
 
 /** Time formats of the screen: HH:mm:ss within a day, with the date on longer ranges. */
@@ -126,7 +126,7 @@ export function LogErrorRow({ row, keep, order, note }: { row: LogRow; keep: Kee
         </span>
       </div>
       <KvList items={logKvs(row)} />
-      <ErrorDetailText text={logDetail(row)} />
+      <ErrorWhatFix {...logWhatFix(row)} />
       <ActualError text={actualError(row.error)} />
       <div className="err-row__meta">
         <ServiceChip service={row.service} role={row.role} order={order} />
@@ -169,7 +169,7 @@ export function GroupErrorRow({ group, keep, order, split }: { group: ErrorGroup
         </span>
       </div>
       <KvList items={groupKvs(g)} />
-      <ErrorDetailText text={groupDetail(g)} />
+      <ErrorWhatFix {...groupWhatFix(g)} />
       <ActualError text={actualError({ type: g.errorType, code: g.errorCode, message: g.sampleMessage })} />
       <div className="err-row__meta">
         <ServiceChip service={g.service} role={g.role} order={order} />

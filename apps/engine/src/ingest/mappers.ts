@@ -142,8 +142,8 @@ const LOG_COLUMN_KEYS = new Set([
   'error.code',
   'error.message',
   'error.hint',
-  'error.hint_detail',
-  'error.fix',
+  'error.detail',
+  'error.how_to_fix',
   'error.stack_trace',
   'error.cause',
   'log.origin.function',
@@ -187,7 +187,7 @@ function maskLogRecord(r: Record<string, unknown>): Record<string, unknown> {
   const textOf = (key: string, mask: (text: string) => string) => {
     if (typeof out[key] === 'string') out[key] = mask(out[key] as string)
   }
-  for (const key of ['message', 'error.message', 'error.stack_trace', 'error.hint', 'error.hint_detail', 'error.fix', 'reason']) {
+  for (const key of ['message', 'error.message', 'error.stack_trace', 'error.hint', 'error.detail', 'error.how_to_fix', 'reason']) {
     textOf(key, redactText)
   }
   textOf('db.statement', maskSql)
@@ -250,8 +250,8 @@ export function mapLog(item: LogItem, resource: ResourceInfo, sentAt: string): R
     error_code: str(r['error.code']),
     error_message: str(r['error.message']),
     error_hint: str(r['error.hint']),
-    error_hint_detail: str(r['error.hint_detail']),
-    error_fix: str(r['error.fix']),
+    error_detail: str(r['error.detail']),
+    error_how_to_fix: str(r['error.how_to_fix']),
     error_stack: str(r['error.stack_trace']),
     error_cause: str(r['error.cause']),
     error_category: labelColumns.error_category,

@@ -310,7 +310,8 @@ export function LogDrawer({
                 </>
               ),
             },
-            { label: 'ต้องแก้อะไร', name: cause.line.error?.fix ? 'error_fix' : 'error_hint_detail', value: cause.line.error?.fix || cause.line.error?.hintDetail },
+            { label: 'เกิดอะไรขึ้น', name: 'error_detail', value: cause.line.error?.detail },
+            { label: 'ต้องแก้อะไร', name: 'error_how_to_fix', value: cause.line.error?.howToFix },
             { label: 'Error จริง', name: 'error_type · error_code · error_message', value: actualText(cause.line), className: 'err-row__actual' },
             { label: 'Function ต้นทาง', name: 'origin_function', value: cause.line.error?.originFunction, className: 'mono' },
             {
@@ -328,8 +329,8 @@ export function LogDrawer({
         fields={[
           { label: 'หัวข้อ', name: e?.hint ? 'error_hint' : eventTitle(row) ? 'event_code' : 'message', value: title },
           { label: 'ข้อความ', name: 'message', value: !e && row.message && row.message !== title ? row.message : null, className: 'lg-pre' },
-          { label: 'ต้องแก้อะไร', name: 'error_fix', value: e?.fix },
-          { label: 'อธิบายทั่วไป', name: 'error_hint_detail', value: e?.hintDetail },
+          { label: 'เกิดอะไรขึ้น', name: 'error_detail', value: e?.detail },
+          { label: 'ต้องแก้อะไร', name: 'error_how_to_fix', value: e?.howToFix },
           { label: 'หมวด', name: 'error_category', value: e?.category ? <CategoryChip category={e.category} /> : null },
           {
             label: 'Error group',

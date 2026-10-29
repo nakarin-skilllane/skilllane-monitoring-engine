@@ -150,11 +150,12 @@ export interface ErrorGroup {
   errorType: string
   errorCode: string
   hint: string
-  hintDetail: string
+  /** What happened, from the latest occurrence (it may name this case's values). */
+  detail: string
   category: ErrorCategory | string
   target: string
-  /** Fix sentence of the latest occurrence. */
-  fix: string
+  /** What to do, from the latest occurrence. */
+  howToFix: string
   originFunction: string
   originFile: string
   count: number
@@ -272,8 +273,8 @@ export interface LogRow {
     code: string
     message: string
     hint: string
-    hintDetail: string
-    fix: string
+    detail: string
+    howToFix: string
     category: ErrorCategory | string
     target: string
     stack: string

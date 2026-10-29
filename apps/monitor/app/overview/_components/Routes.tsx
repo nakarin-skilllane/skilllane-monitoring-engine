@@ -8,12 +8,12 @@ import Link from 'next/link'
 import type { CSSProperties, ReactNode } from 'react'
 import { CategoryChip, LevelBadge, NewBadge, ServiceChip, Ts } from '@/components/badges'
 import { CopyButton } from '@/components/CopyButton'
-import { ErrorDetailText, KvList } from '@/components/ErrorParts'
+import { ErrorWhatFix, KvList } from '@/components/ErrorParts'
 import { ExpandRow } from '@/components/ExpandRow'
 import { EmptyState } from '@/components/states'
 import { fmtCount, fmtDuration, fmtMs, fmtPct, fmtRangeShort, fmtTime, shortId } from '@/lib/format'
 import { buildHref, type Scope } from '@/lib/params'
-import { groupDetail, groupKvs, groupTitle } from '@/lib/readable'
+import { groupKvs, groupTitle, groupWhatFix } from '@/lib/readable'
 import type { ErrorGroup, OverviewRoute, OverviewService } from '@/lib/types'
 import { type DeployInfo, ERROR_RATE_BAD, P95_WORSE, SLOW_MS, isHttp } from '../_lib/model'
 import { fmtDeltaMs, fmtPt, inRange } from '../_lib/text'
@@ -197,7 +197,7 @@ export function Routes({ scope, order, selected, routes, base, deploy, slowTrace
                           ) : null}
                         </div>
                         <KvList items={groupKvs(g)} />
-                        <ErrorDetailText text={groupDetail(g)} />
+                        <ErrorWhatFix {...groupWhatFix(g)} />
                       </div>
                     ) : (
                       <div className="row-detail__body">
