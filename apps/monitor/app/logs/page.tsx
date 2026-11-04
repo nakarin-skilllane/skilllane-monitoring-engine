@@ -408,7 +408,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                   {[
                     hidden && hidden.total > 0 ? `ซ่อน noise ${fmtCount(hidden.total)} แถว` : '',
                     collapsed && collapsed.patterns > 0
-                      ? `ยุบ log ซ้ำ ${fmtCount(collapsed.patterns)} แบบ (${fmtCount(collapsed.lines)} แถว) เหลือบรรทัดล่าสุดที่มีป้าย ซ้ำ ×`
+                      ? `ยุบ log ซ้ำ ${fmtCount(collapsed.patterns)} แบบ (${fmtCount(collapsed.lines)} แถว) เหลือบรรทัดล่าสุด (ป้าย ⟲ ซ้ำ)`
                       : '',
                     collapsed?.skipped === 'range' ? 'ไม่ยุบ log ซ้ำเพราะช่วงเวลาเกิน 7 วัน' : '',
                   ]
