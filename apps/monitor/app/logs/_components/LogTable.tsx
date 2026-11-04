@@ -29,15 +29,22 @@ function outageText(row: LogRow, outages: readonly Outage[]): string {
   return [where, down].filter(Boolean).join(' · ')
 }
 
-/** `⟲ ซ้ำ ×11,840 · ตั้งแต่ 15:01` on the latest line of a collapsed repeat: opens every line of it. */
+/**
+ * On the latest line of a collapsed repeat, opening every line of it: `⟲ ซ้ำ ×11,840 · ตั้งแต่ 15:01` (steady, the
+ * page's range) or `⟲ ซ้ำ ×7 ใน 0.3 วิ` (a burst, its own few seconds).
+ */
 export function RepeatMark({ repeat, keep, withDate }: { repeat: LogRepeat; keep: Keep; withDate?: boolean }) {
+  const burst = repeat.kind === 'burst'
+  const spanMs = Date.parse(repeat.lastSeen) - Date.parse(repeat.firstSeen)
+  const href = burst
+    ? buildHref('/logs', keep, { pattern: repeat.pattern, from: repeat.firstSeen, to: new Date(Date.parse(repeat.lastSeen) + 1).toISOString() })
+    : buildHref('/logs', keep, { pattern: repeat.pattern })
   return (
-    <Link
-      className="tag lg-repeat"
-      href={buildHref('/logs', keep, { pattern: repeat.pattern })}
-      title={`แสดงรายการซ้ำทั้ง ${fmtCount(repeat.count)} บรรทัด: ${repeat.template}`}
-    >
-      ⟲ ซ้ำ ×{fmtCount(repeat.count)} · ตั้งแต่ {withDate ? fmtDateTime(repeat.firstSeen) : fmtTime(repeat.firstSeen)}
+    <Link className="tag lg-repeat" href={href} title={`แสดงรายการซ้ำทั้ง ${fmtCount(repeat.count)} บรรทัด: ${repeat.template}`}>
+      ⟲ ซ้ำ ×{fmtCount(repeat.count)}
+      {burst
+        ? ` ใน ${spanMs < 1000 ? `${spanMs} ms` : `${(spanMs / 1000).toFixed(1)} วิ`}`
+        : ` · ตั้งแต่ ${withDate ? fmtDateTime(repeat.firstSeen) : fmtTime(repeat.firstSeen)}`}
     </Link>
   )
 }

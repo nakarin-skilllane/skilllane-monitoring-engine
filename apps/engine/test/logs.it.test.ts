@@ -42,10 +42,19 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   for (let i = 0; i < 100; i++) log(start + i * 15_000 + 8, { logger: 'RedisCacheManager', message: `Cache hit for key: course-media/${(0xabc000 + i).toString(16)}.png` })
   for (let i = 0; i < 150; i++) log(start + 10 * MIN + i * 200 + 9, { level: 'warn', logger: 'Importer', message: `Import row ${i} failed` }) // a burst: 150 in 30 s
   for (let i = 0; i < 5; i++) log(start + i * 5 * MIN + 10, { logger: 'ExamService', message: `Exam submitted by u_${i}` })
+  // bursts: 7 lines 50 ms apart, twice 5 s apart (two marked lines); 3 in a row stay (not more than 3)
+  for (const at of [start + 5 * MIN, start + 5 * MIN + 5000]) {
+    for (let i = 0; i < 7; i++) log(at + i * 50 + 12, { logger: 'DatabaseModule', message: 'Session schema set to: MICA2_DEV' })
+  }
+  for (let i = 0; i < 3; i++) log(start + 6 * MIN + i * 100 + 13, { level: 'warn', logger: 'OracleAuthProvider', message: 'Token is valid, retrieving user from repository: a@b.th' })
+  const handlers = ['GetUsers', 'GetRoles', 'GetMinistries', 'GetJurisdictions', 'GetDepartments', 'ExportUsers', 'GetExamRoom', 'GetProfile']
+  handlers.forEach((h, i) =>
+    log(start + 7 * MIN + i + 14, { level: 'warn', logger: 'QueryBus', message: `Query handler [${h}Handler] is already registered. Overriding previously registered handler.` }),
+  )
   return out
 }
 
-const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5
+const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8
 const NOISE = 450 + 10 + 450 + 100
 
 describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_IT=1, docker compose up -d clickhouse)', () => {
@@ -122,10 +131,12 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
   describe('collapse', () => {
     it('keeps the latest line of each fast repeat, marked with its count', async () => {
       const r = await logs.search({ ...range, hide: ALL, collapse: '1', limit: '500' })
-      expect(r.collapse).toEqual({ patterns: 3, lines: 900 + 450 + 150 - 3, skipped: null })
-      // the burst's latest line is 20 minutes old: it sits on a later page, where its time is
+      expect(r.collapse).toEqual({ patterns: 3, bursts: 3, lines: 900 + 450 + 150 - 3 + 14 - 2 + 8 - 1, skipped: null })
+      // the import burst's latest line is 20 minutes old: it sits on a later page, where its time is
       const marked = (await allRows({ ...range, hide: ALL, collapse: '1', limit: '500' })).filter((x) => x.repeat)
-      expect(marked.map((x) => x.repeat!.count).sort((a, b) => a - b)).toEqual([150, 450, 900])
+      const counts = (kind: string) => marked.filter((x) => x.repeat!.kind === kind).map((x) => x.repeat!.count).sort((a, b) => a - b)
+      expect(counts('steady')).toEqual([150, 450, 900])
+      expect(counts('burst')).toEqual([7, 7, 8])
       const redis = marked.find((x) => x.logger === 'RedisClient')!
       expect(redis.level).toBe('error')
       expect(redis.repeat!.template).toBe('connect ECONNREFUSED *.*.*.*:*')
@@ -136,13 +147,25 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
 
     it('a repeat shows up once over every page; jobs and requests are never collapsed', async () => {
       const rows = await allRows({ ...range, hide: ALL, collapse: '1' })
-      expect(rows).toHaveLength(TOTAL - NOISE - (900 + 450 + 150) + 3)
+      expect(rows).toHaveLength(TOTAL - NOISE - (900 + 450 + 150) + 3 - (14 - 2) - (8 - 1))
       expect(rows.filter((x) => x.logger === 'RedisClient')).toHaveLength(1)
       expect(rows.filter((x) => x.logger === 'Poller')).toHaveLength(1)
       expect(rows.filter((x) => x.logger === 'Importer')).toHaveLength(1)
       expect(rows.filter((x) => x.eventCode === 'job.finished')).toHaveLength(600)
       expect(rows.filter((x) => x.http?.route === '/courses')).toHaveLength(600)
       expect(rows.filter((x) => x.logger === 'ExamService')).toHaveLength(5)
+    })
+
+    it('a burst of more than 3 within 1 s keeps its last line; 3 in a row stay', async () => {
+      const rows = await allRows({ ...range, hide: ALL, collapse: '1' })
+      const sessions = rows.filter((x) => x.logger === 'DatabaseModule')
+      expect(sessions.map((x) => x.repeat?.count)).toEqual([7, 7])
+      expect(sessions.every((x) => x.timestamp === x.repeat!.lastSeen)).toBe(true)
+      expect(rows.filter((x) => x.logger === 'OracleAuthProvider')).toHaveLength(3)
+      const handler = rows.filter((x) => x.logger === 'QueryBus')
+      expect(handler).toHaveLength(1)
+      expect(handler[0].repeat!.template).toBe('Query handler [*] is already registered. Overriding previously registered handler.')
+      expect(handler[0].message).toContain('GetProfileHandler')
     })
 
     it('pattern lists every line of one repeat', async () => {
@@ -156,7 +179,7 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
 
     it('a range over 7 days is not collapsed', async () => {
       const r = await logs.search({ env: ENV, from: 'now-8d', hide: ALL, collapse: '1', limit: '1' })
-      expect(r.collapse).toEqual({ patterns: 0, lines: 0, skipped: 'range' })
+      expect(r.collapse).toEqual({ patterns: 0, bursts: 0, lines: 0, skipped: 'range' })
     })
   })
 })

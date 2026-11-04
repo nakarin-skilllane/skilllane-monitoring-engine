@@ -3,8 +3,9 @@
  *
  * A noise group matches debug / info lines only, so a warn, error or fatal line is never hidden (a probe
  * that answered 5xx is an error line and stays). A repeat pattern = service + role + logger + level +
- * event code + the message with its uuids, hex ids and numbers turned into `*`; http.request and job.*
- * lines are never collapsed (one line = one request / one job).
+ * event code + the message with its `[…]` parts, uuids, hex ids and numbers turned into `*`; http.request
+ * and job.* lines are never collapsed (one line = one request / one job). A repeat collapses when it is
+ * steady (many lines over the range) or a burst (more than 3 in a row, each within 1 s of the one before).
  */
 import { PROBE_SEGMENTS } from '../probes'
 import { bad, optList, optString, type QueryString } from './params'
@@ -25,15 +26,17 @@ export const NOISE_SQL: Record<NoiseGroup, string> = {
   cache: `${QUIET} AND ${FREE_TEXT} AND (positionCaseInsensitive(logger, 'cache') > 0 OR match(message, '(?i)^cache (hit|miss|set|get|del)'))`,
 }
 
-/** The message (else the error message) with what changes per occurrence turned into `*`. */
+/** The message (else the error message) with what changes per occurrence turned into `*` (`[GetUsersHandler]` → `[*]`). */
 export const TEMPLATE_SQL =
-  "replaceRegexpAll(if(message != '', message, error_message), '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{8,}|[0-9]+', '*')"
+  "replaceRegexpAll(replaceRegexpAll(if(message != '', message, error_message), '\\\\[[^\\\\]]*\\\\]', '[*]'), '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{8,}|[0-9]+', '*')"
 export const PATTERN_SQL = `cityHash64(service, role, logger, level, event_code, ${TEMPLATE_SQL})`
 /** Lines a repeat may collapse. */
 export const COLLAPSIBLE_SQL = "event_code != 'http.request' AND NOT startsWith(event_code, 'job.')"
 
 /** A pattern collapses at `minCount` lines and `perMinute` on average over the range or `peakPerMinute` in one minute. */
 export const COLLAPSE = { minCount: 20, perMinute: 10, peakPerMinute: 60, maxPatterns: 200, maxRangeMs: 7 * 86_400_000 } as const
+/** A burst = lines of one pattern each at most `gapMs` after the one before; it collapses at `minCount` lines. */
+export const BURST = { gapMs: 1000, minCount: 4, maxBursts: 500 } as const
 
 export function parseHide(q: QueryString): NoiseGroup[] {
   return optList(q, 'hide', NOISE_GROUPS) ?? []

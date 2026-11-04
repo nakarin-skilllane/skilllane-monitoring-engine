@@ -304,8 +304,12 @@ export interface LogRow {
   repeat?: LogRepeat
 }
 
-/** A collapsed repeat over the range: `pattern` = id for the `pattern` filter, `template` = its message with `*`. */
+/**
+ * A collapsed repeat: `steady` = over the whole range, `burst` = one run of lines each within 1 s of the one before;
+ * `pattern` = id for the `pattern` filter, `template` = its message with `*`.
+ */
 export interface LogRepeat {
+  kind: 'steady' | 'burst'
   pattern: string
   count: number
   firstSeen: string
@@ -461,8 +465,8 @@ export interface LogsResponse {
   nextBefore: string | null
   /** Lines of each noise group / the exclude text (with the level filter), hidden or not; `total` = hidden by this request. */
   hidden: LogsHidden
-  /** Repeats collapsed to their latest line; null without collapse. */
-  collapse: { patterns: number; lines: number; skipped: 'range' | null } | null
+  /** Steady repeats (`patterns`) and bursts collapsed to their latest line; null without collapse. */
+  collapse: { patterns: number; bursts: number; lines: number; skipped: 'range' | null } | null
 }
 
 export interface LogsHidden {

@@ -80,7 +80,9 @@ export function AdvancedSearch({
           <label className="lg-adv__check">
             <input type="checkbox" checked={collapse} onChange={(e) => go({ repeats: repeatsParam(e.target.checked, narrowed) })} />
             <span className="lg-adv__label">ยุบ log ซ้ำเหลือบรรทัดล่าสุด</span>
-            <span className="t-muted">แพทเทิร์นเดียวกันเฉลี่ยตั้งแต่ 10 ครั้ง/นาที หรือ 60 ครั้งในนาทีเดียว · ไม่ยุบ http.request และ job.*</span>
+            <span className="t-muted">
+              แพทเทิร์นเดียวกันเฉลี่ยตั้งแต่ 10 ครั้ง/นาที หรือ 60 ครั้งในนาทีเดียว และที่ซ้ำติดกันเกิน 3 บรรทัด (ห่างกันไม่เกิน 1 วิ) · ไม่ยุบ http.request และ job.*
+            </span>
           </label>
         </fieldset>
         <div>

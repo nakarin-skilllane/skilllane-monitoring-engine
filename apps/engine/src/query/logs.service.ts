@@ -13,6 +13,7 @@ import {
   bad,
 } from './params'
 import {
+  BURST,
   COLLAPSE,
   COLLAPSIBLE_SQL,
   NOISE_GROUPS,
@@ -43,10 +44,22 @@ export interface LogsResponse {
    */
   hidden: { probe: number; preflight: number; middleware: number; cache: number; exclude: number; total: number }
   /**
-   * `collapse=1`: fast repeats kept to their latest line (its `repeat`); `lines` = the lines they stood for
-   * minus those latest lines. The histogram and levelCounts still count every line. null without collapse.
+   * `collapse=1`: steady repeats (`patterns`) and bursts (`bursts`) kept to their latest line (its `repeat`);
+   * `lines` = the lines they stood for minus those latest lines. The histogram and levelCounts still count
+   * every line. null without collapse.
    */
-  collapse: { patterns: number; lines: number; skipped: 'range' | null } | null
+  collapse: { patterns: number; bursts: number; lines: number; skipped: 'range' | null } | null
+}
+
+/** One collapsed burst (logs.bursts). */
+interface BurstDb {
+  pattern: string
+  n: number
+  f_ms: number
+  l_ms: number
+  first_ts: string
+  last_ts: string
+  template: string
 }
 
 /** One collapsed repeat (logs.repeats). */
@@ -66,6 +79,16 @@ interface Hiding {
 }
 
 const EXCLUDE_SQL = 'lower(message) LIKE {excludeLike:String}'
+
+/** timestamp, template and pattern key of the collapsible lines the variants match (logs.repeats, logs.bursts). */
+function patternBranches(variants: Where[]): string {
+  return variants
+    .map(
+      (v) => `SELECT timestamp, ${TEMPLATE_SQL} AS tpl, cityHash64(service, role, logger, level, event_code, tpl) AS pk
+       FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${COLLAPSIBLE_SQL}`,
+    )
+    .join('\n UNION ALL \n')
+}
 
 function hidingOf(q: QueryString): Hiding {
   const parts = parseHide(q).map((g) => `(${NOISE_SQL[g]})`)
@@ -195,20 +218,34 @@ export class LogsService {
 
     const collapse = parseCollapse(q)
     const tooLong = c.toMs - c.fromMs > COLLAPSE.maxRangeMs
-    const repeats = collapse && !tooLong ? await this.repeats(variants, c) : []
+    const [repeats, allBursts] = collapse && !tooLong ? await Promise.all([this.repeats(variants, c), this.bursts(variants)]) : [[], []]
+    // a steady repeat already stands for every line of its pattern
+    const steady = new Set(repeats.map((r) => r.pattern))
+    const bursts = allBursts.filter((b) => !steady.has(b.pattern))
     if (repeats.length) params.collapsed = repeats.map((r) => BigInt(r.pattern))
+    if (bursts.length) Object.assign(params, { bp: bursts.map((b) => BigInt(b.pattern)), bf: bursts.map((b) => b.f_ms), bl: bursts.map((b) => b.l_ms) })
 
-    // One branch per variant, so each LIKE can use its own ngram skip index. A collapsed repeat leaves the
-    // normal branches and comes back once: its latest line in the range, on the page that line falls on.
-    const notCollapsed = repeats.length ? ` AND ${PATTERN_SQL} NOT IN {collapsed:Array(UInt64)}` : ''
+    // One branch per variant, so each LIKE can use its own ngram skip index. A steady repeat leaves the normal
+    // branches and comes back once: its latest line in the range, on the page that line falls on. A burst keeps
+    // its last line in the normal branches and loses the lines before it.
+    const folding = repeats.length > 0 || bursts.length > 0
+    const keyCols = folding ? `${PATTERN_SQL} AS pk, toString(pk) AS pattern` : `0 AS pk, '' AS pattern`
+    const notSteady = repeats.length ? ' AND pk NOT IN {collapsed:Array(UInt64)}' : ''
+    const notInBurst = bursts.length
+      ? ' AND NOT arrayExists((p, f, l) -> p = pk AND ms >= f AND ms < l, {bp:Array(UInt64)}, {bf:Array(Int64)}, {bl:Array(Int64)})'
+      : ''
     const normal = variants.map(
       (v) =>
-        `SELECT ${LOG_SELECT}, '' AS pattern FROM skilllane_monitoring.logs WHERE ${v.sql}${notCollapsed}${cursor} ORDER BY timestamp DESC LIMIT {limit:UInt32}`,
+        `SELECT ${LOG_SELECT}, ${keyCols}, toUnixTimestamp64Milli(timestamp) AS ms FROM skilllane_monitoring.logs
+         WHERE ${v.sql}${notSteady}${notInBurst}${cursor} ORDER BY timestamp DESC LIMIT {limit:UInt32}`,
     )
     const latest = repeats.length
       ? [
           `SELECT * FROM (SELECT * FROM (${variants
-            .map((v) => `SELECT ${LOG_SELECT}, toString(${PATTERN_SQL}) AS pattern FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${PATTERN_SQL} IN {collapsed:Array(UInt64)}`)
+            .map(
+              (v) =>
+                `SELECT ${LOG_SELECT}, ${keyCols}, toUnixTimestamp64Milli(timestamp) AS ms FROM skilllane_monitoring.logs WHERE ${v.sql} AND pk IN {collapsed:Array(UInt64)}`,
+            )
             .join('\n UNION ALL \n')}) ORDER BY timestamp DESC LIMIT 1 BY pattern)${before !== undefined ? ` WHERE timestamp < ${msParam('beforeMs')}` : ''}`,
         ]
       : []
@@ -239,7 +276,7 @@ export class LogsService {
     const COUNTS = ['debug', 'info', 'warn', 'error', 'fatal', 'request_error', ...NOISE_GROUPS.map((g) => `noise_${g}`), 'noise_exclude', 'hidden_total']
 
     const [rows, histogram, counts] = await Promise.all([
-      this.reader.rows<LogDb & { pattern: string }>('logs', `SELECT * FROM (${rowsSql}) ORDER BY timestamp DESC LIMIT {limit:UInt32}`, params),
+      this.reader.rows<LogDb & { pattern: string; ms: number }>('logs', `SELECT * EXCEPT (pk) FROM (${rowsSql}) ORDER BY timestamp DESC LIMIT {limit:UInt32}`, params),
       this.reader.rows<{ t: number; debug: number; info: number; warn: number; error: number; fatal: number }>(
         'logs.histogram',
         `SELECT t, sum(debug) AS debug, sum(info) AS info, sum(warn) AS warn, sum(error) AS error, sum(fatal) AS fatal
@@ -248,13 +285,16 @@ export class LogsService {
       ),
       this.reader.rows<Record<string, number>>('logs.levels', `SELECT ${COUNTS.map((k) => `sum(${k}) AS ${k}`).join(', ')} FROM (${countsSql})`, countParams),
     ])
-    const byPattern = new Map(repeats.map((r) => [r.pattern, r]))
+    const bySteady = new Map(repeats.map((r) => [r.pattern, r]))
+    const byBurstEnd = new Map(bursts.map((b) => [`${b.pattern}@${b.l_ms}`, b]))
     const mapped = await withRequests(
       this.reader,
       rows.map((db) => {
         const row = toLogRow(db)
-        const r = db.pattern ? byPattern.get(db.pattern) : undefined
-        if (r) row.repeat = { pattern: r.pattern, count: num(r.total), firstSeen: iso(r.first_ts) ?? '', lastSeen: iso(r.last_ts) ?? '', template: r.template }
+        const r = db.pattern ? bySteady.get(db.pattern) : undefined
+        const b = db.pattern && !r ? byBurstEnd.get(`${db.pattern}@${db.ms}`) : undefined
+        if (r) row.repeat = { kind: 'steady', pattern: r.pattern, count: num(r.total), firstSeen: iso(r.first_ts) ?? '', lastSeen: iso(r.last_ts) ?? '', template: r.template }
+        else if (b) row.repeat = { kind: 'burst', pattern: b.pattern, count: num(b.n), firstSeen: iso(b.first_ts) ?? '', lastSeen: iso(b.last_ts) ?? '', template: b.template }
         return row
       }),
     )
@@ -280,7 +320,12 @@ export class LogsService {
         total: num(lc.hidden_total),
       },
       collapse: collapse
-        ? { patterns: repeats.length, lines: repeats.reduce((a, r) => a + num(r.total), 0) - repeats.length, skipped: tooLong ? 'range' : null }
+        ? {
+            patterns: repeats.length,
+            bursts: bursts.length,
+            lines: repeats.reduce((a, r) => a + num(r.total) - 1, 0) + bursts.reduce((a, b) => a + num(b.n) - 1, 0),
+            skipped: tooLong ? 'range' : null,
+          }
         : null,
     }
   }
@@ -291,12 +336,7 @@ export class LogsService {
    */
   private repeats(variants: Where[], c: Common): Promise<RepeatDb[]> {
     const minutes = (c.toMs - c.fromMs) / 60_000
-    const branches = variants
-      .map(
-        (v) => `SELECT timestamp, ${TEMPLATE_SQL} AS tpl, cityHash64(service, role, logger, level, event_code, tpl) AS pk
-         FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${COLLAPSIBLE_SQL}`,
-      )
-      .join('\n UNION ALL \n')
+    const branches = patternBranches(variants)
     return this.reader.rows<RepeatDb>(
       'logs.repeats',
       `SELECT toString(pk) AS pattern, sum(n) AS total, min(f) AS first_ts, max(l) AS last_ts, any(t1) AS template
@@ -313,6 +353,30 @@ export class LogsService {
         peakCount: COLLAPSE.peakPerMinute,
         maxPatterns: COLLAPSE.maxPatterns,
       }),
+    )
+  }
+
+  /**
+   * Bursts among the lines the variants match: runs of one pattern, each line at most `gapMs` after the one
+   * before, with at least `minCount` lines; biggest first.
+   */
+  private bursts(variants: Where[]): Promise<BurstDb[]> {
+    return this.reader.rows<BurstDb>(
+      'logs.bursts',
+      `SELECT toString(pk) AS pattern, count() AS n, min(timestamp) AS first_ts, max(timestamp) AS last_ts,
+              toUnixTimestamp64Milli(first_ts) AS f_ms, toUnixTimestamp64Milli(last_ts) AS l_ms, any(tpl) AS template
+       FROM (
+         SELECT pk, timestamp, tpl, sum(gap) OVER (PARTITION BY pk ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS run
+         FROM (
+           SELECT pk, timestamp, tpl,
+                  dateDiff('millisecond', lagInFrame(timestamp) OVER (PARTITION BY pk ORDER BY timestamp ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), timestamp) > {gapMs:UInt32} AS gap
+           FROM (${patternBranches(variants)})
+         )
+       )
+       GROUP BY pk, run
+       HAVING n >= {burstMin:UInt32}
+       ORDER BY n DESC LIMIT {maxBursts:UInt32}`,
+      Object.assign({}, ...variants.map((v) => v.params), { gapMs: BURST.gapMs, burstMin: BURST.minCount, maxBursts: BURST.maxBursts }),
     )
   }
 

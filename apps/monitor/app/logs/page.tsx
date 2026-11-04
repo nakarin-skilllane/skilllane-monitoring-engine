@@ -401,14 +401,14 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                 </div>
               ) : null}
             </div>
-            {(hidden && hidden.total > 0) || (collapsed && (collapsed.patterns > 0 || collapsed.skipped)) ? (
+            {(hidden && hidden.total > 0) || (collapsed && (collapsed.lines > 0 || collapsed.skipped)) ? (
               <p className="lg-folded">
                 <Icon name="filter" size="sm" />
                 <span>
                   {[
                     hidden && hidden.total > 0 ? `ซ่อน noise ${fmtCount(hidden.total)} แถว` : '',
-                    collapsed && collapsed.patterns > 0
-                      ? `ยุบ log ซ้ำ ${fmtCount(collapsed.patterns)} แบบ (${fmtCount(collapsed.lines)} แถว) เหลือบรรทัดล่าสุด (ป้าย ⟲ ซ้ำ)`
+                    collapsed && collapsed.patterns + collapsed.bursts > 0
+                      ? `ยุบ log ซ้ำ ${fmtCount(collapsed.patterns + collapsed.bursts)} ชุด (${fmtCount(collapsed.lines)} แถว) เหลือบรรทัดล่าสุด (ป้าย ⟲ ซ้ำ)`
                       : '',
                     collapsed?.skipped === 'range' ? 'ไม่ยุบ log ซ้ำเพราะช่วงเวลาเกิน 7 วัน' : '',
                   ]
