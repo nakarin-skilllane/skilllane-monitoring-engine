@@ -48,8 +48,9 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   }
   for (let i = 0; i < 3; i++) log(start + 6 * MIN + i * 100 + 13, { level: 'warn', logger: 'OracleAuthProvider', message: 'Token is valid, retrieving user from repository: a@b.th' })
   const handlers = ['GetUsers', 'GetRoles', 'GetMinistries', 'GetJurisdictions', 'GetDepartments', 'ExportUsers', 'GetExamRoom', 'GetProfile']
+  // the last three in the same millisecond, as a NestJS start-up writes them: still one line kept
   handlers.forEach((h, i) =>
-    log(start + 7 * MIN + i + 14, { level: 'warn', logger: 'QueryBus', message: `Query handler [${h}Handler] is already registered. Overriding previously registered handler.` }),
+    log(start + 7 * MIN + Math.min(i, 5) + 14, { level: 'warn', logger: 'QueryBus', message: `Query handler [${h}Handler] is already registered. Overriding previously registered handler.` }),
   )
   return out
 }
@@ -165,7 +166,7 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       const handler = rows.filter((x) => x.logger === 'QueryBus')
       expect(handler).toHaveLength(1)
       expect(handler[0].repeat!.template).toBe('Query handler [*] is already registered. Overriding previously registered handler.')
-      expect(handler[0].message).toContain('GetProfileHandler')
+      expect(handler[0].message).toMatch(/GetExamRoomHandler|GetProfileHandler|ExportUsersHandler/)
     })
 
     it('pattern lists every line of one repeat', async () => {

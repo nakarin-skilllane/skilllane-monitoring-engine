@@ -225,30 +225,29 @@ export class LogsService {
     if (repeats.length) params.collapsed = repeats.map((r) => BigInt(r.pattern))
     if (bursts.length) Object.assign(params, { bp: bursts.map((b) => BigInt(b.pattern)), bf: bursts.map((b) => b.f_ms), bl: bursts.map((b) => b.l_ms) })
 
-    // One branch per variant, so each LIKE can use its own ngram skip index. A steady repeat leaves the normal
-    // branches and comes back once: its latest line in the range, on the page that line falls on. A burst keeps
-    // its last line in the normal branches and loses the lines before it.
+    // One branch per variant, so each LIKE can use its own ngram skip index. A steady repeat or a burst leaves
+    // the normal branches and comes back once: its latest line, on the page that line falls on (a burst's last
+    // millisecond may hold several of its lines: one of them).
     const folding = repeats.length > 0 || bursts.length > 0
     const keyCols = folding ? `${PATTERN_SQL} AS pk, toString(pk) AS pattern` : `0 AS pk, '' AS pattern`
     const notSteady = repeats.length ? ' AND pk NOT IN {collapsed:Array(UInt64)}' : ''
     const notInBurst = bursts.length
-      ? ' AND NOT arrayExists((p, f, l) -> p = pk AND ms >= f AND ms < l, {bp:Array(UInt64)}, {bf:Array(Int64)}, {bl:Array(Int64)})'
+      ? ' AND NOT arrayExists((p, f, l) -> p = pk AND ms >= f AND ms <= l, {bp:Array(UInt64)}, {bf:Array(Int64)}, {bl:Array(Int64)})'
       : ''
     const normal = variants.map(
       (v) =>
         `SELECT ${LOG_SELECT}, ${keyCols}, toUnixTimestamp64Milli(timestamp) AS ms FROM skilllane_monitoring.logs
          WHERE ${v.sql}${notSteady}${notInBurst}${cursor} ORDER BY timestamp DESC LIMIT {limit:UInt32}`,
     )
-    const latest = repeats.length
-      ? [
-          `SELECT * FROM (SELECT * FROM (${variants
-            .map(
-              (v) =>
-                `SELECT ${LOG_SELECT}, ${keyCols}, toUnixTimestamp64Milli(timestamp) AS ms FROM skilllane_monitoring.logs WHERE ${v.sql} AND pk IN {collapsed:Array(UInt64)}`,
-            )
-            .join('\n UNION ALL \n')}) ORDER BY timestamp DESC LIMIT 1 BY pattern)${before !== undefined ? ` WHERE timestamp < ${msParam('beforeMs')}` : ''}`,
-        ]
-      : []
+    const afterCursor = before !== undefined ? ` WHERE timestamp < ${msParam('beforeMs')}` : ''
+    const kept = (where: string, by: string) =>
+      `SELECT * FROM (SELECT * FROM (${variants
+        .map((v) => `SELECT ${LOG_SELECT}, ${keyCols}, toUnixTimestamp64Milli(timestamp) AS ms FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${where}`)
+        .join('\n UNION ALL \n')}) ORDER BY timestamp DESC LIMIT 1 BY ${by})${afterCursor}`
+    const latest = [
+      ...(repeats.length ? [kept('pk IN {collapsed:Array(UInt64)}', 'pattern')] : []),
+      ...(bursts.length ? [kept('arrayExists((p, l) -> p = pk AND ms = l, {bp:Array(UInt64)}, {bl:Array(Int64)})', 'pattern, ms')] : []),
+    ]
     const rowsSql = [...normal, ...latest].join('\n UNION ALL \n')
     const histogramSql = variants
       .map(
