@@ -12,7 +12,7 @@ import { Reader } from '../src/query/sql'
  */
 const ENV = 'logs-it'
 const MIN = 60_000
-const ALL = 'probe,preflight,middleware,cache,cron'
+const ALL = 'probe,preflight,middleware,cache,cron,startup'
 const chTime = (ms: number) => new Date(ms).toISOString().replace('T', ' ').replace('Z', '')
 
 function fixture(endMs: number): Array<Record<string, unknown>> {
@@ -47,6 +47,17 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   log(start + 12 * MIN + 20, { logger: 'ClassService', message: 'Loaded class 42', trace_id: trace })
   req(start + 12 * MIN + 21, 'GET', '/classes/:id', 200)
   out[out.length - 1].trace_id = trace
+  // a new process (host h2) starting for 20 s up to app.started at 25 min: its INF lines are noise, a warning
+  // and a kafka error stay; h1 keeps serving meanwhile
+  const up = start + 25 * MIN
+  const h2 = { host: 'h2' }
+  for (let i = 0; i < 50; i++) log(up - 19_050 + i * 380, { ...h2, logger: 'RouterExplorer', message: `Mapped {/r${i}, GET} route` })
+  log(up - 15_000 + 23, { ...h2, level: 'warn', logger: 'CommandBus', message: 'Command handler [CreateUserHandler] is already registered.' })
+  log(up - 10_000 + 24, { ...h2, level: 'error', logger: 'kafkajs:Connection', dependency_type: 'kafka', message: 'Connection error: connect ECONNREFUSED' })
+  log(up + 25, { ...h2, logger: 'skilllane-monitoring', event_code: 'app.started', message: 'app started', duration_ms: 20_000 })
+  log(start + 27 * MIN + 26, { logger: 'KafkaConsumerLagService', message: 'Consumer lag 0' })
+  log(start + 29 * MIN + 27, { logger: 'process', event_code: 'app.shutdown', message: 'app shutting down' })
+  log(start + 29 * MIN + 2000 + 28, { logger: 'App', message: 'Closing connections' })
   // a cron every 5 minutes: its started / finished lines are noise, its failure is not; BullMQ jobs above stay
   for (let i = 0; i < 6; i++) {
     const cron = { logger: 'Cron', event_module: 'cron', job_queue: 'cron', job_type: 'AnnouncementCronService.handleCron', job_id: `c${i}` }
@@ -71,8 +82,8 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   return out
 }
 
-const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1 + 2 + 2
-const NOISE = 450 + 10 + 450 + 100 + 12
+const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1 + 2 + 2 + 50 + 6
+const NOISE = 450 + 10 + 450 + 100 + 12 + 50
 
 describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_IT=1, docker compose up -d clickhouse)', () => {
   const writer = createClient({ url: config.clickhouse.url, username: config.clickhouse.user, password: config.clickhouse.password, database: config.clickhouse.database })
@@ -116,15 +127,15 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
     it('without the new params nothing is hidden or collapsed', async () => {
       const r = await logs.search({ ...range, limit: '1' })
       expect(sumLevels(r.levelCounts)).toBe(TOTAL)
-      expect(r.hidden).toEqual({ probe: 450, preflight: 10, middleware: 450, cache: 100, cron: 12, exclude: 0, total: 0 })
+      expect(r.hidden).toEqual({ probe: 450, preflight: 10, middleware: 450, cache: 100, cron: 12, startup: 50, exclude: 0, total: 0 })
       expect(r.collapse).toBeNull()
     })
 
     it('hide drops the noise groups from rows and counts, never a failed probe', async () => {
       const r = await logs.search({ ...range, hide: ALL, limit: '1' })
-      expect(r.hidden).toEqual({ probe: 450, preflight: 10, middleware: 450, cache: 100, cron: 12, exclude: 0, total: NOISE })
+      expect(r.hidden).toEqual({ probe: 450, preflight: 10, middleware: 450, cache: 100, cron: 12, startup: 50, exclude: 0, total: NOISE })
       expect(sumLevels(r.levelCounts)).toBe(TOTAL - NOISE)
-      expect(r.levelCounts.error).toBe(904)
+      expect(r.levelCounts.error).toBe(905)
       const rows = await allRows({ ...range, hide: ALL, limit: '500' })
       expect(rows).toHaveLength(TOTAL - NOISE)
       expect(rows.filter((x) => x.http?.route === '/api/health').map((x) => x.http?.status)).toEqual([503, 503, 503])
@@ -134,6 +145,20 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
     it('a 5-minute cron is frequent in a range much longer than its data', async () => {
       const r = await logs.search({ env: ENV, from: new Date(end - 6 * 60 * MIN).toISOString(), to: range.to, hide: ALL, limit: '1' })
       expect(r.hidden.cron).toBe(12)
+    })
+
+    it('every line says where it came from', async () => {
+      const rows = await allRows({ ...range, hide: ALL, collapse: '1' })
+      const origin = (pred: (x: LogRow) => boolean) => rows.find(pred)?.origin
+      expect(origin((x) => x.message === 'Loaded class 42')).toBe('request')
+      expect(origin((x) => x.http?.route === '/courses')).toBe('request')
+      expect(origin((x) => x.eventCode === 'job.finished' && x.job?.queue === 'mail')).toBe('job')
+      expect(origin((x) => x.logger === 'kafkajs:Connection')).toBe('dependency')
+      expect(origin((x) => x.logger === 'CommandBus')).toBe('startup')
+      expect(origin((x) => x.eventCode === 'app.started')).toBe('startup')
+      expect(origin((x) => x.message === 'Closing connections')).toBe('shutdown')
+      expect(origin((x) => x.logger === 'KafkaConsumerLagService')).toBe('background')
+      expect(rows.some((x) => x.logger === 'RouterExplorer')).toBe(false)
     })
 
     it('a plain line written in a request gets its route', async () => {
@@ -170,7 +195,7 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       expect(redis.repeat!.template).toBe('connect ECONNREFUSED *.*.*.*:*')
       expect(redis.timestamp).toBe(redis.repeat!.lastSeen)
       // the volume still counts every line: an error that floods is seen in the chart and on ERR
-      expect(r.levelCounts.error).toBe(904)
+      expect(r.levelCounts.error).toBe(905)
     })
 
     it('a repeat shows up once over every page; jobs and requests are never collapsed', async () => {

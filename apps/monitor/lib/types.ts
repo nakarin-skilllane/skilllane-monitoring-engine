@@ -270,6 +270,8 @@ export interface LogRow {
   requestDurationMs: number | null
   /** `METHOD /route` of the request the line was written in (same trace + service + role); null outside one. */
   requestRoute: string | null
+  /** Where the line came from (startup / shutdown / request from a trace: /api/logs only). */
+  origin: LogOrigin
   error: {
     type: string
     code: string
@@ -305,6 +307,8 @@ export interface LogRow {
   /** On the line that stands for a collapsed repeat (/api/logs collapse=1). */
   repeat?: LogRepeat
 }
+
+export type LogOrigin = 'request' | 'job' | 'dependency' | 'startup' | 'shutdown' | 'background'
 
 /**
  * A collapsed repeat: `steady` = over the whole range, `burst` = one run of lines each within 1 s of the one before;
@@ -426,7 +430,7 @@ export interface LogsQuery extends CommonQuery {
   category?: string
   /** Error group (decimal UInt64): its lines. */
   fingerprint?: string
-  /** Comma list of noise groups to leave out (probe, preflight, middleware, cache, cron). */
+  /** Comma list of noise groups to leave out (probe, preflight, middleware, cache, cron, startup). */
   hide?: string
   /** Leave out the lines whose message has this text (case-insensitive). */
   exclude?: string
@@ -477,6 +481,7 @@ export interface LogsHidden {
   middleware: number
   cache: number
   cron: number
+  startup: number
   exclude: number
   total: number
 }

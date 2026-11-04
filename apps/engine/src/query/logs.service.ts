@@ -18,6 +18,11 @@ import {
   COLLAPSIBLE_SQL,
   cronParams,
   FREQUENT_CRON_SQL,
+  inWindow,
+  type LifeWindow,
+  SHUTDOWN_MS,
+  STARTUP_MAX_MS,
+  windowParams,
   NOISE_GROUPS,
   NOISE_SQL,
   PATTERN_SQL,
@@ -27,7 +32,7 @@ import {
   parsePattern,
 } from './noise'
 import { type LogDb, type LogRow, LOG_SELECT, toLogRow } from './rows'
-import { type Params, Reader, Where, bucketExpr, fillSeries, iso, msParam, num, scoped, seriesParams } from './sql'
+import { type Params, Reader, Where, bucketExpr, fillSeries, iso, msParam, num, scoped, scopeOnly, seriesParams } from './sql'
 
 export interface LogsResponse {
   rows: LogRow[]
@@ -44,7 +49,7 @@ export interface LogsResponse {
    * or not; `total` = the lines this request hid (a line in two groups counts once). Rows, histogram and
    * levelCounts leave the hidden lines out.
    */
-  hidden: { probe: number; preflight: number; middleware: number; cache: number; cron: number; exclude: number; total: number }
+  hidden: { probe: number; preflight: number; middleware: number; cache: number; cron: number; startup: number; exclude: number; total: number }
   /**
    * `collapse=1`: steady repeats (`patterns`) and bursts (`bursts`) kept to their latest line (its `repeat`);
    * `lines` = the lines they stood for minus those latest lines. The histogram and levelCounts still count
@@ -92,12 +97,16 @@ function patternBranches(variants: Where[]): string {
     .join('\n UNION ALL \n')
 }
 
-/** `frequentCron` = the crons the `cron` group may hide (LogsService.frequentCron). */
-function hidingOf(q: QueryString, frequentCron: string[]): Hiding {
+/** `frequentCron` / `startup` = what the `cron` / `startup` groups may hide (LogsService.frequentCron, lifecycle). */
+function hidingOf(q: QueryString, frequentCron: string[], startup: LifeWindow[]): Hiding {
   const parts = parseHide(q).map((g) => `(${NOISE_SQL[g]})`)
   const exclude = optString(q, 'exclude', 200)
   if (exclude) parts.push(EXCLUDE_SQL)
-  return { sql: parts.length ? parts.join(' OR ') : null, params: { frequentCron, ...(exclude ? { excludeLike: likePattern(exclude) } : {}) }, exclude: !!exclude }
+  return {
+    sql: parts.length ? parts.join(' OR ') : null,
+    params: { frequentCron, ...windowParams('su', startup), ...(exclude ? { excludeLike: likePattern(exclude) } : {}) },
+    exclude: !!exclude,
+  }
 }
 
 /** How far after an error line its request's `http.request` line may come (written when the response ends). */
@@ -213,7 +222,8 @@ export class LogsService {
     const limit = optInt(q, 'limit', 1, 500, 100)
     const beforeRaw = optString(q, 'before', 40)
     const before = beforeRaw === undefined ? undefined : parseTime('before', beforeRaw, Date.now())
-    const hiding = hidingOf(q, await this.frequentCron(c))
+    const [frequentCron, life] = await Promise.all([this.frequentCron(c), this.lifecycle(c)])
+    const hiding = hidingOf(q, frequentCron, life.startup)
     const levels = parseLevels(q)
     const variants = this.variants(q, c, true, hiding)
     // levelCounts: every level, hidden lines counted apart (countIf)
@@ -304,6 +314,13 @@ export class LogsService {
         return row
       }),
     )
+    for (const row of mapped) {
+      if (row.requestRoute) row.origin = 'request'
+      if (row.origin !== 'background') continue
+      const ms = Date.parse(row.timestamp)
+      if (inWindow(life.startup, row.service, row.role, row.host, ms)) row.origin = 'startup'
+      else if (inWindow(life.shutdown, row.service, row.role, row.host, ms)) row.origin = 'shutdown'
+    }
     const lc = counts[0] ?? {}
     return {
       rows: mapped,
@@ -323,6 +340,7 @@ export class LogsService {
         middleware: num(lc.noise_middleware),
         cache: num(lc.noise_cache),
         cron: num(lc.noise_cron),
+        startup: num(lc.noise_startup),
         exclude: num(lc.noise_exclude),
         total: num(lc.hidden_total),
       },
@@ -334,6 +352,30 @@ export class LogsService {
             skipped: tooLong ? 'range' : null,
           }
         : null,
+    }
+  }
+
+  /**
+   * Start-up and shutdown windows of the processes in scope around the range: app.started − its duration (the
+   * SDK's start-up time, at most STARTUP_MAX_MS) .. app.started, and app.shutdown .. + SHUTDOWN_MS.
+   */
+  private async lifecycle(c: Common): Promise<{ startup: LifeWindow[]; shutdown: LifeWindow[] }> {
+    const w = scopeOnly(c).add(`timestamp >= ${msParam('lcFrom')} AND timestamp <= ${msParam('lcTo')}`, {
+      lcFrom: c.fromMs - SHUTDOWN_MS,
+      lcTo: c.toMs + STARTUP_MAX_MS,
+    })
+    const rows = await this.reader.rows<{ service: string; role: string; host: string; event_code: string; ms: number; d: number }>(
+      'logs.lifecycle',
+      `SELECT service, role, host, event_code, toUnixTimestamp64Milli(timestamp) AS ms, ifNull(duration_ms, 0) AS d
+       FROM skilllane_monitoring.logs
+       WHERE ${w.sql} AND event_code IN ('app.started', 'app.shutdown')
+       ORDER BY timestamp LIMIT 2000`,
+      w.params,
+    )
+    const win = (r: (typeof rows)[number], from: number, to: number): LifeWindow => ({ service: r.service, role: r.role, host: r.host, from, to })
+    return {
+      startup: rows.filter((r) => r.event_code === 'app.started').map((r) => win(r, num(r.ms) - Math.min(num(r.d), STARTUP_MAX_MS), num(r.ms))),
+      shutdown: rows.filter((r) => r.event_code === 'app.shutdown').map((r) => win(r, num(r.ms), num(r.ms) + SHUTDOWN_MS)),
     }
   }
 

@@ -8,7 +8,7 @@
  */
 import { shownGroups } from '@/lib/noise'
 
-export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron'] as const
+export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron', 'startup'] as const
 export type NoiseGroup = (typeof NOISE_GROUPS)[number]
 
 export const NOISE_LABEL: Record<NoiseGroup, { label: string; hint: string }> = {
@@ -17,6 +17,7 @@ export const NOISE_LABEL: Record<NoiseGroup, { label: string; hint: string }> = 
   middleware: { label: 'Middleware', hint: 'log ทั่วไปที่ข้อความมีคำว่า middleware' },
   cache: { label: 'Cache hit / set', hint: 'logger ที่ชื่อมี cache หรือข้อความ Cache hit / miss / set …' },
   cron: { label: 'Cron ที่รันถี่และทำงานปกติ', hint: 'cron ที่รันทุก 15 นาทีหรือถี่กว่า · cron รายวันและรอบที่ล้มยังแสดง' },
+  startup: { label: 'Log ตอน start แอป', hint: 'INF ระหว่าง start จนถึง app.started เช่น Mapped route · app.started และ WRN / ERR ยังแสดง' },
 }
 
 export const shownNoise = (show: string | undefined, narrowed: boolean): NoiseGroup[] => shownGroups(NOISE_GROUPS, show, narrowed)

@@ -107,6 +107,12 @@ export interface LogRow {
    * service + role (/api/logs only); null on the http.request line itself and outside a request.
    */
   requestRoute: string | null
+  /**
+   * Where the line came from: a request, a job, a call to a dependency (dependency.type), the app starting
+   * (up to app.started) or shutting down, else background work of the app. /api/logs places request (a line
+   * in a request trace), startup and shutdown; elsewhere only what the line itself says.
+   */
+  origin: LogOrigin
   error: {
     type: string
     code: string
@@ -142,6 +148,8 @@ export interface LogRow {
   /** On the line that stands for a collapsed repeat (/api/logs collapse=1 only). */
   repeat?: LogRepeat
 }
+
+export type LogOrigin = 'request' | 'job' | 'dependency' | 'startup' | 'shutdown' | 'background'
 
 /**
  * A collapsed repeat: `steady` = over the whole range, `burst` = one run of lines each within 1 s of the one before;
@@ -186,6 +194,13 @@ export function toLogRow(r: LogDb): LogRow {
     httpStatus: isRequest && r.http_status ? r.http_status : null,
     requestDurationMs: isRequest ? durationMs : null,
     requestRoute: null,
+    origin:
+      (isRequest || (hasHttp && !r.url_domain && (r.http_route || r.url_path))) ? 'request'
+      : r.job_queue || r.job_type ? 'job'
+      : r.dependency_type ? 'dependency'
+      : r.event_code === 'app.started' ? 'startup'
+      : r.event_code === 'app.shutdown' ? 'shutdown'
+      : 'background',
     error: hasError
       ? {
           type: r.error_type,

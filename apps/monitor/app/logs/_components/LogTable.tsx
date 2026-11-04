@@ -12,7 +12,7 @@ import { LiveTbody } from '@/components/Motion'
 import { fmtCount, fmtDateTime, fmtDuration, fmtTime, fmtTimeMs, fmtTimeSec } from '@/lib/format'
 import { buildHref, depAnchor, type Keep } from '@/lib/params'
 import { LEVEL_SHORT, logTitle, logWhatFix } from '@/lib/readable'
-import type { LogRepeat, LogRow } from '@/lib/types'
+import type { LogOrigin, LogRepeat, LogRow } from '@/lib/types'
 import { actualText, durationText, hasErrorDetail, isHintLine, jobContext, moduleLabel, type Outage, outageOf, prettyText, routeText, rowKvs } from '../_lib/lines'
 import { LogLine } from './LogLine'
 
@@ -27,6 +27,44 @@ function outageText(row: LogRow, outages: readonly Outage[]): string {
   const where = row.traceId ? '' : 'เกิดนอก request: ไม่มี trace'
   const down = o ? (o.to === null ? `down ตั้งแต่ ${fmtTimeSec(o.from)} ยังไม่กลับมา` : `down ${fmtDuration(o.to - o.from)} ถึง ${fmtTimeSec(o.to)}`) : ''
   return [where, down].filter(Boolean).join(' · ')
+}
+
+const ORIGIN_LABEL: Record<LogOrigin, { text: string; title: string }> = {
+  request: { text: '–', title: 'ใน request ที่ไม่รู้ route' },
+  job: { text: '–', title: 'ใน job ที่ไม่รู้ชื่อ' },
+  dependency: { text: '–', title: 'ติดต่อ dependency' },
+  startup: { text: '▶ start แอป', title: 'เกิดระหว่างแอป start (ก่อน app.started ของ process นี้)' },
+  shutdown: { text: '■ ปิดแอป', title: 'เกิดตอนแอปกำลังปิด (หลัง app.shutdown ของ process นี้)' },
+  background: { text: '◌ เบื้องหลัง', title: 'งานเบื้องหลังของแอป ไม่อยู่ใน request หรือ job ใด' },
+}
+
+/**
+ * The Route / ที่มา cell: the request or job (routeText), else a call to a dependency (`⚡ kafka`, opening its
+ * status on /jobs), else where in the app's life the line was written (start แอป, ปิดแอป, เบื้องหลัง).
+ */
+function RouteCell({ row, route, keep }: { row: LogRow; route: string; keep: Keep }) {
+  if (route) {
+    return (
+      <span className="mono" title={route}>
+        {route}
+      </span>
+    )
+  }
+  const dep = row.dependency
+  if (row.origin === 'dependency' && dep && (dep.type || dep.name)) {
+    const target = dep.host ? ` ${dep.host}${dep.port ? `:${dep.port}` : ''}` : ''
+    return (
+      <Link className="lg-origin lg-origin--dep mono" href={`${buildHref('/jobs', keep)}#${depAnchor(dep.name || dep.type)}`} title={`ติดต่อ ${dep.type || dep.name}${target} · ดูสถานะ dependency`}>
+        ⚡ {dep.type || dep.name}
+      </Link>
+    )
+  }
+  const o = ORIGIN_LABEL[row.origin] ?? ORIGIN_LABEL.background
+  return (
+    <span className="lg-origin" title={o.title}>
+      {o.text}
+    </span>
+  )
 }
 
 /**
@@ -165,7 +203,7 @@ export function LogTable({
               Level
             </th>
             <th scope="col" className="col-tight">
-              Route <span className="t-muted lg-th-sub">· จุดสี = service</span>
+              Route / ที่มา <span className="t-muted lg-th-sub">· จุดสี = service</span>
             </th>
             <th scope="col">
               ข้อความ <span className="t-muted lg-th-sub">· หัวข้อ แล้ว key=value</span>
@@ -205,13 +243,7 @@ export function LogTable({
                     </td>
                     <td className="lg-route">
                       <ServiceDot service={row.service} role={row.role} order={order} />
-                      {route ? (
-                        <span className="mono" title={route}>
-                          {route}
-                        </span>
-                      ) : (
-                        <span className="t-muted">–</span>
-                      )}
+                      <RouteCell row={row} route={route} keep={keep} />
                     </td>
                     <td className="lg-msgcell">
                       <div className="lg-msg">

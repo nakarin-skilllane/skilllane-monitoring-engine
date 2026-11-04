@@ -10,7 +10,7 @@
 import { PROBE_SEGMENTS } from '../probes'
 import { bad, optList, optString, type QueryString } from './params'
 
-export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron'] as const
+export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron', 'startup'] as const
 export type NoiseGroup = (typeof NOISE_GROUPS)[number]
 
 const QUIET = "level IN ('debug', 'info')"
@@ -29,7 +29,45 @@ export const NOISE_SQL: Record<NoiseGroup, string> = {
   // a run that went fine of a frequent cron (`frequentCron`: CRON); a daily job, job.failed / job.retry and BullMQ,
   // Kafka, RabbitMQ jobs (one per user action) stay
   cron: `${QUIET} AND event_module = 'cron' AND event_code IN ('job.started', 'job.finished') AND concat(job_queue, ' ', job_type) IN {frequentCron:Array(String)}`,
+  // what an app writes while it starts (route mapping, module loading), up to its app.started (STARTUP windows)
+  startup: `${QUIET} AND ${FREE_TEXT} AND trace_id = '' AND ${IN_WINDOW('su')}`,
 }
+
+/**
+ * A line of a process inside one of the windows passed as parallel arrays `<p>S` (service), `<p>R` (role),
+ * `<p>H` (host), `<p>F` / `<p>T` (from / to, epoch ms).
+ */
+function IN_WINDOW(p: string): string {
+  return `arrayExists((s, r, h, f, t) -> s = service AND r = role AND h = host AND toUnixTimestamp64Milli(timestamp) BETWEEN f AND t, {${p}S:Array(String)}, {${p}R:Array(String)}, {${p}H:Array(String)}, {${p}F:Array(Int64)}, {${p}T:Array(Int64)})`
+}
+
+/** A process window (start-up: app.started − its duration .. app.started; shutdown: app.shutdown .. + SHUTDOWN_MS). */
+export interface LifeWindow {
+  service: string
+  role: string
+  host: string
+  from: number
+  to: number
+}
+
+/** A start-up longer than this is cut to it; lines after an app.shutdown within this are its shutdown. */
+export const STARTUP_MAX_MS = 10 * 60_000
+export const SHUTDOWN_MS = 30_000
+
+/** The `<p>S/R/H/F/T` params of IN_WINDOW. */
+export function windowParams(p: string, ws: LifeWindow[]): Record<string, unknown> {
+  return {
+    [`${p}S`]: ws.map((w) => w.service),
+    [`${p}R`]: ws.map((w) => w.role),
+    [`${p}H`]: ws.map((w) => w.host),
+    [`${p}F`]: ws.map((w) => w.from),
+    [`${p}T`]: ws.map((w) => w.to),
+  }
+}
+
+/** The window of `ms` among `ws` for this process, if any. */
+export const inWindow = (ws: LifeWindow[], service: string, role: string, host: string, ms: number): boolean =>
+  ws.some((w) => w.service === service && w.role === role && w.host === host && ms >= w.from && ms <= w.to)
 
 /**
  * A cron (queue + type) is frequent with at least `minRuns` runs in the range, `maxGapS` apart on average (every
