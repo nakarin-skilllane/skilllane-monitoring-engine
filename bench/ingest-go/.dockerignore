@@ -1,0 +1,7 @@
+.git
+.gitignore
+*.md
+scripts/
+.dockerignore
+bench-ingest-go
+ingest

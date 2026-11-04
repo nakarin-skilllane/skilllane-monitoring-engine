@@ -1,0 +1,146 @@
+# The benchmark stack: its own ClickHouse and Kafka, and the four ingest targets behind profiles so one runs at a
+# time (bench/run.sh). Every target gets the same CPU / memory budget. Nothing here touches the dev or deploy stacks.
+#
+#   docker compose -f bench/docker-compose.yml up -d --wait clickhouse kafka
+#   docker compose -f bench/docker-compose.yml --profile go up -d --wait ingest-go
+name: ingest-bench
+
+x-target: &target
+  restart: "no"
+  cpus: ${BENCH_CPUS:-4}
+  mem_limit: ${BENCH_MEM:-2g}
+  environment: &target-env
+    PORT: "5100"
+    ENGINE_PORT: "5100"
+    CLICKHOUSE_URL: http://clickhouse:8123
+    CLICKHOUSE_USER: skilllane_monitoring
+    CLICKHOUSE_PASSWORD: skilllane_monitoring
+    CLICKHOUSE_DATABASE: skilllane_monitoring
+    LOG_KAFKA_BROKERS: ${BENCH_KAFKA:-kafka:9092}
+    LOG_EXPORT: kafka
+    ENGINE_FLUSH_MS: "1000"
+    ENGINE_FLUSH_ROWS: "5000"
+    ENGINE_INGEST_MAX_INFLIGHT: "64"
+    ENGINE_INGEST_HTTP: "true"
+    ENGINE_ROLE: ingest
+    ENGINE_APPLY_SCHEMA: "false"
+    BENCH_CONSUMER_GROUP: ${BENCH_CONSUMER_GROUP:-}
+  ports:
+    - "15100:5100"
+  depends_on:
+    clickhouse:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    cpus: ${BENCH_CH_CPUS:-8}
+    mem_limit: ${BENCH_CH_MEM:-8g}
+    environment:
+      CLICKHOUSE_DB: skilllane_monitoring
+      CLICKHOUSE_USER: skilllane_monitoring
+      CLICKHOUSE_PASSWORD: skilllane_monitoring
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - bench-ch:/var/lib/clickhouse
+    ports:
+      - "18123:8123"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  kafka:
+    image: apache/kafka:4.3.1
+    hostname: kafka
+    cpus: 4
+    mem_limit: 2g
+    environment:
+      CLUSTER_ID: benchbenchbenchbenchbQ
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:19092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 2
+      KAFKA_MESSAGE_MAX_BYTES: 4194304
+      KAFKA_HEAP_OPTS: -Xmx1g -Xms1g
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - bench-kafka:/var/lib/kafka/data
+    ports:
+      - "19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "KAFKA_HEAP_OPTS='-Xms32m -Xmx128m' timeout 10 /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 15s
+      retries: 20
+      start_period: 20s
+
+  # the current engine, ingest role only (built from the repo root)
+  ingest-node:
+    <<: *target
+    profiles: [node]
+    image: bench-ingest-node
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.engine
+    environment:
+      <<: *target-env
+      ENGINE_CONSUMER_GROUP: ${ENGINE_CONSUMER_GROUP:-bench-node}
+
+  ingest-go:
+    <<: *target
+    profiles: [go]
+    image: bench-ingest-go
+    build: { context: ./ingest-go }
+
+  ingest-rust:
+    <<: *target
+    profiles: [rust]
+    image: bench-ingest-rust
+    build: { context: ./ingest-rust }
+
+  ingest-dotnet:
+    <<: *target
+    profiles: [dotnet]
+    image: bench-ingest-dotnet
+    build: { context: ./ingest-dotnet }
+
+  # the verifier / load generator (bench/load), on the stack's network: run.sh uses `compose run --rm loadgen …`
+  loadgen:
+    profiles: [load]
+    image: bench-loadgen
+    build: { context: ., dockerfile: load/Dockerfile }
+    environment:
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: skilllane_monitoring
+      CLICKHOUSE_PASSWORD: skilllane_monitoring
+      CLICKHOUSE_DATABASE: skilllane_monitoring
+      LOG_KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ./results:/app/results
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+volumes:
+  bench-ch:
+  bench-kafka:
