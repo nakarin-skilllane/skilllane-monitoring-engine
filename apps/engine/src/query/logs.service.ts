@@ -32,7 +32,7 @@ import {
   parseHide,
   parsePattern,
 } from './noise'
-import { type LogDb, type LogRow, LOG_SELECT, toLogRow } from './rows'
+import { isCatchAllRoute, type LogDb, type LogRow, LOG_SELECT, toLogRow } from './rows'
 import { type Params, Reader, Where, bucketExpr, fillSeries, iso, msParam, num, scoped, scopeOnly, seriesParams } from './sql'
 
 export interface LogsResponse {
@@ -159,8 +159,11 @@ export async function withRequests(reader: Reader, rows: LogRow[]): Promise<LogR
   for (const r of targets) {
     const req = byKey.get(`${r.traceId}\u0000${r.service}\u0000${r.role}`)
     if (!req) continue
-    const route = req.req_route || req.path
+    // a catch-all route says nothing about the request: its real path instead
+    const catchAll = isCatchAllRoute(req.req_route)
+    const route = catchAll ? req.path || req.req_route : req.req_route || req.path
     r.requestRoute = route ? `${req.method} ${route}`.trim() : null
+    if (catchAll && req.path) r.requestCatchAll = true
     if (!r.fingerprint) continue
     const reqMs = req.req_ms === null || req.req_ms === undefined ? null : num(req.req_ms)
     r.httpStatus = req.status || null

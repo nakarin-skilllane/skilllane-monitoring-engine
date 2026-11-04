@@ -13,7 +13,7 @@ import { fmtCount, fmtDateTime, fmtDuration, fmtTime, fmtTimeMs, fmtTimeSec } fr
 import { buildHref, depAnchor, type Keep } from '@/lib/params'
 import { LEVEL_SHORT, logTitle, logWhatFix } from '@/lib/readable'
 import type { LogOrigin, LogRepeat, LogRow } from '@/lib/types'
-import { actualText, durationText, hasErrorDetail, isHintLine, jobContext, moduleLabel, type Outage, outageOf, prettyText, routeText, rowKvs } from '../_lib/lines'
+import { actualText, durationText, hasErrorDetail, isHintLine, jobContext, moduleLabel, type Outage, outageOf, prettyText, routeText, rowKvs, unrouted } from '../_lib/lines'
 import { LogLine } from './LogLine'
 
 export interface Line {
@@ -49,9 +49,16 @@ const secText = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed
 function RouteCell({ row, route, keep }: { row: LogRow; route: string; keep: Keep }) {
   if (route) {
     return (
-      <span className="mono" title={route}>
-        {route}
-      </span>
+      <>
+        <span className="mono" title={route}>
+          {route}
+        </span>
+        {unrouted(row) ? (
+          <span className="lg-unrouted" title="request จบใน middleware (เช่น auth ตอบ 401) ก่อนถึง controller จึงไม่รู้ route template · แสดง path จริงแทน">
+            ไม่ถึง route
+          </span>
+        ) : null}
+      </>
     )
   }
   const dep = row.dependency

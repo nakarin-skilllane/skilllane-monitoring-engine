@@ -69,6 +69,7 @@
 /* Route column (the request or job a line was written in): one line, cut with … (the full text in its title) */
 .lg-table td.lg-route .svc-dots { margin-right: var(--sp-1h); vertical-align: 0; }
 .lg-origin { color: var(--muted); }
+.lg-unrouted { margin-left: var(--sp-1h); font-size: var(--fs-11); color: var(--muted); border-bottom: 1px dotted var(--line-strong, var(--muted)); cursor: help; }
 .lg-origin--dep, .lg-origin--link { color: var(--ink-2); text-decoration: none; }
 .lg-origin--dep:hover, .lg-origin--link:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .lg-table td.lg-route { max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-12); color: var(--ink-2); line-height: 22px; }

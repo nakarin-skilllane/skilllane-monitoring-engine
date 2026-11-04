@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { AutoRefresh } from '@/components/AutoRefresh'
 import { ServiceChip, Tag, Ts } from '@/components/badges'
 import type { TimeEvent } from '@/components/charts/TimeCharts'
 import { CopyLinkButton } from '@/components/CopyButton'
@@ -10,7 +9,7 @@ import { EmptyState, EngineErrorState, ParamProblems } from '@/components/states
 import { engine, getMeta } from '@/lib/engine'
 import { fmtDuration, fmtPct, fmtRangeShort, fmtRate } from '@/lib/format'
 import { latestByEnv } from '@/lib/freshness'
-import { buildHref, depAnchor, isPastWindow, type Keep, type ParamProblem, parseScope, type RawSearchParams, withParams } from '@/lib/params'
+import { buildHref, depAnchor, type Keep, type ParamProblem, parseScope, type RawSearchParams, withParams } from '@/lib/params'
 import { systemLabel } from '@/lib/readable'
 import { serviceOrder, serviceSlot } from '@/lib/services'
 import type { SystemMapNode } from '@/lib/3d/system-map'
@@ -102,7 +101,6 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             เปิด Log ช่วงนี้
           </Link>
           {/* a fixed past window does not change: no auto refresh */}
-          {isPastWindow(scope) ? null : <AutoRefresh />}
         </>
       }
     />

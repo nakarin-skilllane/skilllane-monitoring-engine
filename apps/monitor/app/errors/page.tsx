@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { AutoRefresh } from '@/components/AutoRefresh'
 import { CategoryChip, EnvTag, HttpStatus, LevelBadge, Method, NewBadge, ServiceChip, Tag, Ts } from '@/components/badges'
 import { CopyButton } from '@/components/CopyButton'
 import { Icon, type IconName } from '@/components/icons'
@@ -127,7 +126,6 @@ export default async function ErrorsPage({ searchParams }: { searchParams: Promi
       actions={
         <>
           {/* a fixed past window does not change: no auto refresh */}
-          {isPastWindow(scope) ? null : <AutoRefresh />}
           <Link className="btn" href={logsHref}>
             เปิดใน Log
           </Link>

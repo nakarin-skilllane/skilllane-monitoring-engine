@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
-import { AutoRefresh } from '@/components/AutoRefresh'
 import { Icon } from '@/components/icons'
 import { PageHead } from '@/components/PageHead'
 import { Section } from '@/components/Panel'
@@ -9,7 +8,7 @@ import { ParamSegmented } from '@/components/ParamControls'
 import { EmptyState, EngineErrorState, ParamProblems } from '@/components/states'
 import { engine, getMeta } from '@/lib/engine'
 import { fmtCount } from '@/lib/format'
-import { buildHref, inRange, isPastWindow, Params, parseScope, type RawSearchParams, scopeQuery } from '@/lib/params'
+import { buildHref, inRange, Params, parseScope, type RawSearchParams, scopeQuery } from '@/lib/params'
 import { serviceOrder } from '@/lib/services'
 import type { JobStat, LogRow } from '@/lib/types'
 import { Dependencies } from './_components/Dependencies'
@@ -105,7 +104,6 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         question="Queue, cron และ consumer ทำงานครบไหม อะไรล้มเหลวจริง อะไรแค่ retry และระบบที่เรียกใช้ล่มช่วงไหน"
         actions={
           <>
-            {isPastWindow(scope) ? null : <AutoRefresh />}
             <Link className="btn" href={logsHref({ event: 'job.failed' })}>
               เปิด Log ของ job ที่ล้มเหลว
               <Icon name="arrow" />

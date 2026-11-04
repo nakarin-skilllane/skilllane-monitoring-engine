@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import Form from 'next/form'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { AutoRefresh } from '@/components/AutoRefresh'
 import { Live, ServiceChip } from '@/components/badges'
 import { Icon } from '@/components/icons'
 import { ChangedValue } from '@/components/Motion'
@@ -257,8 +256,6 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
         question="ทุกบรรทัด log ตามเวลา: ค้น กรอง แล้วเปิดดูว่าพังที่ไหนและต้องแก้อะไร"
         actions={
           <>
-            {/* a fixed past window does not change: no auto refresh */}
-            {scope.to ? null : <AutoRefresh />}
             <Link className="btn" href={errorsHref}>
               ดู error group
             </Link>

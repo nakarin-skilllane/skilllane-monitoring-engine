@@ -2,7 +2,7 @@
 
 /**
  * Top bar (markup and Thai copy of _shell.html): env control, time range (+ custom
- * from/to in ICT), `.range-abs`, jump search ("/" focuses it), theme toggle, and the
+ * from/to in ICT), `.range-abs`, refresh (RefreshControl), jump search ("/" focuses it), theme toggle, and the
  * menu button + brand shown below 900 px. Everything is URL state:
  * env / from / to are search params; changing them keeps the screen and its filters
  * (minus the paging cursor). `data-env` draws the prod line.
@@ -29,6 +29,7 @@ import {
   RANGE_BOUND_KEYS,
   RANGE_PRESETS,
   buildHref,
+  isPastWindow,
   jumpHref,
   keepOf,
   parseScope,
@@ -39,6 +40,7 @@ import {
 import { BrandMark, Icon } from '../icons'
 import { ThemeToggle } from '../ThemeToggle'
 import { NavToggle } from './AppFrame'
+import { RefreshControl } from './RefreshControl'
 import { PRODUCT_NAME } from './names'
 
 const DROP = Object.fromEntries(RANGE_BOUND_KEYS.map((k) => [k, null]))
@@ -98,6 +100,7 @@ export function Topbar({ envs, latest, limited, me }: TopbarProps) {
         <span className="range-abs" suppressHydrationWarning>
           {rangeAbs(scope)}
         </span>
+        <RefreshControl fixed={isPastWindow(scope)} />
       </div>
       <JumpSearch />
       <div className="topbar__end">

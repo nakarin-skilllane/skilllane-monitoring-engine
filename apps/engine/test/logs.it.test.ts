@@ -58,6 +58,11 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   log(start + 27 * MIN + 26, { logger: 'KafkaConsumerLagService', message: 'Consumer lag 0' })
   log(start + 29 * MIN + 27, { logger: 'process', event_code: 'app.shutdown', message: 'app shutting down' })
   log(start + 29 * MIN + 2000 + 28, { logger: 'App', message: 'Closing connections' })
+  // a request stopped by an auth middleware (401) before any controller: route /{*path}, real path /users/profile
+  const denied = 'cd'.repeat(16)
+  log(start + 13 * MIN + 29, { logger: 'OracleAuthProvider', message: 'Token rejected', trace_id: denied })
+  req(start + 13 * MIN + 30, 'GET', '/{*path}', 401)
+  Object.assign(out[out.length - 1], { url_path: '/users/profile', trace_id: denied })
   // a cron every 5 minutes: its started / finished lines are noise, its failure is not; BullMQ jobs above stay
   for (let i = 0; i < 6; i++) {
     const cron = { logger: 'Cron', event_module: 'cron', job_queue: 'cron', job_type: 'AnnouncementCronService.handleCron', job_id: `c${i}` }
@@ -82,7 +87,7 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   return out
 }
 
-const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1 + 2 + 2 + 50 + 6
+const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1 + 2 + 2 + 50 + 6 + 2
 const NOISE = 450 + 10 + 450 + 100 + 12 + 50
 
 describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_IT=1, docker compose up -d clickhouse)', () => {
@@ -177,6 +182,11 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       expect(r.rows[0].durationMs).toBeNull()
     })
 
+    it('a line of a request that ended before a controller gets its real path', async () => {
+      const r = await logs.search({ ...range, q: 'Token rejected', limit: '10' })
+      expect(r.rows.map((x) => [x.requestRoute, x.requestCatchAll])).toEqual([['GET /users/profile', true]])
+    })
+
     it('hidden counts follow the level filter', async () => {
       const r = await logs.search({ ...range, hide: ALL, level: 'error', limit: '1' })
       expect(r.hidden.total).toBe(0)
@@ -226,7 +236,7 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       const sessions = rows.filter((x) => x.logger === 'DatabaseModule')
       expect(sessions.map((x) => x.repeat?.count)).toEqual([7, 7])
       expect(sessions.every((x) => x.timestamp === x.repeat!.lastSeen)).toBe(true)
-      expect(rows.filter((x) => x.logger === 'OracleAuthProvider')).toHaveLength(3)
+      expect(rows.filter((x) => x.message.startsWith('Token is valid'))).toHaveLength(3)
       const handler = rows.filter((x) => x.logger === 'QueryBus')
       expect(handler).toHaveLength(1)
       expect(handler[0].repeat!.template).toBe('Query handler [*] is already registered. Overriding previously registered handler.')

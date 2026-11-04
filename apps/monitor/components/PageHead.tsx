@@ -4,7 +4,7 @@
  * right (copy-link first, then your buttons; one primary at most).
  *
  *   <PageHead scope={scope} title="Log" question="ทุกบรรทัด log ตามเวลา: …"
- *     actions={<><AutoRefresh /><Link className="btn" href=…>เปิด Trace</Link></>} />
+ *     actions={<Link className="btn" href=…>เปิด Trace</Link>} />
  *   Detail: crumbs={[{ label: 'Trace', href: buildHref('/traces', scope.keep) }, { label: shortId(id), mono: true, title: id }]}
  *           when={<><Ts value={start} format="date-ms" /> ICT</>}
  */

@@ -28,7 +28,7 @@
   .shell-range__sep { display: none; }
 }
 
-/* AutoRefresh: the icon turns while a refresh is in flight */
+/* AutoRefresh / RefreshControl: the icon turns while a refresh is in flight */
 .ui-refresh[aria-pressed="false"] { color: var(--muted); }
 .ui-refresh.is-pending .i { animation: ui-spin 0.9s linear infinite; }
 @keyframes ui-spin { to { transform: rotate(360deg); } }
@@ -228,3 +228,10 @@
 .folded { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); margin: 0; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); font-size: var(--fs-12); color: var(--ink-2); background: var(--surface-2); }
 .folded > .btn { margin-left: auto; }
 .folded--alone { margin-top: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-2); }
+
+/* Top bar refresh next to the time range: the button, then auto refresh (RefreshControl) */
+.topbar__refresh { display: flex; align-items: center; gap: var(--sp-1); }
+.topbar__auto .select__control { min-width: 0; }
+@media (max-width: 599px) {
+  .topbar__refresh-label, .topbar__auto { display: none; }
+}

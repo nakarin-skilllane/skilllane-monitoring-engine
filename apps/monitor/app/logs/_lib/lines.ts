@@ -55,13 +55,26 @@ export function lineKvs(row: LogRow): Kv[] {
 }
 
 /**
+ * A route that matches every path (Express 5 `/{*path}`, `*`, `(.*)`): the request ended in a middleware (auth
+ * answering 401) before a controller, so no template is known (engine rows.ts isCatchAllRoute).
+ */
+export const isCatchAll = (route: string): boolean => /\{\*|\(\.\*\)|(^|\/)\*$/.test(route)
+
+/** The line's request never reached a controller: routeText shows its real path. */
+export function unrouted(row: LogRow): boolean {
+  const h = row.http
+  if (h && !h.domain && (h.route || h.path)) return !!h.route && isCatchAll(h.route) && !!h.path
+  return !row.job && !!row.requestCatchAll
+}
+
+/**
  * Route column: `GET /classes/:id` of the request a line was written in (its own http, else the engine's
- * requestRoute), `type · queue` of a job line, else ''.
+ * requestRoute; the real path when the route is a catch-all), `type · queue` of a job line, else ''.
  */
 export function routeText(row: LogRow): string {
   const h = row.http
   // an outbound call (http.domain) is not the request the line was written in
-  if (h && !h.domain && (h.route || h.path)) return `${h.method} ${h.route || h.path}`.trim()
+  if (h && !h.domain && (h.route || h.path)) return `${h.method} ${h.route && !isCatchAll(h.route) ? h.route : h.path || h.route}`.trim()
   if (row.job) return row.job.type && row.job.queue ? `${row.job.type} · ${row.job.queue}` : row.job.type || row.job.queue
   return row.requestRoute ?? ''
 }

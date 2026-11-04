@@ -3,7 +3,8 @@
 /**
  * Re-renders the page's server components every `seconds` (router.refresh keeps the old
  * view until the new one is ready: no flash, no loading state). Pauses while the tab is
- * hidden; the button toggles it (aria-pressed = on). Put it in the page-head actions.
+ * hidden; the button toggles it (aria-pressed = on). Screens refresh from the top bar (RefreshControl); this is
+ * for a page that must poll faster on its own (a report whose AI notes are pending).
  */
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useTransition } from 'react'

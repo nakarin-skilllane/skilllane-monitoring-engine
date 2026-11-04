@@ -270,6 +270,8 @@ export interface LogRow {
   requestDurationMs: number | null
   /** `METHOD /route` of the request the line was written in (same trace + service + role); null outside one. */
   requestRoute: string | null
+  /** The request's route was a catch-all (`/{*path}`): requestRoute holds its real path. */
+  requestCatchAll?: true
   /** Where the line came from (startup / shutdown / request from a trace: /api/logs only). */
   origin: LogOrigin
   /** The start-up or shutdown window of a startup / shutdown line (its process: service, role, host). */

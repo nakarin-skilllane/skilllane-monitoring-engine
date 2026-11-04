@@ -107,6 +107,8 @@ export interface LogRow {
    * service + role (/api/logs only); null on the http.request line itself and outside a request.
    */
   requestRoute: string | null
+  /** The request's route was a catch-all (`/{*path}`): it ended in a middleware before a controller, requestRoute holds its real path. */
+  requestCatchAll?: true
   /**
    * Where the line came from: a request, a job, a call to a dependency (dependency.type), the app starting
    * (up to app.started) or shutting down, else background work of the app. /api/logs places request (a line
@@ -150,6 +152,12 @@ export interface LogRow {
   /** On the line that stands for a collapsed repeat (/api/logs collapse=1 only). */
   repeat?: LogRepeat
 }
+
+/**
+ * A route that matches every path (Express 5 `/{*path}`, `*`, `(.*)`): the request ended in a middleware (auth
+ * answering 401) before the router reached a controller, so no template is known.
+ */
+export const isCatchAllRoute = (route: string): boolean => /\{\*|\(\.\*\)|(^|\/)\*$/.test(route)
 
 export type LogOrigin = 'request' | 'job' | 'dependency' | 'startup' | 'shutdown' | 'background'
 
