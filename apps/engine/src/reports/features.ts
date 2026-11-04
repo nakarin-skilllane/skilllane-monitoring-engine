@@ -5,6 +5,7 @@
  * that day; membership is replayed over those days (enter: top 6 for 7 days running; leave:
  * outside the top 8 for 14 days running), so a rebuild of any date gives the same list.
  */
+import { PROBE_SEGMENTS } from '../probes'
 import { featureName } from './feature-names'
 import { addDays, round } from './rules'
 import type { ReportFeature, ReportRules } from './types'
@@ -20,7 +21,7 @@ const MAX_FEATURES = 8
 const MIN_REQUESTS = 50
 const MIN_USER_SHARE = 0.05
 /** Probes and plumbing, never a feature. */
-const NOT_FEATURES = new Set(['health', 'healthz', 'ready', 'readiness', 'live', 'liveness', 'metrics', 'version', 'env', 'ping', 'status', 'favicon.ico'])
+const NOT_FEATURES = new Set<string>([...PROBE_SEGMENTS, 'version', 'env', 'status', 'favicon.ico'])
 const WEIGHTS = { users: 0.3, orgs: 0.15, success: 0.25, days: 0.1, writes: 0.1, peak: 0.1 } as const
 
 /**
