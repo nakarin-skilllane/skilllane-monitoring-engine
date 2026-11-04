@@ -41,7 +41,7 @@ function IN_WINDOW(p: string): string {
   return `arrayExists((s, r, h, f, t) -> s = service AND r = role AND h = host AND toUnixTimestamp64Milli(timestamp) BETWEEN f AND t, {${p}S:Array(String)}, {${p}R:Array(String)}, {${p}H:Array(String)}, {${p}F:Array(Int64)}, {${p}T:Array(Int64)})`
 }
 
-/** A process window (start-up: app.started − its duration .. app.started; shutdown: app.shutdown .. + SHUTDOWN_MS). */
+/** A process window (start-up: app.started − its duration .. + STARTUP_TAIL_MS; shutdown: app.shutdown .. + SHUTDOWN_MS). */
 export interface LifeWindow {
   service: string
   role: string
@@ -52,6 +52,8 @@ export interface LifeWindow {
 
 /** A start-up longer than this is cut to it; lines after an app.shutdown within this are its shutdown. */
 export const STARTUP_MAX_MS = 10 * 60_000
+/** What a NestJS app still writes right after it listens (queue topology, first broker connects) is its start-up too. */
+export const STARTUP_TAIL_MS = 5_000
 export const SHUTDOWN_MS = 30_000
 
 /** The `<p>S/R/H/F/T` params of IN_WINDOW. */

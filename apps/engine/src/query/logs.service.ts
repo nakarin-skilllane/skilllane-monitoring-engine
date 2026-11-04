@@ -22,6 +22,7 @@ import {
   type LifeWindow,
   SHUTDOWN_MS,
   STARTUP_MAX_MS,
+  STARTUP_TAIL_MS,
   windowParams,
   NOISE_GROUPS,
   NOISE_SQL,
@@ -357,7 +358,7 @@ export class LogsService {
 
   /**
    * Start-up and shutdown windows of the processes in scope around the range: app.started − its duration (the
-   * SDK's start-up time, at most STARTUP_MAX_MS) .. app.started, and app.shutdown .. + SHUTDOWN_MS.
+   * SDK's start-up time, at most STARTUP_MAX_MS) .. app.started + STARTUP_TAIL_MS, and app.shutdown .. + SHUTDOWN_MS.
    */
   private async lifecycle(c: Common): Promise<{ startup: LifeWindow[]; shutdown: LifeWindow[] }> {
     const w = scopeOnly(c).add(`timestamp >= ${msParam('lcFrom')} AND timestamp <= ${msParam('lcTo')}`, {
@@ -374,7 +375,9 @@ export class LogsService {
     )
     const win = (r: (typeof rows)[number], from: number, to: number): LifeWindow => ({ service: r.service, role: r.role, host: r.host, from, to })
     return {
-      startup: rows.filter((r) => r.event_code === 'app.started').map((r) => win(r, num(r.ms) - Math.min(num(r.d), STARTUP_MAX_MS), num(r.ms))),
+      startup: rows
+        .filter((r) => r.event_code === 'app.started')
+        .map((r) => win(r, num(r.ms) - Math.min(num(r.d), STARTUP_MAX_MS), num(r.ms) + STARTUP_TAIL_MS)),
       shutdown: rows.filter((r) => r.event_code === 'app.shutdown').map((r) => win(r, num(r.ms), num(r.ms) + SHUTDOWN_MS)),
     }
   }
