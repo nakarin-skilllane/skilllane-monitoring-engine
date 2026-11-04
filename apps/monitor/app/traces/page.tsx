@@ -12,9 +12,12 @@ import { fmtCount, fmtDateTimeMs, fmtDuration, fmtMs, fmtRange, fmtTimeSec, same
 import { buildHref, Params, parseScope, rangeText, type RawSearchParams, type Scope, scopeQuery, withParams } from '@/lib/params'
 import { serviceOrder, svcColor } from '@/lib/services'
 import { type JobStat, type LogRow, SAMPLE_PARTS, type SamplePart, type TraceDetail, type TraceListRow } from '@/lib/types'
+import { Icon } from '@/components/icons'
+import { shownGroups } from '@/lib/noise'
 import { RowNav } from './_components/RowNav'
 import type { ErrorBlockContext } from './_components/TraceErrorBlock'
 import { TraceErrorRow } from './_components/TraceErrorRow'
+import { TraceNoise } from './_components/TraceNoise'
 import { type RouteGroup, TraceFilters } from './_components/TraceFilters'
 import { type ScatterBand, type ScatterPoint, scatterDesc, TraceScatter } from './_components/TraceScatter'
 import {
@@ -33,6 +36,7 @@ import {
   spanLabel,
   type Tone,
 } from './_lib/model'
+import { TRACE_NOISE_GROUPS } from './_lib/noise'
 import './screen.css'
 
 export const metadata: Metadata = { title: 'Trace' }
@@ -206,6 +210,10 @@ export default async function TracesPage({ searchParams }: { searchParams: Promi
   // Params.oneOf lower-cases the value, which cannot match `durationMs`
   const sort = p.oneOf('sort', ['timestamp', 'durationMs'] as const)
   const show = p.int('show', 1, 500)
+  // noise groups hidden by default; all shown while narrowed to one trace, route / job or kind
+  const narrowed = !!(traceId || route || kind)
+  const noiseShown = shownGroups(TRACE_NOISE_GROUPS, p.str('noise', 64), narrowed)
+  const hide = TRACE_NOISE_GROUPS.filter((g) => !noiseShown.includes(g))
   // sample=errors|slow|spread (comma list) as the engine takes it; "เวลาที่ใช้" sort without one = the slowest 100 of the range
   const sampleRaw = p.list('sample')
   const sampleBad = sampleRaw?.filter((s) => !(SAMPLE_PARTS as readonly string[]).includes(s.toLowerCase())) ?? []
@@ -214,7 +222,7 @@ export default async function TracesPage({ searchParams }: { searchParams: Promi
   const sample = sampleAsked ? sampleAsked.join(',') : sort === 'durationMs' ? undefined : 'spread'
   const common = scopeQuery(scope)
   const [res, ov, deps, errs] = await Promise.all([
-    engine.traces({ ...common, route, status, minMs, kind, traceId, sort, sample, limit: SAMPLE_LIMIT }),
+    engine.traces({ ...common, route, status, minMs, kind, traceId, sort, sample, hide: hide.length ? hide.join(',') : undefined, limit: SAMPLE_LIMIT }),
     engine.overview(common),
     engine.dependencies({ env: scope.env, from: scope.from, to: scope.to }),
     engine.errors({ ...common, limit: 500 }),
@@ -300,6 +308,16 @@ export default async function TracesPage({ searchParams }: { searchParams: Promi
       <ParamProblems problems={[...scope.problems, ...p.problems]} />
       <RowNav />
       <TraceFilters services={services.map((s) => s.service)} roles={roles} routeGroups={groups} keep={scope.keep} clearHref={clearHref} hasFilters={hasFilters} />
+      <TraceNoise shown={noiseShown} narrowed={narrowed} hidden={res.ok ? res.data.hidden : null} />
+      {res.ok && res.data.hidden.total > 0 ? (
+        <p className="folded folded--alone">
+          <Icon name="filter" size="sm" />
+          <span>ซ่อน noise {fmtCount(res.data.hidden.total)} trace (health check, preflight, cron ที่รันถี่, งานนอก request ที่ไม่ error) · ตัวเลขและกราฟด้านล่างไม่นับรวม</span>
+          <Link className="btn btn--sm btn--quiet" href={withParams('/traces', sp, { noise: 'all', show: null })}>
+            แสดงทั้งหมด
+          </Link>
+        </p>
+      ) : null}
 
       {!res.ok ? (
         <EngineErrorState error={res.error} />

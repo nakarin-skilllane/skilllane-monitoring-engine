@@ -7,10 +7,11 @@
  *
  *   <AdvancedSearch shown={[]} collapse exclude="" narrowed={false} hidden={res.data.hidden} />
  */
+import { NoiseChecks } from '@/components/NoiseChecks'
 import { useParamNav } from '@/components/ParamControls'
 import { fmtCount } from '@/lib/format'
 import type { LogsHidden } from '@/lib/types'
-import { NOISE_GROUPS, NOISE_LABEL, type NoiseGroup, repeatsParam, showParam } from '../_lib/noise'
+import { NOISE_GROUPS, NOISE_LABEL, type NoiseGroup, repeatsParam } from '../_lib/noise'
 
 export function AdvancedSearch({
   shown,
@@ -31,27 +32,19 @@ export function AdvancedSearch({
   const { go } = useParamNav({ drawer: null })
   const hiddenGroups = NOISE_GROUPS.length - shown.length
   const badge = [hiddenGroups ? `ซ่อน ${hiddenGroups}` : '', exclude ? 'ซ่อนคำ' : '', collapse ? 'ยุบ log ซ้ำ' : ''].filter(Boolean).join(' · ')
-  const toggle = (g: NoiseGroup, on: boolean) => go({ show: showParam(on ? [...shown, g] : shown.filter((x) => x !== g), narrowed) })
   return (
-    <details className="disclosure lg-adv">
+    <details className="disclosure adv">
       <summary>
         ค้นหาขั้นสูง
         {badge ? <span className="tag">{badge}</span> : null}
         <span className="disclosure__meta">log หลักแสดงเสมอ</span>
       </summary>
-      <div className="disclosure__body lg-adv__body">
-        <fieldset className="lg-adv__set">
+      <div className="disclosure__body adv__body">
+        <fieldset className="adv__set">
           <legend className="filter-label">Noise · ติ๊กเพื่อแสดงกลุ่มนั้นด้วย (เฉพาะ DBG / INF)</legend>
-          {NOISE_GROUPS.map((g) => (
-            <label key={g} className="lg-adv__check">
-              <input type="checkbox" checked={shown.includes(g)} onChange={(e) => toggle(g, e.target.checked)} />
-              <span className="lg-adv__label">{NOISE_LABEL[g].label}</span>
-              <span className="t-muted">{NOISE_LABEL[g].hint}</span>
-              {hidden ? <span className="num lg-adv__n">{fmtCount(hidden[g])} แถว</span> : null}
-            </label>
-          ))}
+          <NoiseChecks param="show" groups={NOISE_GROUPS} labels={NOISE_LABEL} counts={hidden} unit="แถว" shown={shown} narrowed={narrowed} reset={{ drawer: null }} />
           <form
-            className="search search--sm lg-adv__exclude"
+            className="search search--sm adv__exclude"
             onSubmit={(e) => {
               e.preventDefault()
               const v = String(new FormData(e.currentTarget).get('exclude') ?? '').trim()
@@ -75,11 +68,11 @@ export function AdvancedSearch({
           </form>
           {exclude && hidden ? <span className="hint">ซ่อนไป {fmtCount(hidden.exclude)} แถว</span> : null}
         </fieldset>
-        <fieldset className="lg-adv__set">
+        <fieldset className="adv__set">
           <legend className="filter-label">Log ซ้ำ</legend>
-          <label className="lg-adv__check">
+          <label className="adv__check">
             <input type="checkbox" checked={collapse} onChange={(e) => go({ repeats: repeatsParam(e.target.checked, narrowed) })} />
-            <span className="lg-adv__label">ยุบ log ซ้ำเหลือบรรทัดล่าสุด</span>
+            <span className="adv__label">ยุบ log ซ้ำเหลือบรรทัดล่าสุด</span>
             <span className="t-muted">
               แพทเทิร์นเดียวกันเฉลี่ยตั้งแต่ 10 ครั้ง/นาที หรือ 60 ครั้งในนาทีเดียว และที่ซ้ำติดกันเกิน 3 บรรทัด (ห่างกันไม่เกิน 1 วิ) · ไม่ยุบ http.request และ job.*
             </span>

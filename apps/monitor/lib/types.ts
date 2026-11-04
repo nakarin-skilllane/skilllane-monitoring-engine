@@ -514,6 +514,8 @@ export interface TracesQuery extends CommonQuery {
   entries?: 'top' | 'all'
   /** Threshold of `totalSlow` in ms (default 2000, the monitor's slow rule). */
   slowMs?: number
+  /** Comma list of noise groups to leave out (probe, preflight, cron, outside); a failed entry is never left out. */
+  hide?: string
   /** 1–500, default 200. */
   limit?: number
 }
@@ -579,6 +581,16 @@ export interface TracesResponse {
   slowMs: number
   /** The sample parts used (`spread` alone = all three); null without `sample`. */
   sample: SamplePart[] | null
+  /** Entry spans of each noise group (hidden or not); `total` = hidden by this request. Rows and totals leave them out. */
+  hidden: TracesHidden
+}
+
+export interface TracesHidden {
+  probe: number
+  preflight: number
+  cron: number
+  outside: number
+  total: number
 }
 
 export interface TraceDetail {

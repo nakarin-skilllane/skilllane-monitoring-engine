@@ -402,7 +402,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
               ) : null}
             </div>
             {(hidden && hidden.total > 0) || (collapsed && (collapsed.lines > 0 || collapsed.skipped)) ? (
-              <p className="lg-folded">
+              <p className="folded">
                 <Icon name="filter" size="sm" />
                 <span>
                   {[

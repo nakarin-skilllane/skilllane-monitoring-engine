@@ -6,6 +6,8 @@
  *
  * Narrowed = a trace, a job, an error group, a route or one repeat pattern: every line of it is wanted.
  */
+import { shownGroups } from '@/lib/noise'
+
 export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron'] as const
 export type NoiseGroup = (typeof NOISE_GROUPS)[number]
 
@@ -17,19 +19,7 @@ export const NOISE_LABEL: Record<NoiseGroup, { label: string; hint: string }> = 
   cron: { label: 'Cron ที่รันถี่และทำงานปกติ', hint: 'cron ที่รันทุก 15 นาทีหรือถี่กว่า · cron รายวันและรอบที่ล้มยังแสดง' },
 }
 
-export function shownNoise(show: string | undefined, narrowed: boolean): NoiseGroup[] {
-  if (show === undefined) return narrowed ? [...NOISE_GROUPS] : []
-  if (show === 'all') return [...NOISE_GROUPS]
-  const list = show.split(',').map((s) => s.trim())
-  return NOISE_GROUPS.filter((g) => list.includes(g))
-}
-
-/** `show` for these shown groups; null = the page's default. */
-export function showParam(groups: readonly NoiseGroup[], narrowed: boolean): string | null {
-  const all = groups.length === NOISE_GROUPS.length
-  if (narrowed ? all : !groups.length) return null
-  return all ? 'all' : groups.length ? NOISE_GROUPS.filter((g) => groups.includes(g)).join(',') : 'none'
-}
+export const shownNoise = (show: string | undefined, narrowed: boolean): NoiseGroup[] => shownGroups(NOISE_GROUPS, show, narrowed)
 
 export function collapsesRepeats(repeats: string | undefined, narrowed: boolean): boolean {
   return repeats === undefined ? !narrowed : repeats === 'collapse'

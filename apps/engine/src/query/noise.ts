@@ -19,8 +19,10 @@ const OK_REQUEST = "event_code = 'http.request' AND http_status < 400"
 const FREE_TEXT = "event_code IN ('', 'app.log')"
 const LAST_SEGMENT = "arrayElement(arrayFilter(s -> s != '', splitByChar('/', lower(http_route))), -1)"
 
+const IS_PROBE_ROUTE = `${LAST_SEGMENT} IN (${PROBE_SEGMENTS.map((s) => `'${s}'`).join(', ')})`
+
 export const NOISE_SQL: Record<NoiseGroup, string> = {
-  probe: `${QUIET} AND ${OK_REQUEST} AND ${LAST_SEGMENT} IN (${PROBE_SEGMENTS.map((s) => `'${s}'`).join(', ')})`,
+  probe: `${QUIET} AND ${OK_REQUEST} AND ${IS_PROBE_ROUTE}`,
   preflight: `${QUIET} AND ${OK_REQUEST} AND http_method = 'OPTIONS'`,
   middleware: `${QUIET} AND ${FREE_TEXT} AND positionCaseInsensitive(message, 'middleware') > 0`,
   cache: `${QUIET} AND ${FREE_TEXT} AND (positionCaseInsensitive(logger, 'cache') > 0 OR match(message, '(?i)^cache (hit|miss|set|get|del)'))`,
@@ -49,6 +51,28 @@ export const BURST = { gapMs: 1000, minCount: 4, maxBursts: 500 } as const
 
 export function parseHide(q: QueryString): NoiseGroup[] {
   return optList(q, 'hide', NOISE_GROUPS) ?? []
+}
+
+/**
+ * /api/traces noise: entry spans that did not fail (a failure is never hidden). `cron` = runs of a frequent cron
+ * (span name `cron <type>`, `frequentCron`), `outside` = a CLIENT span with no parent: a database or HTTP call made
+ * outside any request or job (start-up, a connection pool on its own).
+ */
+export const TRACE_NOISE_GROUPS = ['probe', 'preflight', 'cron', 'outside'] as const
+export type TraceNoiseGroup = (typeof TRACE_NOISE_GROUPS)[number]
+
+const SPAN_OK = "NOT (status_code = 'ERROR' OR http_status >= 500)"
+const OK_SERVER = `${SPAN_OK} AND kind = 'SERVER' AND http_status < 400`
+
+export const TRACE_NOISE_SQL: Record<TraceNoiseGroup, string> = {
+  probe: `${OK_SERVER} AND ${IS_PROBE_ROUTE}`,
+  preflight: `${OK_SERVER} AND http_method = 'OPTIONS'`,
+  cron: `${SPAN_OK} AND name IN {frequentCron:Array(String)}`,
+  outside: `${SPAN_OK} AND kind = 'CLIENT' AND parent_span_id = ''`,
+}
+
+export function parseTraceHide(q: QueryString): TraceNoiseGroup[] {
+  return optList(q, 'hide', TRACE_NOISE_GROUPS) ?? []
 }
 
 export function parseCollapse(q: QueryString): boolean {

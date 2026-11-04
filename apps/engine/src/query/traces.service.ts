@@ -14,6 +14,7 @@ import {
   parseTraceIdPrefix,
 } from './params'
 import { routeCondition } from './logs.service'
+import { frequentRuns, parseTraceHide, TRACE_NOISE_GROUPS, TRACE_NOISE_SQL } from './noise'
 import {
   type LogDb,
   type LogRow,
@@ -99,6 +100,11 @@ export interface TraceListResponse {
   slowMs: number
   /** The sample parts used (`spread` alone = all three); null without `sample`. */
   sample: SamplePart[] | null
+  /**
+   * Entry spans of each noise group in the range with every filter, hidden or not; `total` = the ones this
+   * request hid (`hide`). Rows and the totals above leave the hidden ones out.
+   */
+  hidden: { probe: number; preflight: number; cron: number; outside: number; total: number }
 }
 
 interface TraceIndex {
@@ -184,8 +190,20 @@ export class TracesService {
         ? [...SAMPLE_PARTS]
         : SAMPLE_PARTS.filter((p) => listed.includes(p))
       : null
-    const w = this.filters(q, c)
+    const base = this.filters(q, c)
+    const hide = parseTraceHide(q)
+    const hiddenSql = hide.length ? hide.map((g) => `(${TRACE_NOISE_SQL[g]})`).join(' OR ') : null
+    const frequentCron = await this.frequentCron(c)
+    const w = new Where().add(base.sql, { ...base.params, frequentCron })
+    if (hiddenSql) w.add(`NOT (${hiddenSql})`)
 
+    const hiddenQuery = this.reader.rows<Record<string, number>>(
+      'traces.hidden',
+      `SELECT ${TRACE_NOISE_GROUPS.map((g) => `countIf(${TRACE_NOISE_SQL[g]}) AS ${g}`).join(', ')},
+              countIf(${hiddenSql ?? '0'}) AS total
+       FROM skilllane_monitoring.spans WHERE ${base.sql}`,
+      { ...base.params, frequentCron },
+    )
     const totalQuery = this.reader.rows<{ total: number; errors: number; traces: number; error_traces: number; slow: number }>(
       'traces.total',
       `SELECT count() AS total, countIf(${IS_ERROR}) AS errors,
@@ -213,7 +231,7 @@ export class TracesService {
     }
 
     const entries = picked.map((p) => p.e)
-    const [[total], stats, jobs] = await Promise.all([totalQuery, this.traceStats(c, entries), this.jobLines(entries)])
+    const [[total], [hidden], stats, jobs] = await Promise.all([totalQuery, hiddenQuery, this.traceStats(c, entries), this.jobLines(entries)])
     const byId = new Map(stats.map((s) => [s.trace_id, s]))
     const jobBy = new Map(jobs.map((j) => [`${j.trace_id}\u0000${j.span_id}`, j]))
     return {
@@ -249,7 +267,26 @@ export class TracesService {
       totalSlow: total?.slow ?? 0,
       slowMs,
       sample: parts,
+      hidden: {
+        probe: num(hidden?.probe),
+        preflight: num(hidden?.preflight),
+        cron: num(hidden?.cron),
+        outside: num(hidden?.outside),
+        total: num(hidden?.total),
+      },
     }
+  }
+
+  /** Span names of the crons (`cron <type>`) that ran often enough in the range to be noise (noise.ts CRON). */
+  private async frequentCron(c: Common): Promise<string[]> {
+    const w = scoped(c).add('is_entry = 1')
+    const rows = await this.reader.rows<{ name: string }>(
+      'traces.cron',
+      `SELECT name FROM skilllane_monitoring.spans WHERE ${w.sql} AND startsWith(name, 'cron ')
+       GROUP BY name HAVING count() >= {cronRuns:UInt32}`,
+      { ...w.params, cronRuns: frequentRuns(c.toMs - c.fromMs) },
+    )
+    return rows.map((r) => r.name)
   }
 
   /** Every list filter: is_entry, entries, route, status, minMs, kind, traceId (exact or prefix). */

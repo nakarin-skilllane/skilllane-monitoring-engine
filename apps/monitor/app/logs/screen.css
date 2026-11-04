@@ -66,20 +66,6 @@
   .lg-table td, .lg-table td.lg-time .ts, .lg-table td .svc { line-height: 20px; }
 }
 
-/* ค้นหาขั้นสูง: noise groups, hidden text, repeats (AdvancedSearch) */
-.lg-adv { margin-top: var(--sp-2); }
-.lg-adv > summary .tag { font-family: var(--font-ui); }
-.lg-adv__body { display: grid; gap: var(--sp-3); }
-.lg-adv__set { display: grid; gap: var(--sp-1h); min-width: 0; margin: 0; padding: 0; border: 0; }
-.lg-adv__set > legend { padding: 0; margin-bottom: var(--sp-1); }
-.lg-adv__check { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-2); cursor: pointer; }
-.lg-adv__check input { align-self: center; }
-.lg-adv__label { color: var(--ink); }
-.lg-adv__n { margin-left: auto; color: var(--ink-2); }
-.lg-adv .search.lg-adv__exclude { width: 100%; max-width: 420px; }
-/* what this page hides and collapses, above the table */
-.lg-folded { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); margin: 0; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); font-size: var(--fs-12); color: var(--ink-2); background: var(--surface-2); }
-.lg-folded > .btn { margin-left: auto; }
 /* app: ⟲ ซ้ำ ×N on the latest line of a collapsed repeat (opens every line of it) */
 .lg-repeat { text-decoration: none; background: var(--warn-bg); color: var(--warn); }
 .lg-repeat:hover { text-decoration: underline; text-underline-offset: 2px; }

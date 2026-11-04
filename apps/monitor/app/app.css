@@ -213,3 +213,18 @@
 .user-menu__name { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-13); color: var(--ink-2); padding: 0 var(--sp-1); }
 .user-menu__name:hover { color: var(--ink); }
 @media (max-width: 599px) { .user-menu__name { display: none; } }
+
+/* ค้นหาขั้นสูง of /logs and /traces: noise groups shown or hidden (NoiseChecks), and what a page hid (.folded) */
+.adv { margin-top: var(--sp-2); }
+.adv > summary .tag { font-family: var(--font-ui); }
+.adv__body { display: grid; gap: var(--sp-3); }
+.adv__set { display: grid; gap: var(--sp-1h); min-width: 0; margin: 0; padding: 0; border: 0; }
+.adv__set > legend { padding: 0; margin-bottom: var(--sp-1); }
+.adv__check { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-2); cursor: pointer; }
+.adv__check input { align-self: center; }
+.adv__label { color: var(--ink); }
+.adv__n { margin-left: auto; color: var(--ink-2); }
+.adv .search.adv__exclude { width: 100%; max-width: 420px; }
+.folded { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); margin: 0; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); font-size: var(--fs-12); color: var(--ink-2); background: var(--surface-2); }
+.folded > .btn { margin-left: auto; }
+.folded--alone { margin-top: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-2); }
