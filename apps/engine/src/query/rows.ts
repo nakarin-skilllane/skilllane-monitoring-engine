@@ -134,6 +134,17 @@ export interface LogRow {
   reason: string
   labels: Record<string, string>
   fields: Record<string, string>
+  /** On the line that stands for a collapsed repeat (/api/logs collapse=1 only). */
+  repeat?: LogRepeat
+}
+
+/** A collapsed repeat over the range: `pattern` = id for the `pattern` filter, `template` = its message with `*`. */
+export interface LogRepeat {
+  pattern: string
+  count: number
+  firstSeen: string
+  lastSeen: string
+  template: string
 }
 
 export function toLogRow(r: LogDb): LogRow {

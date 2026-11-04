@@ -12,8 +12,19 @@ import {
   parseTraceId,
   bad,
 } from './params'
+import {
+  COLLAPSE,
+  COLLAPSIBLE_SQL,
+  NOISE_GROUPS,
+  NOISE_SQL,
+  PATTERN_SQL,
+  TEMPLATE_SQL,
+  parseCollapse,
+  parseHide,
+  parsePattern,
+} from './noise'
 import { type LogDb, type LogRow, LOG_SELECT, toLogRow } from './rows'
-import { Reader, Where, bucketExpr, fillSeries, msParam, num, scoped, seriesParams } from './sql'
+import { type Params, Reader, Where, bucketExpr, fillSeries, iso, msParam, num, scoped, seriesParams } from './sql'
 
 export interface LogsResponse {
   rows: LogRow[]
@@ -25,6 +36,42 @@ export interface LogsResponse {
   levelCounts: { debug: number; info: number; warn: number; error: number; fatal: number; requestError: number }
   /** Pass as `before` for the next (older) page; null when this page is the last. */
   nextBefore: string | null
+  /**
+   * Lines of each noise group and of the `exclude` text in the range with every filter (`level` too), hidden
+   * or not; `total` = the lines this request hid (a line in two groups counts once). Rows, histogram and
+   * levelCounts leave the hidden lines out.
+   */
+  hidden: { probe: number; preflight: number; middleware: number; cache: number; exclude: number; total: number }
+  /**
+   * `collapse=1`: fast repeats kept to their latest line (its `repeat`); `lines` = the lines they stood for
+   * minus those latest lines. The histogram and levelCounts still count every line. null without collapse.
+   */
+  collapse: { patterns: number; lines: number; skipped: 'range' | null } | null
+}
+
+/** One collapsed repeat (logs.repeats). */
+interface RepeatDb {
+  pattern: string
+  total: number
+  first_ts: string
+  last_ts: string
+  template: string
+}
+
+/** What a request hides: the `hide` groups OR the `exclude` text (SQL null = nothing). */
+interface Hiding {
+  sql: string | null
+  params: Params
+  exclude: boolean
+}
+
+const EXCLUDE_SQL = 'lower(message) LIKE {excludeLike:String}'
+
+function hidingOf(q: QueryString): Hiding {
+  const parts = parseHide(q).map((g) => `(${NOISE_SQL[g]})`)
+  const exclude = optString(q, 'exclude', 200)
+  if (exclude) parts.push(EXCLUDE_SQL)
+  return { sql: parts.length ? parts.join(' OR ') : null, params: exclude ? { excludeLike: likePattern(exclude) } : {}, exclude: !!exclude }
 }
 
 /** How far after an error line its request's `http.request` line may come (written when the response ends). */
@@ -136,17 +183,36 @@ export class LogsService {
     const limit = optInt(q, 'limit', 1, 500, 100)
     const beforeRaw = optString(q, 'before', 40)
     const before = beforeRaw === undefined ? undefined : parseTime('before', beforeRaw, Date.now())
-    const variants = this.variants(q, c)
+    const hiding = hidingOf(q)
+    const levels = parseLevels(q)
+    const variants = this.variants(q, c, true, hiding)
+    // levelCounts: every level, hidden lines counted apart (countIf)
     const allLevels = this.variants(q, c, false)
-    const params = Object.assign({ limit, ...seriesParams(c) }, ...variants.map((v) => v.params))
-    const countParams = Object.assign({}, ...allLevels.map((v) => v.params))
+    const params: Params = Object.assign({ limit, ...seriesParams(c) }, ...variants.map((v) => v.params))
+    const countParams = Object.assign({}, ...allLevels.map((v) => v.params), hiding.params, levels ? { levels } : {})
     if (before !== undefined) params.beforeMs = before
     const cursor = before !== undefined ? ` AND timestamp < ${msParam('beforeMs')}` : ''
 
-    // One branch per variant, so each LIKE can use its own ngram skip index.
-    const rowsSql = variants
-      .map((v) => `SELECT ${LOG_SELECT} FROM skilllane_monitoring.logs WHERE ${v.sql}${cursor} ORDER BY timestamp DESC LIMIT {limit:UInt32}`)
-      .join('\n UNION ALL \n')
+    const collapse = parseCollapse(q)
+    const tooLong = c.toMs - c.fromMs > COLLAPSE.maxRangeMs
+    const repeats = collapse && !tooLong ? await this.repeats(variants, c) : []
+    if (repeats.length) params.collapsed = repeats.map((r) => BigInt(r.pattern))
+
+    // One branch per variant, so each LIKE can use its own ngram skip index. A collapsed repeat leaves the
+    // normal branches and comes back once: its latest line in the range, on the page that line falls on.
+    const notCollapsed = repeats.length ? ` AND ${PATTERN_SQL} NOT IN {collapsed:Array(UInt64)}` : ''
+    const normal = variants.map(
+      (v) =>
+        `SELECT ${LOG_SELECT}, '' AS pattern FROM skilllane_monitoring.logs WHERE ${v.sql}${notCollapsed}${cursor} ORDER BY timestamp DESC LIMIT {limit:UInt32}`,
+    )
+    const latest = repeats.length
+      ? [
+          `SELECT * FROM (SELECT * FROM (${variants
+            .map((v) => `SELECT ${LOG_SELECT}, toString(${PATTERN_SQL}) AS pattern FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${PATTERN_SQL} IN {collapsed:Array(UInt64)}`)
+            .join('\n UNION ALL \n')}) ORDER BY timestamp DESC LIMIT 1 BY pattern)${before !== undefined ? ` WHERE timestamp < ${msParam('beforeMs')}` : ''}`,
+        ]
+      : []
+    const rowsSql = [...normal, ...latest].join('\n UNION ALL \n')
     const histogramSql = variants
       .map(
         (v) => `SELECT ${bucketExpr('timestamp')} AS t,
@@ -156,47 +222,98 @@ export class LogsService {
          FROM skilllane_monitoring.logs WHERE ${v.sql} GROUP BY t`,
       )
       .join('\n UNION ALL \n')
+    const shown = hiding.sql ? `NOT (${hiding.sql})` : '1'
+    const lv = levels ? 'level IN {levels:Array(String)}' : '1'
     const countsSql = allLevels
       .map(
-        (v) => `SELECT countIf(level = 'debug') AS debug, countIf(level = 'info') AS info,
-                countIf(level = 'warn') AS warn, countIf(level = 'error') AS error,
-                countIf(level = 'fatal') AS fatal,
-                countIf(level = 'error' AND event_code = 'http.request') AS request_error
+        (v) => `SELECT countIf(level = 'debug' AND ${shown}) AS debug, countIf(level = 'info' AND ${shown}) AS info,
+                countIf(level = 'warn' AND ${shown}) AS warn, countIf(level = 'error' AND ${shown}) AS error,
+                countIf(level = 'fatal' AND ${shown}) AS fatal,
+                countIf(level = 'error' AND event_code = 'http.request' AND ${shown}) AS request_error,
+                ${NOISE_GROUPS.map((g) => `countIf(${lv} AND ${NOISE_SQL[g]}) AS noise_${g}`).join(',\n                ')},
+                countIf(${lv} AND ${hiding.exclude ? EXCLUDE_SQL : '0'}) AS noise_exclude,
+                countIf(${lv} AND ${hiding.sql ? `(${hiding.sql})` : '0'}) AS hidden_total
          FROM skilllane_monitoring.logs WHERE ${v.sql}`,
       )
       .join('\n UNION ALL \n')
+    const COUNTS = ['debug', 'info', 'warn', 'error', 'fatal', 'request_error', ...NOISE_GROUPS.map((g) => `noise_${g}`), 'noise_exclude', 'hidden_total']
 
     const [rows, histogram, counts] = await Promise.all([
-      this.reader.rows<LogDb>('logs', `SELECT * FROM (${rowsSql}) ORDER BY timestamp DESC LIMIT {limit:UInt32}`, params),
+      this.reader.rows<LogDb & { pattern: string }>('logs', `SELECT * FROM (${rowsSql}) ORDER BY timestamp DESC LIMIT {limit:UInt32}`, params),
       this.reader.rows<{ t: number; debug: number; info: number; warn: number; error: number; fatal: number }>(
         'logs.histogram',
         `SELECT t, sum(debug) AS debug, sum(info) AS info, sum(warn) AS warn, sum(error) AS error, sum(fatal) AS fatal
          FROM (${histogramSql}) GROUP BY t ORDER BY t`,
         params,
       ),
-      this.reader.rows<{ debug: number; info: number; warn: number; error: number; fatal: number; request_error: number }>(
-        'logs.levels',
-        `SELECT sum(debug) AS debug, sum(info) AS info, sum(warn) AS warn, sum(error) AS error, sum(fatal) AS fatal,
-                sum(request_error) AS request_error
-         FROM (${countsSql})`,
-        countParams,
-      ),
+      this.reader.rows<Record<string, number>>('logs.levels', `SELECT ${COUNTS.map((k) => `sum(${k}) AS ${k}`).join(', ')} FROM (${countsSql})`, countParams),
     ])
-    const mapped = await withRequests(this.reader, rows.map(toLogRow))
-    const lc = counts[0]
+    const byPattern = new Map(repeats.map((r) => [r.pattern, r]))
+    const mapped = await withRequests(
+      this.reader,
+      rows.map((db) => {
+        const row = toLogRow(db)
+        const r = db.pattern ? byPattern.get(db.pattern) : undefined
+        if (r) row.repeat = { pattern: r.pattern, count: num(r.total), firstSeen: iso(r.first_ts) ?? '', lastSeen: iso(r.last_ts) ?? '', template: r.template }
+        return row
+      }),
+    )
+    const lc = counts[0] ?? {}
     return {
       rows: mapped,
       histogram: fillSeries(c, histogram, () => ({ debug: 0, info: 0, warn: 0, error: 0, fatal: 0 })),
       levelCounts: {
-        debug: num(lc?.debug),
-        info: num(lc?.info),
-        warn: num(lc?.warn),
-        error: num(lc?.error),
-        fatal: num(lc?.fatal),
-        requestError: num(lc?.request_error),
+        debug: num(lc.debug),
+        info: num(lc.info),
+        warn: num(lc.warn),
+        error: num(lc.error),
+        fatal: num(lc.fatal),
+        requestError: num(lc.request_error),
       },
       nextBefore: mapped.length === limit ? mapped[mapped.length - 1].timestamp : null,
+      hidden: {
+        probe: num(lc.noise_probe),
+        preflight: num(lc.noise_preflight),
+        middleware: num(lc.noise_middleware),
+        cache: num(lc.noise_cache),
+        exclude: num(lc.noise_exclude),
+        total: num(lc.hidden_total),
+      },
+      collapse: collapse
+        ? { patterns: repeats.length, lines: repeats.reduce((a, r) => a + num(r.total), 0) - repeats.length, skipped: tooLong ? 'range' : null }
+        : null,
     }
+  }
+
+  /**
+   * Fast repeats among the lines the variants match (hidden lines are already out), most lines first:
+   * `minCount` lines and `perMinute` on average over the range or `peakPerMinute` in one minute.
+   */
+  private repeats(variants: Where[], c: Common): Promise<RepeatDb[]> {
+    const minutes = (c.toMs - c.fromMs) / 60_000
+    const branches = variants
+      .map(
+        (v) => `SELECT timestamp, ${TEMPLATE_SQL} AS tpl, cityHash64(service, role, logger, level, event_code, tpl) AS pk
+         FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${COLLAPSIBLE_SQL}`,
+      )
+      .join('\n UNION ALL \n')
+    return this.reader.rows<RepeatDb>(
+      'logs.repeats',
+      `SELECT toString(pk) AS pattern, sum(n) AS total, min(f) AS first_ts, max(l) AS last_ts, any(t1) AS template
+       FROM (
+         SELECT pk, toStartOfMinute(timestamp) AS minute, count() AS n, min(timestamp) AS f, max(timestamp) AS l, any(tpl) AS t1
+         FROM (${branches}) GROUP BY pk, minute
+       )
+       GROUP BY pk
+       HAVING total >= {minCount:UInt32} AND (total >= {rateCount:UInt32} OR max(n) >= {peakCount:UInt32})
+       ORDER BY total DESC LIMIT {maxPatterns:UInt32}`,
+      Object.assign({}, ...variants.map((v) => v.params), {
+        minCount: COLLAPSE.minCount,
+        rateCount: Math.ceil(COLLAPSE.perMinute * minutes),
+        peakCount: COLLAPSE.peakPerMinute,
+        maxPatterns: COLLAPSE.maxPatterns,
+      }),
+    )
   }
 
   /**
@@ -206,9 +323,11 @@ export class LogsService {
    * across two skip indexes prunes nothing in ClickHouse 25.8, so the two indexed
    * columns get one branch each (one `lower(col) LIKE` the ngrambf_v1 index uses);
    * the unindexed columns share a third. The branches are disjoint, so no row comes twice.
+   * `hiding` leaves out the lines `hide` / `exclude` asked to hide.
    */
-  private variants(q: QueryString, c: Common, withLevel = true): Where[] {
+  private variants(q: QueryString, c: Common, withLevel = true, hiding?: Hiding): Where[] {
     const base = this.filters(q, c, withLevel)
+    if (hiding?.sql) base.add(`NOT (${hiding.sql})`, hiding.params)
     const text = optString(q, 'q', 200)
     if (!text) return [base]
     const qLike = likePattern(text)
@@ -261,6 +380,8 @@ export class LogsService {
     if (category) w.add('error_category = {category:String}', { category })
     const fingerprint = optString(q, 'fingerprint', 24)
     if (fingerprint) w.add('error_fingerprint = {fp:UInt64}', { fp: parseFingerprint(fingerprint) })
+    const pattern = parsePattern(q)
+    if (pattern !== undefined) w.add(`${PATTERN_SQL} = {pattern:UInt64}`, { pattern })
     return w
   }
 }
