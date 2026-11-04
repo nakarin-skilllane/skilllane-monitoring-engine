@@ -22,6 +22,7 @@ import { aiErrorMarkdown, aiFieldsOfLog, eventTitle, logTitle } from '@/lib/read
 import type { ErrorDetail, LogRow, TraceDetail } from '@/lib/types'
 import { buildWaterfall, ioSpanOf, stepOf } from '../../traces/_lib/model'
 import { actualText, affectsOf, causeText, moduleLabel, parseStack, rawRecord, statusFromRequest } from '../_lib/lines'
+import { RepeatMark } from './LogTable'
 
 /** The error line behind a failed http.request line (lines.ts requestCause), its line id and its error group. */
 export interface RequestCause {
@@ -251,6 +252,7 @@ export function LogDrawer({
           <EnvTag env={row.env} />
           {row.version ? <Tag>{row.version}</Tag> : null}
           {row.eventCode ? <span className="mono">{row.eventCode}</span> : null}
+          {row.repeat ? <RepeatMark repeat={row.repeat} keep={keep} withDate /> : null}
         </>
       }
       foot={

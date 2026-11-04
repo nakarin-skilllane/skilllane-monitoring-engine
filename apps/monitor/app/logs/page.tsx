@@ -12,14 +12,16 @@ import { EmptyState, EngineErrorState, ParamProblems } from '@/components/states
 import { engine, type EngineError, getMeta } from '@/lib/engine'
 import { fmtCount, fmtDateTimeMs, fmtRange, fmtRangeShort, fmtTimeMs, sameDay, shortId } from '@/lib/format'
 import { buildHref, isTraceId, Params, parseScope, rangeLabel, scopeQuery, toRecord, withParams, type RawSearchParams } from '@/lib/params'
-import { CATEGORY_LABEL, LEVEL_SHORT } from '@/lib/readable'
+import { CATEGORY_LABEL, LEVEL_SHORT, logTitle } from '@/lib/readable'
 import { serviceOrder } from '@/lib/services'
 import { type Level, LEVELS, type LogsHistogramBucket, type LogsQuery, type OverviewRoute } from '@/lib/types'
+import { AdvancedSearch } from './_components/AdvancedSearch'
 import { EventChips, ExpandAllButton, FilterSelect, LevelChips, UserIdSearch } from './_components/LogFilters'
 import { LogDrawer, LogDrawerNotFound, type RequestCause } from './_components/LogDrawer'
 import { LogHistogram, stepLabel } from './_components/LogHistogram'
 import { LogTable, type Line } from './_components/LogTable'
 import { hasErrorDetail, lineId, outagesOf, parseLineId, requestCause, withLineIds } from './_lib/lines'
+import { collapsesRepeats, NOISE_GROUPS, shownNoise } from './_lib/noise'
 import './screen.css'
 
 export const metadata: Metadata = { title: 'Log' }
@@ -104,13 +106,35 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const route = p.str('route')
   const category = p.name('category')
   const fingerprint = p.fingerprint()
+  const patternRaw = p.str('pattern', 24)
+  const pattern = patternRaw && /^\d{1,20}$/.test(patternRaw) ? patternRaw : undefined
+  const exclude = p.str('exclude')
+  // noise hidden and repeats collapsed by default; everything shown while narrowed to one trace, job, error group, route or repeat
+  const narrowed = !!(traceId || jobId || fingerprint || route || pattern)
+  const shownGroups = shownNoise(p.str('show', 64), narrowed)
+  const hide = NOISE_GROUPS.filter((g) => !shownGroups.includes(g))
+  const collapse = collapsesRepeats(p.str('repeats', 16), narrowed)
   const limit = p.int('limit', 1, MAX_LIMIT) ?? PAGE
   const before = p.time('before', scope.nowMs)
   const drawer = p.str('drawer', 64)
   const order = serviceOrder(meta.ok ? meta.data : null)
   const keep = scope.keep
 
-  const filters: LogsQuery = { ...scopeQuery(scope), q, event, traceId, userId, jobId, route, category, fingerprint }
+  const filters: LogsQuery = {
+    ...scopeQuery(scope),
+    q,
+    event,
+    traceId,
+    userId,
+    jobId,
+    route,
+    category,
+    fingerprint,
+    pattern,
+    exclude,
+    hide: hide.length ? hide.join(',') : undefined,
+    collapse: collapse ? '1' : undefined,
+  }
   const levelParam = level?.join(',')
   // ERR = error lines + http.request lines that answered 5xx: the chart foot says how many of each
   const wantsReqSplit = !event && (!level || level.includes('error'))
@@ -169,7 +193,10 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const svc = scope.service ? `${scope.service}${scope.role ? `/${scope.role}` : ''}` : ''
   const envText = scope.env ?? 'ทุก env'
   const rangeShort = fmtRangeShort(scope.fromMs, scope.toMs, scope.nowMs)
-  const resetKey = JSON.stringify([scope.env, scope.from, scope.to, scope.service, scope.role, levelParam, q, event, traceId, userId, jobId, route, category, fingerprint, limit, before])
+  const resetKey = JSON.stringify([scope.env, scope.from, scope.to, scope.service, scope.role, levelParam, q, event, traceId, userId, jobId, route, category, fingerprint, pattern, exclude, hide, collapse, limit, before])
+  const hidden = res.ok ? res.data.hidden : null
+  const collapsed = res.ok ? res.data.collapse : null
+  const showAllHref = withParams('/logs', sp, { show: 'all', repeats: 'all', exclude: null, before: null, limit: null, drawer: null })
 
   // applied filters (× removes one)
   const applied: Array<{ param: string; label: string; value: string }> = []
@@ -184,11 +211,13 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   if (category) applied.push({ param: 'category', label: 'หมวด', value: category })
   if (traceId) applied.push({ param: 'traceId', label: 'trace', value: traceId })
   if (fingerprint) applied.push({ param: 'fingerprint', label: 'error group', value: fingerprint })
+  if (pattern) applied.push({ param: 'pattern', label: 'log ซ้ำ', value: lines[0] ? logTitle(lines[0].row).title : pattern })
+  if (exclude) applied.push({ param: 'exclude', label: 'ซ่อนคำ', value: exclude })
   if (before) applied.push({ param: 'before', label: 'ก่อน', value: atText(before) })
   const clearHref = buildHref('/logs', keep)
 
   // hidden inputs keep every other param when the query bar submits (q replaces, paging and drawer reset)
-  const hidden = Object.entries(toRecord(sp)).filter(([k]) => !['q', 'before', 'limit', 'drawer'].includes(k))
+  const keepInputs = Object.entries(toRecord(sp)).filter(([k]) => !['q', 'before', 'limit', 'drawer'].includes(k))
 
   // "ไม่มี log ระดับ FTL จาก school-etl-api …" for the empty state
   const what = [
@@ -201,6 +230,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     jobId ? `ของ job #${jobId}` : '',
     traceId ? `ใน trace ${shortId(traceId)}` : '',
     fingerprint ? `ของ error group นี้` : '',
+    pattern ? 'ของ log ซ้ำนี้' : '',
     q ? `ที่มีคำว่า "${q}"` : '',
   ]
     .filter(Boolean)
@@ -236,7 +266,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
 
       {/* Query bar: one row above everything it scopes (histogram + table) */}
       <Form action="/logs" className="lg-query" role="search" aria-label="ค้นหา log">
-        {hidden.map(([k, v]) => (
+        {keepInputs.map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
         <div className="search">
@@ -302,6 +332,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             <FilterSelect param="category" label="หมวด error" allLabel="ทุกหมวด error" options={CATEGORY_OPTIONS} />
           </div>
         </div>
+        <AdvancedSearch shown={shownGroups} collapse={collapse} exclude={exclude ?? ''} narrowed={narrowed} hidden={hidden} />
       </div>
 
       {!res.ok ? (
@@ -370,6 +401,25 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                 </div>
               ) : null}
             </div>
+            {(hidden && hidden.total > 0) || (collapsed && (collapsed.patterns > 0 || collapsed.skipped)) ? (
+              <p className="lg-folded">
+                <Icon name="filter" size="sm" />
+                <span>
+                  {[
+                    hidden && hidden.total > 0 ? `ซ่อน noise ${fmtCount(hidden.total)} แถว` : '',
+                    collapsed && collapsed.patterns > 0
+                      ? `ยุบ log ซ้ำ ${fmtCount(collapsed.patterns)} แบบ (${fmtCount(collapsed.lines)} แถว) เหลือบรรทัดล่าสุดที่มีป้าย ซ้ำ ×`
+                      : '',
+                    collapsed?.skipped === 'range' ? 'ไม่ยุบ log ซ้ำเพราะช่วงเวลาเกิน 7 วัน' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+                <Link className="btn btn--sm btn--quiet" href={showAllHref} scroll={false}>
+                  แสดงทั้งหมด
+                </Link>
+              </p>
+            ) : null}
             {lines.length ? (
               <LogTable
                 lines={lines}
@@ -401,6 +451,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                   {fmtCount(total)}
                 </ChangedValue>{' '}
                 แถว
+                {hidden && hidden.total > 0 ? ` · ซ่อน ${fmtCount(hidden.total)}` : ''}
+                {collapsed && collapsed.lines > 0 ? ` · ยุบ ${fmtCount(collapsed.lines)}` : ''}
               </span>
               {nextBefore ? (
                 <span className="list-foot__cursor">

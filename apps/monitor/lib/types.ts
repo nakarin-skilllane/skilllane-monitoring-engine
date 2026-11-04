@@ -300,6 +300,17 @@ export interface LogRow {
   reason: string
   labels: Record<string, string>
   fields: Record<string, string>
+  /** On the line that stands for a collapsed repeat (/api/logs collapse=1). */
+  repeat?: LogRepeat
+}
+
+/** A collapsed repeat over the range: `pattern` = id for the `pattern` filter, `template` = its message with `*`. */
+export interface LogRepeat {
+  pattern: string
+  count: number
+  firstSeen: string
+  lastSeen: string
+  template: string
 }
 
 export interface SpanRow {
@@ -409,6 +420,14 @@ export interface LogsQuery extends CommonQuery {
   category?: string
   /** Error group (decimal UInt64): its lines. */
   fingerprint?: string
+  /** Comma list of noise groups to leave out (probe, preflight, middleware, cache). */
+  hide?: string
+  /** Leave out the lines whose message has this text (case-insensitive). */
+  exclude?: string
+  /** '1' = fast repeats kept to their latest line (`LogRow.repeat`). */
+  collapse?: '1'
+  /** Repeat id (`LogRepeat.pattern`): every line of that repeat. */
+  pattern?: string
   /** 1–500, default 100. */
   limit?: number
   /** Cursor: `nextBefore` of the previous page. */
@@ -440,6 +459,19 @@ export interface LogsResponse {
   levelCounts: LogsLevelCounts
   /** Pass as `before` for the next (older) page; null on the last page. */
   nextBefore: string | null
+  /** Lines of each noise group / the exclude text (with the level filter), hidden or not; `total` = hidden by this request. */
+  hidden: LogsHidden
+  /** Repeats collapsed to their latest line; null without collapse. */
+  collapse: { patterns: number; lines: number; skipped: 'range' | null } | null
+}
+
+export interface LogsHidden {
+  probe: number
+  preflight: number
+  middleware: number
+  cache: number
+  exclude: number
+  total: number
 }
 
 // ---------- GET /api/traces, /api/traces/:traceId ----------

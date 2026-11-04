@@ -9,10 +9,10 @@ import { CopyButton } from '@/components/CopyButton'
 import { DrawerLink } from '@/components/Drawer'
 import { ActualError, ErrorWhatFix, IdChip, KvList } from '@/components/ErrorParts'
 import { LiveTbody } from '@/components/Motion'
-import { fmtDuration, fmtTimeMs, fmtTimeSec } from '@/lib/format'
+import { fmtCount, fmtDateTime, fmtDuration, fmtTime, fmtTimeMs, fmtTimeSec } from '@/lib/format'
 import { buildHref, depAnchor, type Keep } from '@/lib/params'
 import { LEVEL_SHORT, logTitle, logWhatFix } from '@/lib/readable'
-import type { LogRow } from '@/lib/types'
+import type { LogRepeat, LogRow } from '@/lib/types'
 import { actualText, durationText, hasErrorDetail, isHintLine, jobContext, lineKvs, moduleLabel, type Outage, outageOf, prettyText } from '../_lib/lines'
 import { LogLine } from './LogLine'
 
@@ -27,6 +27,19 @@ function outageText(row: LogRow, outages: readonly Outage[]): string {
   const where = row.traceId ? '' : 'เกิดนอก request: ไม่มี trace'
   const down = o ? (o.to === null ? `down ตั้งแต่ ${fmtTimeSec(o.from)} ยังไม่กลับมา` : `down ${fmtDuration(o.to - o.from)} ถึง ${fmtTimeSec(o.to)}`) : ''
   return [where, down].filter(Boolean).join(' · ')
+}
+
+/** `⟲ ซ้ำ ×11,840 · ตั้งแต่ 15:01` on the latest line of a collapsed repeat: opens every line of it. */
+export function RepeatMark({ repeat, keep, withDate }: { repeat: LogRepeat; keep: Keep; withDate?: boolean }) {
+  return (
+    <Link
+      className="tag lg-repeat"
+      href={buildHref('/logs', keep, { pattern: repeat.pattern })}
+      title={`แสดงรายการซ้ำทั้ง ${fmtCount(repeat.count)} บรรทัด: ${repeat.template}`}
+    >
+      ⟲ ซ้ำ ×{fmtCount(repeat.count)} · ตั้งแต่ {withDate ? fmtDateTime(repeat.firstSeen) : fmtTime(repeat.firstSeen)}
+    </Link>
+  )
 }
 
 function Detail({
@@ -195,6 +208,7 @@ export function LogTable({
                         {row.fingerprint && newFingerprints.has(row.fingerprint) ? <NewBadge /> : null}
                         {mod ? <Tag>{mod}</Tag> : null}
                         <KvList items={lineKvs(row)} />
+                        {row.repeat ? <RepeatMark repeat={row.repeat} keep={keep} withDate={withDate} /> : null}
                       </div>
                     </td>
                     <td className="num lg-dur">{dur || <span className="t-muted">–</span>}</td>
