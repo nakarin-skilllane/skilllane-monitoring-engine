@@ -424,7 +424,7 @@ export interface LogsQuery extends CommonQuery {
   category?: string
   /** Error group (decimal UInt64): its lines. */
   fingerprint?: string
-  /** Comma list of noise groups to leave out (probe, preflight, middleware, cache). */
+  /** Comma list of noise groups to leave out (probe, preflight, middleware, cache, cron). */
   hide?: string
   /** Leave out the lines whose message has this text (case-insensitive). */
   exclude?: string
@@ -474,6 +474,7 @@ export interface LogsHidden {
   preflight: number
   middleware: number
   cache: number
+  cron: number
   exclude: number
   total: number
 }

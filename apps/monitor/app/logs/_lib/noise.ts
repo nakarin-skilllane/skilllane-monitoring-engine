@@ -6,7 +6,7 @@
  *
  * Narrowed = a trace, a job, an error group, a route or one repeat pattern: every line of it is wanted.
  */
-export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache'] as const
+export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron'] as const
 export type NoiseGroup = (typeof NOISE_GROUPS)[number]
 
 export const NOISE_LABEL: Record<NoiseGroup, { label: string; hint: string }> = {
@@ -14,6 +14,7 @@ export const NOISE_LABEL: Record<NoiseGroup, { label: string; hint: string }> = 
   preflight: { label: 'CORS preflight', hint: 'OPTIONS ที่ตอบต่ำกว่า 400' },
   middleware: { label: 'Middleware', hint: 'log ทั่วไปที่ข้อความมีคำว่า middleware' },
   cache: { label: 'Cache hit / set', hint: 'logger ที่ชื่อมี cache หรือข้อความ Cache hit / miss / set …' },
+  cron: { label: 'Cron ที่ทำงานปกติ', hint: 'job.started / job.finished ของ cron · รอบที่ล้ม (job.failed) ยังแสดง' },
 }
 
 export function shownNoise(show: string | undefined, narrowed: boolean): NoiseGroup[] {

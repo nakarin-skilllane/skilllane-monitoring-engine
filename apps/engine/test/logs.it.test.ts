@@ -12,7 +12,7 @@ import { Reader } from '../src/query/sql'
  */
 const ENV = 'logs-it'
 const MIN = 60_000
-const ALL = 'probe,preflight,middleware,cache'
+const ALL = 'probe,preflight,middleware,cache,cron'
 const chTime = (ms: number) => new Date(ms).toISOString().replace('T', ' ').replace('Z', '')
 
 function fixture(endMs: number): Array<Record<string, unknown>> {
@@ -42,6 +42,13 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   for (let i = 0; i < 100; i++) log(start + i * 15_000 + 8, { logger: 'RedisCacheManager', message: `Cache hit for key: course-media/${(0xabc000 + i).toString(16)}.png` })
   for (let i = 0; i < 150; i++) log(start + 10 * MIN + i * 200 + 9, { level: 'warn', logger: 'Importer', message: `Import row ${i} failed` }) // a burst: 150 in 30 s
   for (let i = 0; i < 5; i++) log(start + i * 5 * MIN + 10, { logger: 'ExamService', message: `Exam submitted by u_${i}` })
+  // a cron every 5 minutes: its started / finished lines are noise, its failure is not; BullMQ jobs above stay
+  for (let i = 0; i < 6; i++) {
+    const cron = { logger: 'Cron', event_module: 'cron', job_queue: 'cron', job_type: 'AnnouncementCronService.handleCron', job_id: `c${i}` }
+    log(start + i * 5 * MIN + 15, { ...cron, event_code: 'job.started', message: 'job started' })
+    log(start + i * 5 * MIN + 16, { ...cron, event_code: 'job.finished', message: 'job finished', duration_ms: 4 })
+  }
+  log(start + 3 * 5 * MIN + 17, { logger: 'Cron', event_module: 'cron', job_queue: 'cron', job_type: 'AnnouncementCronService.handleCron', job_id: 'c3', level: 'error', event_code: 'job.failed', message: 'job failed' })
   // bursts: 7 lines 50 ms apart, twice 5 s apart (two marked lines); 3 in a row stay (not more than 3)
   for (const at of [start + 5 * MIN, start + 5 * MIN + 5000]) {
     for (let i = 0; i < 7; i++) log(at + i * 50 + 12, { logger: 'DatabaseModule', message: 'Session schema set to: MICA2_DEV' })
@@ -55,8 +62,8 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   return out
 }
 
-const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8
-const NOISE = 450 + 10 + 450 + 100
+const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1
+const NOISE = 450 + 10 + 450 + 100 + 12
 
 describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_IT=1, docker compose up -d clickhouse)', () => {
   const writer = createClient({ url: config.clickhouse.url, username: config.clickhouse.user, password: config.clickhouse.password, database: config.clickhouse.database })
@@ -100,15 +107,15 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
     it('without the new params nothing is hidden or collapsed', async () => {
       const r = await logs.search({ ...range, limit: '1' })
       expect(sumLevels(r.levelCounts)).toBe(TOTAL)
-      expect(r.hidden).toEqual({ probe: 450, preflight: 10, middleware: 450, cache: 100, exclude: 0, total: 0 })
+      expect(r.hidden).toEqual({ probe: 450, preflight: 10, middleware: 450, cache: 100, cron: 12, exclude: 0, total: 0 })
       expect(r.collapse).toBeNull()
     })
 
     it('hide drops the noise groups from rows and counts, never a failed probe', async () => {
       const r = await logs.search({ ...range, hide: ALL, limit: '1' })
-      expect(r.hidden).toEqual({ probe: 450, preflight: 10, middleware: 450, cache: 100, exclude: 0, total: NOISE })
+      expect(r.hidden).toEqual({ probe: 450, preflight: 10, middleware: 450, cache: 100, cron: 12, exclude: 0, total: NOISE })
       expect(sumLevels(r.levelCounts)).toBe(TOTAL - NOISE)
-      expect(r.levelCounts.error).toBe(903)
+      expect(r.levelCounts.error).toBe(904)
       const rows = await allRows({ ...range, hide: ALL, limit: '500' })
       expect(rows).toHaveLength(TOTAL - NOISE)
       expect(rows.filter((x) => x.http?.route === '/api/health').map((x) => x.http?.status)).toEqual([503, 503, 503])
@@ -143,7 +150,7 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       expect(redis.repeat!.template).toBe('connect ECONNREFUSED *.*.*.*:*')
       expect(redis.timestamp).toBe(redis.repeat!.lastSeen)
       // the volume still counts every line: an error that floods is seen in the chart and on ERR
-      expect(r.levelCounts.error).toBe(903)
+      expect(r.levelCounts.error).toBe(904)
     })
 
     it('a repeat shows up once over every page; jobs and requests are never collapsed', async () => {
@@ -153,6 +160,7 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       expect(rows.filter((x) => x.logger === 'Poller')).toHaveLength(1)
       expect(rows.filter((x) => x.logger === 'Importer')).toHaveLength(1)
       expect(rows.filter((x) => x.eventCode === 'job.finished')).toHaveLength(600)
+      expect(rows.filter((x) => x.eventModule === 'cron').map((x) => x.eventCode)).toEqual(['job.failed'])
       expect(rows.filter((x) => x.http?.route === '/courses')).toHaveLength(600)
       expect(rows.filter((x) => x.logger === 'ExamService')).toHaveLength(5)
     })

@@ -10,7 +10,7 @@
 import { PROBE_SEGMENTS } from '../probes'
 import { bad, optList, optString, type QueryString } from './params'
 
-export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache'] as const
+export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron'] as const
 export type NoiseGroup = (typeof NOISE_GROUPS)[number]
 
 const QUIET = "level IN ('debug', 'info')"
@@ -24,6 +24,8 @@ export const NOISE_SQL: Record<NoiseGroup, string> = {
   preflight: `${QUIET} AND ${OK_REQUEST} AND http_method = 'OPTIONS'`,
   middleware: `${QUIET} AND ${FREE_TEXT} AND positionCaseInsensitive(message, 'middleware') > 0`,
   cache: `${QUIET} AND ${FREE_TEXT} AND (positionCaseInsensitive(logger, 'cache') > 0 OR match(message, '(?i)^cache (hit|miss|set|get|del)'))`,
+  // a scheduled run that went fine; job.failed / job.retry and BullMQ, Kafka, RabbitMQ jobs (one per user action) stay
+  cron: `${QUIET} AND event_module = 'cron' AND event_code IN ('job.started', 'job.finished')`,
 }
 
 /** The message (else the error message) with what changes per occurrence turned into `*` (`[GetUsersHandler]` → `[*]`). */

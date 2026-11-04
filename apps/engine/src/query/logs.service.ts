@@ -42,7 +42,7 @@ export interface LogsResponse {
    * or not; `total` = the lines this request hid (a line in two groups counts once). Rows, histogram and
    * levelCounts leave the hidden lines out.
    */
-  hidden: { probe: number; preflight: number; middleware: number; cache: number; exclude: number; total: number }
+  hidden: { probe: number; preflight: number; middleware: number; cache: number; cron: number; exclude: number; total: number }
   /**
    * `collapse=1`: steady repeats (`patterns`) and bursts (`bursts`) kept to their latest line (its `repeat`);
    * `lines` = the lines they stood for minus those latest lines. The histogram and levelCounts still count
@@ -315,6 +315,7 @@ export class LogsService {
         preflight: num(lc.noise_preflight),
         middleware: num(lc.noise_middleware),
         cache: num(lc.noise_cache),
+        cron: num(lc.noise_cron),
         exclude: num(lc.noise_exclude),
         total: num(lc.hidden_total),
       },
