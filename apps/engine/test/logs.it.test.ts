@@ -161,6 +161,16 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       expect(rows.some((x) => x.logger === 'RouterExplorer')).toBe(false)
     })
 
+    it('a start-up line opens every line of that start-up: its window and host', async () => {
+      const rows = await allRows({ ...range, hide: ALL, collapse: '1' })
+      const w = rows.find((x) => x.eventCode === 'app.started')!.originWindow!
+      expect(Date.parse(w.to) - Date.parse(w.from)).toBe(20_000 + 5_000)
+      expect(rows.find((x) => x.logger === 'CommandBus')!.originWindow).toEqual(w)
+      const all = await logs.search({ env: ENV, host: 'h2', from: w.from, to: w.to, limit: '500' })
+      expect(all.rows).toHaveLength(50 + 3)
+      expect(all.rows.every((x) => x.host === 'h2')).toBe(true)
+    })
+
     it('a plain line written in a request gets its route', async () => {
       const r = await logs.search({ ...range, q: 'Loaded class', limit: '10' })
       expect(r.rows.map((x) => x.requestRoute)).toEqual(['GET /classes/:id'])

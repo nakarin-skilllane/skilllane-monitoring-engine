@@ -29,18 +29,22 @@ function outageText(row: LogRow, outages: readonly Outage[]): string {
   return [where, down].filter(Boolean).join(' · ')
 }
 
-const ORIGIN_LABEL: Record<LogOrigin, { text: string; title: string }> = {
-  request: { text: '–', title: 'ใน request ที่ไม่รู้ route' },
-  job: { text: '–', title: 'ใน job ที่ไม่รู้ชื่อ' },
-  dependency: { text: '–', title: 'ติดต่อ dependency' },
-  startup: { text: '▶ start แอป', title: 'เกิดระหว่างแอป start (ก่อน app.started ของ process นี้)' },
-  shutdown: { text: '■ ปิดแอป', title: 'เกิดตอนแอปกำลังปิด (หลัง app.shutdown ของ process นี้)' },
-  background: { text: '◌ เบื้องหลัง', title: 'งานเบื้องหลังของแอป ไม่อยู่ใน request หรือ job ใด' },
+/** Lines whose Route / ที่มา cell names who wrote them (the logger, or the event code) under an icon of when. */
+const LIFE: Partial<Record<LogOrigin, { icon: string; word: string }>> = {
+  startup: { icon: '▶', word: 'start แอป' },
+  shutdown: { icon: '■', word: 'ปิดแอป' },
+  background: { icon: '◌', word: 'เบื้องหลัง: ไม่อยู่ใน request หรือ job ใด' },
 }
+
+/** The logger (or event code) moves to the Route / ที่มา cell: no route, a life origin. */
+export const namesWriter = (row: LogRow, route: string): boolean => !route && !!LIFE[row.origin]
+
+const secText = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} วิ`)
 
 /**
  * The Route / ที่มา cell: the request or job (routeText), else a call to a dependency (`⚡ kafka`, opening its
- * status on /jobs), else where in the app's life the line was written (start แอป, ปิดแอป, เบื้องหลัง).
+ * status on /jobs), else who wrote the line under an icon of when (`▶ InstanceLoader` = while the app started,
+ * `■` shutting down, `◌` background); a start-up or shutdown opens every line of it (that process, nothing hidden).
  */
 function RouteCell({ row, route, keep }: { row: LogRow; route: string; keep: Keep }) {
   if (route) {
@@ -59,11 +63,22 @@ function RouteCell({ row, route, keep }: { row: LogRow; route: string; keep: Kee
       </Link>
     )
   }
-  const o = ORIGIN_LABEL[row.origin] ?? ORIGIN_LABEL.background
+  const life = LIFE[row.origin]
+  if (!life) return <span className="t-muted">–</span>
+  const who = logTitle(row).prefix || row.logger || life.word
+  const w = row.originWindow
+  if (!w) {
+    return (
+      <span className="lg-origin mono" title={life.word}>
+        {life.icon} {who}
+      </span>
+    )
+  }
+  const href = buildHref('/logs', keep, { service: row.service, role: row.role, host: row.host, from: w.from, to: w.to, show: 'all', repeats: 'all' })
   return (
-    <span className="lg-origin" title={o.title}>
-      {o.text}
-    </span>
+    <Link className="lg-origin lg-origin--link mono" href={href} title={`${life.word} · +${secText(Date.parse(row.timestamp) - Date.parse(w.from))} · กดเพื่อดู log ทั้งหมดของช่วงนี้ (${row.host})`}>
+      {life.icon} {who}
+    </Link>
   )
 }
 
@@ -203,7 +218,7 @@ export function LogTable({
               Level
             </th>
             <th scope="col" className="col-tight">
-              Route / ที่มา <span className="t-muted lg-th-sub">· จุดสี = service</span>
+              Route / ที่มา <span className="t-muted lg-th-sub">· จุดสี = service · ▶ start ■ ปิด ◌ เบื้องหลัง</span>
             </th>
             <th scope="col">
               ข้อความ <span className="t-muted lg-th-sub">· หัวข้อ แล้ว key=value</span>
@@ -247,7 +262,7 @@ export function LogTable({
                     </td>
                     <td className="lg-msgcell">
                       <div className="lg-msg">
-                        {prefix ? <span className="lg-src">{prefix}</span> : null}
+                        {prefix && !namesWriter(row, route) ? <span className="lg-src">{prefix}</span> : null}
                         <DrawerLink value={id} className="lg-title">
                           {title}
                         </DrawerLink>

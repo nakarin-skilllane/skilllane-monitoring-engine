@@ -103,6 +103,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const traceId = p.traceId()
   const userId = p.str('userId', 128)
   const jobId = p.str('jobId', 128)
+  const host = p.name('host')
   const route = p.str('route')
   const category = p.name('category')
   const fingerprint = p.fingerprint()
@@ -110,7 +111,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const pattern = patternRaw && /^\d{1,20}$/.test(patternRaw) ? patternRaw : undefined
   const exclude = p.str('exclude')
   // noise hidden and repeats collapsed by default; everything shown while narrowed to one trace, job, error group, route or repeat
-  const narrowed = !!(traceId || jobId || fingerprint || route || pattern)
+  const narrowed = !!(traceId || jobId || fingerprint || route || pattern || host)
   const shownGroups = shownNoise(p.str('show', 64), narrowed)
   const hide = NOISE_GROUPS.filter((g) => !shownGroups.includes(g))
   const collapse = collapsesRepeats(p.str('repeats', 16), narrowed)
@@ -127,6 +128,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     traceId,
     userId,
     jobId,
+    host,
     route,
     category,
     fingerprint,
@@ -193,7 +195,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const svc = scope.service ? `${scope.service}${scope.role ? `/${scope.role}` : ''}` : ''
   const envText = scope.env ?? 'ทุก env'
   const rangeShort = fmtRangeShort(scope.fromMs, scope.toMs, scope.nowMs)
-  const resetKey = JSON.stringify([scope.env, scope.from, scope.to, scope.service, scope.role, levelParam, q, event, traceId, userId, jobId, route, category, fingerprint, pattern, exclude, hide, collapse, limit, before])
+  const resetKey = JSON.stringify([scope.env, scope.from, scope.to, scope.service, scope.role, levelParam, q, event, traceId, userId, jobId, host, route, category, fingerprint, pattern, exclude, hide, collapse, limit, before])
   const hidden = res.ok ? res.data.hidden : null
   const collapsed = res.ok ? res.data.collapse : null
   const showAllHref = withParams('/logs', sp, { show: 'all', repeats: 'all', exclude: null, before: null, limit: null, drawer: null })
@@ -207,6 +209,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   if (event) applied.push({ param: 'event', label: 'event', value: event })
   if (userId) applied.push({ param: 'userId', label: 'user', value: userId })
   if (jobId) applied.push({ param: 'jobId', label: 'job', value: `#${jobId}` })
+  if (host) applied.push({ param: 'host', label: 'host', value: host })
   if (route) applied.push({ param: 'route', label: 'route', value: route })
   if (category) applied.push({ param: 'category', label: 'หมวด', value: category })
   if (traceId) applied.push({ param: 'traceId', label: 'trace', value: traceId })

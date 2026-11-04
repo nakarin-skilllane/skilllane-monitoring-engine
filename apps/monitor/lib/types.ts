@@ -272,6 +272,8 @@ export interface LogRow {
   requestRoute: string | null
   /** Where the line came from (startup / shutdown / request from a trace: /api/logs only). */
   origin: LogOrigin
+  /** The start-up or shutdown window of a startup / shutdown line (its process: service, role, host). */
+  originWindow?: { from: string; to: string }
   error: {
     type: string
     code: string
@@ -425,6 +427,8 @@ export interface LogsQuery extends CommonQuery {
   userId?: string
   /** job_id (any queue): every attempt of one job. */
   jobId?: string
+  /** One process's host (a start-up or shutdown of it). */
+  host?: string
   /** `GET /classes/:id` (the form responses use), a bare `/classes/:id`, or a job key `report report:generate` (job_queue + job_type). */
   route?: string
   category?: string

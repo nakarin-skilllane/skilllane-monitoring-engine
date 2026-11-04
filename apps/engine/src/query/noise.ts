@@ -67,9 +67,9 @@ export function windowParams(p: string, ws: LifeWindow[]): Record<string, unknow
   }
 }
 
-/** The window of `ms` among `ws` for this process, if any. */
-export const inWindow = (ws: LifeWindow[], service: string, role: string, host: string, ms: number): boolean =>
-  ws.some((w) => w.service === service && w.role === role && w.host === host && ms >= w.from && ms <= w.to)
+/** The window of this process that `ms` falls in, if any. */
+export const windowOf = (ws: LifeWindow[], service: string, role: string, host: string, ms: number): LifeWindow | undefined =>
+  ws.find((w) => w.service === service && w.role === role && w.host === host && ms >= w.from && ms <= w.to)
 
 /**
  * A cron (queue + type) is frequent with at least `minRuns` runs in the range, `maxGapS` apart on average (every

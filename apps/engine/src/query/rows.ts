@@ -113,6 +113,8 @@ export interface LogRow {
    * in a request trace), startup and shutdown; elsewhere only what the line itself says.
    */
   origin: LogOrigin
+  /** The start-up or shutdown window of a `startup` / `shutdown` line (its process: service, role, host); /api/logs only. */
+  originWindow?: { from: string; to: string }
   error: {
     type: string
     code: string

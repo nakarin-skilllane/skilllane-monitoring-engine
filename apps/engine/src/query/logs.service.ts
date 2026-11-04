@@ -18,7 +18,7 @@ import {
   COLLAPSIBLE_SQL,
   cronParams,
   FREQUENT_CRON_SQL,
-  inWindow,
+  windowOf,
   type LifeWindow,
   SHUTDOWN_MS,
   STARTUP_MAX_MS,
@@ -317,10 +317,15 @@ export class LogsService {
     )
     for (const row of mapped) {
       if (row.requestRoute) row.origin = 'request'
-      if (row.origin !== 'background') continue
+      // app.started / app.shutdown lines start as startup / shutdown (toLogRow): they get their window here too
+      if (row.origin !== 'background' && row.origin !== 'startup' && row.origin !== 'shutdown') continue
       const ms = Date.parse(row.timestamp)
-      if (inWindow(life.startup, row.service, row.role, row.host, ms)) row.origin = 'startup'
-      else if (inWindow(life.shutdown, row.service, row.role, row.host, ms)) row.origin = 'shutdown'
+      const up = windowOf(life.startup, row.service, row.role, row.host, ms)
+      const down = up ? undefined : windowOf(life.shutdown, row.service, row.role, row.host, ms)
+      const w = up ?? down
+      if (!w) continue
+      row.origin = up ? 'startup' : 'shutdown'
+      row.originWindow = { from: new Date(w.from).toISOString(), to: new Date(w.to).toISOString() }
     }
     const lc = counts[0] ?? {}
     return {
@@ -503,6 +508,8 @@ export class LogsService {
     }
     const jobId = optString(q, 'jobId', 128)
     if (jobId) w.add('job_id = {jobId:String}', { jobId })
+    const host = optName(q, 'host')
+    if (host) w.add('host = {host:String}', { host })
     const traceId = optString(q, 'traceId', 64)
     if (traceId) w.add('trace_id = {traceId:String}', { traceId: parseTraceId(traceId) })
     const userId = optString(q, 'userId', 128)
