@@ -42,6 +42,11 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   for (let i = 0; i < 100; i++) log(start + i * 15_000 + 8, { logger: 'RedisCacheManager', message: `Cache hit for key: course-media/${(0xabc000 + i).toString(16)}.png` })
   for (let i = 0; i < 150; i++) log(start + 10 * MIN + i * 200 + 9, { level: 'warn', logger: 'Importer', message: `Import row ${i} failed` }) // a burst: 150 in 30 s
   for (let i = 0; i < 5; i++) log(start + i * 5 * MIN + 10, { logger: 'ExamService', message: `Exam submitted by u_${i}` })
+  // a plain line written inside a request gets the request's route (requestRoute)
+  const trace = 'ab'.repeat(16)
+  log(start + 12 * MIN + 20, { logger: 'ClassService', message: 'Loaded class 42', trace_id: trace })
+  req(start + 12 * MIN + 21, 'GET', '/classes/:id', 200)
+  out[out.length - 1].trace_id = trace
   // a cron every 5 minutes: its started / finished lines are noise, its failure is not; BullMQ jobs above stay
   for (let i = 0; i < 6; i++) {
     const cron = { logger: 'Cron', event_module: 'cron', job_queue: 'cron', job_type: 'AnnouncementCronService.handleCron', job_id: `c${i}` }
@@ -66,7 +71,7 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   return out
 }
 
-const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1 + 2
+const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1 + 2 + 2
 const NOISE = 450 + 10 + 450 + 100 + 12
 
 describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_IT=1, docker compose up -d clickhouse)', () => {
@@ -129,6 +134,12 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
     it('a 5-minute cron is frequent in a range much longer than its data', async () => {
       const r = await logs.search({ env: ENV, from: new Date(end - 6 * 60 * MIN).toISOString(), to: range.to, hide: ALL, limit: '1' })
       expect(r.hidden.cron).toBe(12)
+    })
+
+    it('a plain line written in a request gets its route', async () => {
+      const r = await logs.search({ ...range, q: 'Loaded class', limit: '10' })
+      expect(r.rows.map((x) => x.requestRoute)).toEqual(['GET /classes/:id'])
+      expect(r.rows[0].durationMs).toBeNull()
     })
 
     it('hidden counts follow the level filter', async () => {

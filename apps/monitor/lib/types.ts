@@ -268,6 +268,8 @@ export interface LogRow {
   httpStatus: number | null
   /** Duration of that request (same source as httpStatus). */
   requestDurationMs: number | null
+  /** `METHOD /route` of the request the line was written in (same trace + service + role); null outside one. */
+  requestRoute: string | null
   error: {
     type: string
     code: string

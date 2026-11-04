@@ -58,13 +58,17 @@
   .lg-filters .select, .lg-filters .select__control { max-width: 100%; }
   .lg-acts { margin-left: 0; }
   .lg-drawer .drawer__foot .btn-copy.btn--cta { margin-left: 0; }
-  /* each log line: time · level · duration, then the readable message (title, category, chips), then service/role */
-  .lg-table > tbody > tr { grid-template-columns: 24px auto auto minmax(0, 1fr); grid-template-areas: "tog time lvl dur" "msg msg msg msg" "svc svc svc svc"; }
+  /* each log line: time · level · duration, then the readable message (title, category, chips), then the route */
+  .lg-table > tbody > tr { grid-template-columns: 24px auto auto minmax(0, 1fr); grid-template-areas: "tog time lvl dur" "msg msg msg msg" "route route route route"; }
   .lg-table.table--reflow > tbody > tr > td.lg-msgcell { grid-area: msg; width: auto; min-width: 0; }
-  .lg-tog { grid-area: tog; } .lg-time { grid-area: time; } .lg-lvl { grid-area: lvl; } .lg-svc { grid-area: svc; }
+  .lg-tog { grid-area: tog; } .lg-time { grid-area: time; } .lg-lvl { grid-area: lvl; } .lg-route { grid-area: route; }
   .lg-table.table--reflow > tbody > tr > td.lg-dur { grid-area: dur; text-align: right; }
   .lg-table td, .lg-table td.lg-time .ts, .lg-table td .svc { line-height: 20px; }
 }
+
+/* Route column (the request or job a line was written in): one line, cut with … (the full text in its title) */
+.lg-table td.lg-route .svc-dots { margin-right: var(--sp-1h); vertical-align: 0; }
+.lg-table td.lg-route { max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-12); color: var(--ink-2); line-height: 22px; }
 
 /* app: ⟲ ซ้ำ ×N on the latest line of a collapsed repeat (opens every line of it) */
 .lg-repeat { text-decoration: none; background: var(--warn-bg); color: var(--warn); }

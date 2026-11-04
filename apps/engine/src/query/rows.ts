@@ -102,6 +102,11 @@ export interface LogRow {
   httpStatus: number | null
   /** Duration of that request (same source as httpStatus). */
   requestDurationMs: number | null
+  /**
+   * `METHOD /route` of the request a line was written in, from the `http.request` line of the same trace +
+   * service + role (/api/logs only); null on the http.request line itself and outside a request.
+   */
+  requestRoute: string | null
   error: {
     type: string
     code: string
@@ -180,6 +185,7 @@ export function toLogRow(r: LogDb): LogRow {
     durationMs,
     httpStatus: isRequest && r.http_status ? r.http_status : null,
     requestDurationMs: isRequest ? durationMs : null,
+    requestRoute: null,
     error: hasError
       ? {
           type: r.error_type,

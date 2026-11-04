@@ -104,16 +104,17 @@ function hidingOf(q: QueryString, frequentCron: string[]): Hiding {
 const REQUEST_LINE_AFTER_MS = 10 * 60_000
 
 /**
- * Error lines (fingerprint set) get `httpStatus` / `requestDurationMs` from the
- * `http.request` line of the same trace + service + role, in one query bounded
- * to the given rows' trace ids, envs and time span. When the line has no HTTP
+ * Lines written in a request get `requestRoute` from the `http.request` line of
+ * the same trace + service + role, in one query bounded to the given rows' trace
+ * ids, envs and time span. Error lines (fingerprint set) also get `httpStatus` /
+ * `requestDurationMs` from it. When the line has no HTTP
  * status of its own (or the same one), `http.status` and a missing `durationMs`
  * are filled from it too. An outbound line (`http.domain` set, or
  * `http.outbound_failed`) describes another call: it keeps its own `http` and
  * `durationMs` (a timeout has no status), only httpStatus / requestDurationMs are set.
  */
 export async function withRequests(reader: Reader, rows: LogRow[]): Promise<LogRow[]> {
-  const targets = rows.filter((r) => r.fingerprint && r.traceId && r.eventCode !== 'http.request')
+  const targets = rows.filter((r) => r.traceId && r.eventCode !== 'http.request')
   if (!targets.length) return rows
   const times = targets.map((r) => Date.parse(r.timestamp)).filter(Number.isFinite)
   if (!times.length) return rows
@@ -148,6 +149,9 @@ export async function withRequests(reader: Reader, rows: LogRow[]): Promise<LogR
   for (const r of targets) {
     const req = byKey.get(`${r.traceId}\u0000${r.service}\u0000${r.role}`)
     if (!req) continue
+    const route = req.req_route || req.path
+    r.requestRoute = route ? `${req.method} ${route}`.trim() : null
+    if (!r.fingerprint) continue
     const reqMs = req.req_ms === null || req.req_ms === undefined ? null : num(req.req_ms)
     r.httpStatus = req.status || null
     r.requestDurationMs = reqMs

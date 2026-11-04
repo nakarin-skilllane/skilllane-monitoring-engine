@@ -104,6 +104,17 @@ export function ServiceChip({ service, role, order = KNOWN_SERVICES }: { service
   )
 }
 
+/** One service key (a single `.svc-dots` dot), `service/role` in its title and for screen readers. */
+export function ServiceDot({ service, role, order = KNOWN_SERVICES }: { service: string; role?: string; order?: readonly string[] }) {
+  const name = role ? `${service}/${role}` : service
+  return (
+    <span className="svc-dots" title={name}>
+      <i style={{ '--c': svcColor(service, order) } as CSSProperties} />
+      <span className="sr-only">{name}</span>
+    </span>
+  )
+}
+
 /** `.svc-dots`: one key per service a trace touched, the count from 2 services, the names for screen readers. */
 export function ServiceDots({ services, order = KNOWN_SERVICES }: { services: string[]; order?: readonly string[] }) {
   return (

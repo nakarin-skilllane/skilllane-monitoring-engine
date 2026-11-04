@@ -54,6 +54,25 @@ export function lineKvs(row: LogRow): Kv[] {
   return kvs
 }
 
+/**
+ * Route column: `GET /classes/:id` of the request a line was written in (its own http, else the engine's
+ * requestRoute), `type · queue` of a job line, else ''.
+ */
+export function routeText(row: LogRow): string {
+  const h = row.http
+  // an outbound call (http.domain) is not the request the line was written in
+  if (h && !h.domain && (h.route || h.path)) return `${h.method} ${h.route || h.path}`.trim()
+  if (row.job) return row.job.type && row.job.queue ? `${row.job.type} · ${row.job.queue}` : row.job.type || row.job.queue
+  return row.requestRoute ?? ''
+}
+
+/** lineKvs of a table row: what the Route column already says left out. */
+export function rowKvs(row: LogRow): Kv[] {
+  const h = row.http
+  const inRoute = h && !h.domain && (h.route || h.path) ? ['method', 'route'] : row.job ? ['job'] : []
+  return lineKvs(row).filter((kv) => !inRoute.includes(kv.k))
+}
+
 /** Duration column text, or '' (shown as a muted dash). */
 export const durationText = (row: LogRow) => (row.durationMs === null ? '' : fmtDuration(row.durationMs))
 

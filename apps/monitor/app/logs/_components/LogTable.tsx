@@ -4,7 +4,7 @@
  * (LiveTbody; resetKey = the filters, so new filters do not mark every row as new).
  */
 import Link from 'next/link'
-import { CategoryChip, LevelBadge, NewBadge, ServiceChip, Tag, Ts } from '@/components/badges'
+import { CategoryChip, LevelBadge, NewBadge, ServiceChip, ServiceDot, Tag, Ts } from '@/components/badges'
 import { CopyButton } from '@/components/CopyButton'
 import { DrawerLink } from '@/components/Drawer'
 import { ActualError, ErrorWhatFix, IdChip, KvList } from '@/components/ErrorParts'
@@ -13,7 +13,7 @@ import { fmtCount, fmtDateTime, fmtDuration, fmtTime, fmtTimeMs, fmtTimeSec } fr
 import { buildHref, depAnchor, type Keep } from '@/lib/params'
 import { LEVEL_SHORT, logTitle, logWhatFix } from '@/lib/readable'
 import type { LogRepeat, LogRow } from '@/lib/types'
-import { actualText, durationText, hasErrorDetail, isHintLine, jobContext, lineKvs, moduleLabel, type Outage, outageOf, prettyText } from '../_lib/lines'
+import { actualText, durationText, hasErrorDetail, isHintLine, jobContext, moduleLabel, type Outage, outageOf, prettyText, routeText, rowKvs } from '../_lib/lines'
 import { LogLine } from './LogLine'
 
 export interface Line {
@@ -165,7 +165,7 @@ export function LogTable({
               Level
             </th>
             <th scope="col" className="col-tight">
-              Service / role
+              Route <span className="t-muted lg-th-sub">· จุดสี = service</span>
             </th>
             <th scope="col">
               ข้อความ <span className="t-muted lg-th-sub">· หัวข้อ แล้ว key=value</span>
@@ -185,6 +185,7 @@ export function LogTable({
             const context = row.job ? jobContext(row, rows) : isDep ? outageText(row, outages) : ''
             const depHref = isDep ? `${buildHref('/jobs', keep)}#${depAnchor(row.dependency!.name || row.dependency!.type)}` : undefined
             const cause = causeOf(row)
+            const route = routeText(row)
             return (
               <LogLine
                 key={id}
@@ -202,8 +203,15 @@ export function LogTable({
                     <td className="lg-lvl">
                       <LevelBadge level={row.level} />
                     </td>
-                    <td className="lg-svc">
-                      <ServiceChip service={row.service} role={row.role} order={order} />
+                    <td className="lg-route">
+                      <ServiceDot service={row.service} role={row.role} order={order} />
+                      {route ? (
+                        <span className="mono" title={route}>
+                          {route}
+                        </span>
+                      ) : (
+                        <span className="t-muted">–</span>
+                      )}
                     </td>
                     <td className="lg-msgcell">
                       <div className="lg-msg">
@@ -214,7 +222,7 @@ export function LogTable({
                         {row.error?.category ? <CategoryChip category={row.error.category} /> : null}
                         {row.fingerprint && newFingerprints.has(row.fingerprint) ? <NewBadge /> : null}
                         {mod ? <Tag>{mod}</Tag> : null}
-                        <KvList items={lineKvs(row)} />
+                        <KvList items={rowKvs(row)} />
                         {row.repeat ? <RepeatMark repeat={row.repeat} keep={keep} withDate={withDate} /> : null}
                       </div>
                     </td>
