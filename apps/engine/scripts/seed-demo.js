@@ -1733,6 +1733,37 @@ function rebalance() {
   logLine(t + 3200, r, 'info', 'consumer.joined', 'kafka:school-core-persister', 'Kafka consumer joined group', cols)
 }
 
+/**
+ * The plumbing /logs hides or collapses by default, over the last 3 hours: the load balancer's GET /health
+ * on both API hosts every 10 s with the app's own "request middleware" line, Redis cache hits, the
+ * notification worker polling every 5 s, and 2 minutes of a reconnect error flooding at 2 per second.
+ */
+function noise() {
+  const from = NOW - 3 * HOUR
+  for (let t = from; t < NOW - 2000; t += 10_000) {
+    for (const host of [0, 1]) {
+      const r = res(CORE, 'api', t, host)
+      const at0 = t + host * 37 + between(0, 20)
+      logLine(at0, r, 'info', 'app.log', 'App', 'request middleware')
+      logLine(at0 + between(2, 8), r, 'info', 'http.request', 'HttpRequest', 'HTTP request', {
+        http_method: 'GET', http_route: '/health', url_path: '/health', http_status: 200, duration_ms: round3(between(2, 8)),
+      })
+    }
+    if (chance(0.3)) {
+      logLine(t + between(100, 9000), res(CORE, 'api', t, int(0, 1)), 'info', 'app.log', 'RedisCacheManager', `Cache hit for key: course-media/${hex(32)}.png:2026-11-05`)
+    }
+  }
+  for (let t = from; t < NOW - 2000; t += 5000) {
+    logLine(t + between(0, 40), res(CORE, 'worker', t, 0), 'info', 'app.log', 'NotificationPoller', `Polling for new jobs… found ${int(0, 2)}`)
+  }
+  const flood = NOW - 40 * 60_000
+  for (let t = flood; t < flood + 2 * 60_000; t += 500) {
+    logLine(t + between(0, 30), res(CORE, 'worker', t, 0), 'error', 'app.error', 'IORedisClient', `Reconnecting to Redis ${REDIS_QUEUE.host}:${REDIS_QUEUE.port} failed: connect ETIMEDOUT`, {
+      error_type: 'Error', error_message: 'connect ETIMEDOUT',
+    })
+  }
+}
+
 // ---------------------------------------------------------------- generate
 /** n random times in the day, as a sorted array. */
 const times = (n, sample = inDay) => Array.from({ length: n }, sample).sort((a, b) => a - b)
@@ -1825,6 +1856,7 @@ function generate() {
   deployEvents()
   cacheOutage()
   rebalance()
+  noise()
 }
 
 // ---------------------------------------------------------------- reset + insert
