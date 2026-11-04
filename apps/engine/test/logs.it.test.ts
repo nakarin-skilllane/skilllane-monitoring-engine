@@ -49,6 +49,10 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
     log(start + i * 5 * MIN + 16, { ...cron, event_code: 'job.finished', message: 'job finished', duration_ms: 4 })
   }
   log(start + 3 * 5 * MIN + 17, { logger: 'Cron', event_module: 'cron', job_queue: 'cron', job_type: 'AnnouncementCronService.handleCron', job_id: 'c3', level: 'error', event_code: 'job.failed', message: 'job failed' })
+  // a cron that runs once (a daily 05:00 job): not frequent, never hidden
+  const daily = { logger: 'Cron', event_module: 'cron', job_queue: 'cron', job_type: 'ReportCronService.daily', job_id: 'd1' }
+  log(start + 20 * MIN + 18, { ...daily, event_code: 'job.started', message: 'job started' })
+  log(start + 20 * MIN + 19, { ...daily, event_code: 'job.finished', message: 'job finished', duration_ms: 900 })
   // bursts: 7 lines 50 ms apart, twice 5 s apart (two marked lines); 3 in a row stay (not more than 3)
   for (const at of [start + 5 * MIN, start + 5 * MIN + 5000]) {
     for (let i = 0; i < 7; i++) log(at + i * 50 + 12, { logger: 'DatabaseModule', message: 'Session schema set to: MICA2_DEV' })
@@ -62,7 +66,7 @@ function fixture(endMs: number): Array<Record<string, unknown>> {
   return out
 }
 
-const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1
+const TOTAL = 3 * 450 + 900 + 2 * 600 + 3 + 10 + 100 + 150 + 5 + 14 + 3 + 8 + 12 + 1 + 2
 const NOISE = 450 + 10 + 450 + 100 + 12
 
 describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_IT=1, docker compose up -d clickhouse)', () => {
@@ -159,8 +163,9 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       expect(rows.filter((x) => x.logger === 'RedisClient')).toHaveLength(1)
       expect(rows.filter((x) => x.logger === 'Poller')).toHaveLength(1)
       expect(rows.filter((x) => x.logger === 'Importer')).toHaveLength(1)
-      expect(rows.filter((x) => x.eventCode === 'job.finished')).toHaveLength(600)
-      expect(rows.filter((x) => x.eventModule === 'cron').map((x) => x.eventCode)).toEqual(['job.failed'])
+      expect(rows.filter((x) => x.eventCode === 'job.finished' && x.job?.queue === 'mail')).toHaveLength(600)
+      const crons = rows.filter((x) => x.eventModule === 'cron')
+      expect(crons.map((x) => `${x.job?.type} ${x.eventCode}`)).toEqual(['ReportCronService.daily job.finished', 'ReportCronService.daily job.started', 'AnnouncementCronService.handleCron job.failed'])
       expect(rows.filter((x) => x.http?.route === '/courses')).toHaveLength(600)
       expect(rows.filter((x) => x.logger === 'ExamService')).toHaveLength(5)
     })

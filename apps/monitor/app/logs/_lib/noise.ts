@@ -14,7 +14,7 @@ export const NOISE_LABEL: Record<NoiseGroup, { label: string; hint: string }> = 
   preflight: { label: 'CORS preflight', hint: 'OPTIONS ที่ตอบต่ำกว่า 400' },
   middleware: { label: 'Middleware', hint: 'log ทั่วไปที่ข้อความมีคำว่า middleware' },
   cache: { label: 'Cache hit / set', hint: 'logger ที่ชื่อมี cache หรือข้อความ Cache hit / miss / set …' },
-  cron: { label: 'Cron ที่ทำงานปกติ', hint: 'job.started / job.finished ของ cron · รอบที่ล้ม (job.failed) ยังแสดง' },
+  cron: { label: 'Cron ที่รันถี่และทำงานปกติ', hint: 'cron ที่รันทุก 15 นาทีหรือถี่กว่า · cron รายวันและรอบที่ล้มยังแสดง' },
 }
 
 export function shownNoise(show: string | undefined, narrowed: boolean): NoiseGroup[] {

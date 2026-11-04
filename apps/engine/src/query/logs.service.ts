@@ -16,6 +16,7 @@ import {
   BURST,
   COLLAPSE,
   COLLAPSIBLE_SQL,
+  frequentRuns,
   NOISE_GROUPS,
   NOISE_SQL,
   PATTERN_SQL,
@@ -90,11 +91,12 @@ function patternBranches(variants: Where[]): string {
     .join('\n UNION ALL \n')
 }
 
-function hidingOf(q: QueryString): Hiding {
+/** `frequentCron` = the crons the `cron` group may hide (LogsService.frequentCron). */
+function hidingOf(q: QueryString, frequentCron: string[]): Hiding {
   const parts = parseHide(q).map((g) => `(${NOISE_SQL[g]})`)
   const exclude = optString(q, 'exclude', 200)
   if (exclude) parts.push(EXCLUDE_SQL)
-  return { sql: parts.length ? parts.join(' OR ') : null, params: exclude ? { excludeLike: likePattern(exclude) } : {}, exclude: !!exclude }
+  return { sql: parts.length ? parts.join(' OR ') : null, params: { frequentCron, ...(exclude ? { excludeLike: likePattern(exclude) } : {}) }, exclude: !!exclude }
 }
 
 /** How far after an error line its request's `http.request` line may come (written when the response ends). */
@@ -206,7 +208,7 @@ export class LogsService {
     const limit = optInt(q, 'limit', 1, 500, 100)
     const beforeRaw = optString(q, 'before', 40)
     const before = beforeRaw === undefined ? undefined : parseTime('before', beforeRaw, Date.now())
-    const hiding = hidingOf(q)
+    const hiding = hidingOf(q, await this.frequentCron(c))
     const levels = parseLevels(q)
     const variants = this.variants(q, c, true, hiding)
     // levelCounts: every level, hidden lines counted apart (countIf)
@@ -328,6 +330,20 @@ export class LogsService {
           }
         : null,
     }
+  }
+
+  /** `<queue> <type>` of the crons that ran often enough in the range to be noise (noise.ts CRON). */
+  private async frequentCron(c: Common): Promise<string[]> {
+    const w = scoped(c)
+    const rows = await this.reader.rows<{ k: string }>(
+      'logs.cron',
+      `SELECT concat(job_queue, ' ', job_type) AS k FROM skilllane_monitoring.logs
+       WHERE ${w.sql} AND event_module = 'cron' AND event_code IN ('job.started', 'job.finished')
+       GROUP BY k
+       HAVING greatest(countIf(event_code = 'job.started'), countIf(event_code = 'job.finished')) >= {cronRuns:UInt32}`,
+      { ...w.params, cronRuns: frequentRuns(c.toMs - c.fromMs) },
+    )
+    return rows.map((r) => r.k)
   }
 
   /**

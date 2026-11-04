@@ -24,9 +24,16 @@ export const NOISE_SQL: Record<NoiseGroup, string> = {
   preflight: `${QUIET} AND ${OK_REQUEST} AND http_method = 'OPTIONS'`,
   middleware: `${QUIET} AND ${FREE_TEXT} AND positionCaseInsensitive(message, 'middleware') > 0`,
   cache: `${QUIET} AND ${FREE_TEXT} AND (positionCaseInsensitive(logger, 'cache') > 0 OR match(message, '(?i)^cache (hit|miss|set|get|del)'))`,
-  // a scheduled run that went fine; job.failed / job.retry and BullMQ, Kafka, RabbitMQ jobs (one per user action) stay
-  cron: `${QUIET} AND event_module = 'cron' AND event_code IN ('job.started', 'job.finished')`,
+  // a run that went fine of a frequent cron (`frequentCron`: CRON); a daily job, job.failed / job.retry and BullMQ,
+  // Kafka, RabbitMQ jobs (one per user action) stay
+  cron: `${QUIET} AND event_module = 'cron' AND event_code IN ('job.started', 'job.finished') AND concat(job_queue, ' ', job_type) IN {frequentCron:Array(String)}`,
 }
+
+/** A cron (queue + type) is frequent with at least `minRuns` runs and `perHour` on average over the range (every 15 min or more often). */
+export const CRON = { minRuns: 3, perHour: 4 } as const
+
+/** Runs a cron needs in a range of `rangeMs` to be frequent. */
+export const frequentRuns = (rangeMs: number): number => Math.max(CRON.minRuns, Math.ceil((CRON.perHour * rangeMs) / 3_600_000))
 
 /** The message (else the error message) with what changes per occurrence turned into `*` (`[GetUsersHandler]` → `[*]`). */
 export const TEMPLATE_SQL =
