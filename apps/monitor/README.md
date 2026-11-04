@@ -121,7 +121,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
 
 - **Server components call `engine.*`** from `lib/engine.ts` (`health, meta, overview, logs, traces, trace(id),
   errors, error(fp), jobs, dependencies, topology`; `engineGet<T>(path, query)` for anything new). Every call resolves to
-  `{ ok: true, data, ms } | { ok: false, error }`, `no-store`, 8 s timeout. Run independent calls with `Promise.all`.
+  `{ ok: true, data, ms } | { ok: false, error }`, `no-store`, 60 s timeout. Run independent calls with `Promise.all`.
 - **A failed call is a normal state**: render `<EngineErrorState error={res.error} />` (Thai, names the engine URL,
   retry button; 400 shows the engine's message, 404 says not found). Never throw for engine errors; `app/error.tsx`
   is only for bugs. For a block that can fail on its own, render the error state in that block only.

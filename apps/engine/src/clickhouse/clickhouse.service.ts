@@ -38,7 +38,7 @@ export class ClickhouseService implements OnModuleInit, OnApplicationShutdown {
     password: config.clickhouse.readerPassword,
     database: config.clickhouse.database,
     application: 'skilllane-monitoring-engine-query',
-    request_timeout: 30_000,
+    request_timeout: 60_000,
   })
 
   /** Last result of applySchema(); undefined when skipped. */

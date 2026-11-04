@@ -38,7 +38,7 @@ function describe(error: EngineError | ClientEngineError): { title: string; text
         ),
       }
     case 'timeout':
-      return { title: 'engine ตอบช้าเกินไป', text: <>skilllane-monitoring engine ที่ {url} ไม่ตอบภายใน 8 วินาที · ลองช่วงเวลาที่สั้นลง หรือดูว่า ClickHouse ทำงานหนักอยู่หรือไม่</> }
+      return { title: 'engine ตอบช้าเกินไป', text: <>skilllane-monitoring engine ที่ {url} ไม่ตอบภายใน 1 นาที · ลองช่วงเวลาที่สั้นลง หรือดูว่า ClickHouse ทำงานหนักอยู่หรือไม่</> }
     case 'invalid':
       return { title: 'อ่านคำตอบของ engine ไม่ได้', text: <>skilllane-monitoring engine ที่ {url} ตอบกลับมาแต่ไม่ใช่ JSON ({error.message})</> }
     default:

@@ -36,7 +36,7 @@ import type {
   TracesResponse,
 } from './types'
 
-export const ENGINE_TIMEOUT_MS = 8_000
+export const ENGINE_TIMEOUT_MS = 60_000
 
 /** Base URL of the engine as server code sees it (no trailing slash). */
 export function engineUrl(): string {
@@ -44,7 +44,7 @@ export function engineUrl(): string {
 }
 
 export interface EngineError {
-  /** unreachable = connection refused / DNS; timeout = no answer in 8 s; http = 4xx/5xx; invalid = not JSON. */
+  /** unreachable = connection refused / DNS; timeout = no answer in 60 s; http = 4xx/5xx; invalid = not JSON. */
   kind: 'unreachable' | 'timeout' | 'http' | 'invalid'
   /** HTTP status for kind http, else null. */
   status: number | null
@@ -99,7 +99,7 @@ async function toLoginOn401(): Promise<void> {
   redirect(`/login?next=${encodeURIComponent(`${path}${search}`)}`)
 }
 
-/** GET <ENGINE_URL><path>?<query> with no-store and an 8 s timeout, as the signed-in user. */
+/** GET <ENGINE_URL><path>?<query> with no-store and a 60 s timeout, as the signed-in user. */
 export async function engineGet<T>(path: string, query?: QueryInput): Promise<EngineResult<T>> {
   const base = engineUrl()
   const full = `${path}${toSearch(query)}`

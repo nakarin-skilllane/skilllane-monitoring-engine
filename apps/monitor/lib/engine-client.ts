@@ -33,7 +33,7 @@ export function toLoginOn401(status: number): void {
   window.location.assign(`/login?next=${encodeURIComponent(here)}`)
 }
 
-export async function clientGet<T>(path: string, query?: QueryInput, timeoutMs = 8_000): Promise<ClientResult<T>> {
+export async function clientGet<T>(path: string, query?: QueryInput, timeoutMs = 60_000): Promise<ClientResult<T>> {
   const url = engineClientUrl(path, query)
   const fail = (kind: ClientEngineError['kind'], message: string, status: number | null = null): ClientResult<T> => ({
     ok: false,
