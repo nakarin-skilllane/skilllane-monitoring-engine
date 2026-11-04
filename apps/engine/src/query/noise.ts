@@ -31,11 +31,16 @@ export const NOISE_SQL: Record<NoiseGroup, string> = {
   cron: `${QUIET} AND event_module = 'cron' AND event_code IN ('job.started', 'job.finished') AND concat(job_queue, ' ', job_type) IN {frequentCron:Array(String)}`,
 }
 
-/** A cron (queue + type) is frequent with at least `minRuns` runs and `perHour` on average over the range (every 15 min or more often). */
-export const CRON = { minRuns: 3, perHour: 4 } as const
+/**
+ * A cron (queue + type) is frequent with at least `minRuns` runs in the range, `maxGapS` apart on average (every
+ * 15 min or more often), measured between its own first and last run: a range that starts before the data or an
+ * app that was down does not make a 5-minute cron look rare.
+ */
+export const CRON = { minRuns: 3, maxGapS: 900 } as const
 
-/** Runs a cron needs in a range of `rangeMs` to be frequent. */
-export const frequentRuns = (rangeMs: number): number => Math.max(CRON.minRuns, Math.ceil((CRON.perHour * rangeMs) / 3_600_000))
+/** HAVING of a cron's runs (`runs`, first / last time `first`, `last`) that make it frequent; params `cronRuns`, `cronGapS`. */
+export const FREQUENT_CRON_SQL = "runs >= {cronRuns:UInt32} AND dateDiff('second', first, last) <= {cronGapS:UInt32} * (runs - 1)"
+export const cronParams = { cronRuns: CRON.minRuns, cronGapS: CRON.maxGapS }
 
 /** The message (else the error message) with what changes per occurrence turned into `*` (`[GetUsersHandler]` → `[*]`). */
 export const TEMPLATE_SQL =

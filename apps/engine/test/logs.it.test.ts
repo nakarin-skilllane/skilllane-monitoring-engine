@@ -126,6 +126,11 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
       expect(rows.some((x) => x.http?.method === 'OPTIONS' || x.message === 'request middleware' || x.logger === 'RedisCacheManager')).toBe(false)
     })
 
+    it('a 5-minute cron is frequent in a range much longer than its data', async () => {
+      const r = await logs.search({ env: ENV, from: new Date(end - 6 * 60 * MIN).toISOString(), to: range.to, hide: ALL, limit: '1' })
+      expect(r.hidden.cron).toBe(12)
+    })
+
     it('hidden counts follow the level filter', async () => {
       const r = await logs.search({ ...range, hide: ALL, level: 'error', limit: '1' })
       expect(r.hidden.total).toBe(0)

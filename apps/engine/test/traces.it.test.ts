@@ -86,6 +86,11 @@ describe.skipIf(!process.env.LOGS_IT)('traces noise on ClickHouse (LOGS_IT=1, do
     expect(r.rows.filter((x) => x.kind === 'CLIENT').map((x) => x.isError)).toEqual([true])
   })
 
+  it('a 5-minute cron is frequent in a range much longer than its data (judged by its own runs)', async () => {
+    const r = await traces.list({ env: ENV, from: new Date(end - 6 * 60 * MIN).toISOString(), to: range.to, hide: ALL, limit: '1' })
+    expect(r.hidden.cron).toBe(6)
+  })
+
   it('the sample (spread) picks only from what is shown', async () => {
     const r = await traces.list({ ...range, hide: ALL, sample: 'spread', limit: '500' })
     expect(r.rows).toHaveLength(SHOWN)

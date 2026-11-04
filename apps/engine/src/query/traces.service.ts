@@ -14,7 +14,7 @@ import {
   parseTraceIdPrefix,
 } from './params'
 import { routeCondition } from './logs.service'
-import { frequentRuns, parseTraceHide, TRACE_NOISE_GROUPS, TRACE_NOISE_SQL } from './noise'
+import { cronParams, FREQUENT_CRON_SQL, parseTraceHide, TRACE_NOISE_GROUPS, TRACE_NOISE_SQL } from './noise'
 import {
   type LogDb,
   type LogRow,
@@ -282,9 +282,10 @@ export class TracesService {
     const w = scoped(c).add('is_entry = 1')
     const rows = await this.reader.rows<{ name: string }>(
       'traces.cron',
-      `SELECT name FROM skilllane_monitoring.spans WHERE ${w.sql} AND startsWith(name, 'cron ')
-       GROUP BY name HAVING count() >= {cronRuns:UInt32}`,
-      { ...w.params, cronRuns: frequentRuns(c.toMs - c.fromMs) },
+      `SELECT name, count() AS runs, min(timestamp) AS first, max(timestamp) AS last
+       FROM skilllane_monitoring.spans WHERE ${w.sql} AND startsWith(name, 'cron ')
+       GROUP BY name HAVING ${FREQUENT_CRON_SQL}`,
+      { ...w.params, ...cronParams },
     )
     return rows.map((r) => r.name)
   }

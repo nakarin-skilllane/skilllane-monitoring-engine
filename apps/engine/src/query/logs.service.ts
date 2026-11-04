@@ -16,7 +16,8 @@ import {
   BURST,
   COLLAPSE,
   COLLAPSIBLE_SQL,
-  frequentRuns,
+  cronParams,
+  FREQUENT_CRON_SQL,
   NOISE_GROUPS,
   NOISE_SQL,
   PATTERN_SQL,
@@ -337,11 +338,14 @@ export class LogsService {
     const w = scoped(c)
     const rows = await this.reader.rows<{ k: string }>(
       'logs.cron',
-      `SELECT concat(job_queue, ' ', job_type) AS k FROM skilllane_monitoring.logs
+      `SELECT concat(job_queue, ' ', job_type) AS k,
+              greatest(countIf(event_code = 'job.started'), countIf(event_code = 'job.finished')) AS runs,
+              min(timestamp) AS first, max(timestamp) AS last
+       FROM skilllane_monitoring.logs
        WHERE ${w.sql} AND event_module = 'cron' AND event_code IN ('job.started', 'job.finished')
        GROUP BY k
-       HAVING greatest(countIf(event_code = 'job.started'), countIf(event_code = 'job.finished')) >= {cronRuns:UInt32}`,
-      { ...w.params, cronRuns: frequentRuns(c.toMs - c.fromMs) },
+       HAVING ${FREQUENT_CRON_SQL}`,
+      { ...w.params, ...cronParams },
     )
     return rows.map((r) => r.k)
   }
