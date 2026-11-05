@@ -138,7 +138,7 @@ fn present(value: Option<&Value>) -> bool {
 }
 
 fn first<'a>(values: &[Option<&'a Value>]) -> Option<&'a Value> {
-    values.iter().copied().find(|v| present(*v))
+    values.iter().copied().find(|v| present(*v)).flatten()
 }
 
 static SCHEME: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new(r"(?i)^[a-z][a-z0-9+.-]*://").unwrap());

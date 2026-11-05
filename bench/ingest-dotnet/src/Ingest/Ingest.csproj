@@ -13,7 +13,8 @@
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <TrimMode>partial</TrimMode>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
-    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+    <!-- off: the handlers are RequestDelegates (HttpContext only); the generator mis-intercepts them (CS9144) -->
+    <EnableRequestDelegateGenerator>false</EnableRequestDelegateGenerator>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
