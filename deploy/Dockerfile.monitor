@@ -14,6 +14,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY apps/engine/package.json apps/engine/
 COPY apps/monitor/package.json apps/monitor/
 COPY apps/demo-api/package.json apps/demo-api/
+COPY apps/bullmq-bridge/package.json apps/bullmq-bridge/
 RUN pnpm install --frozen-lockfile --filter @skilllane/monitoring-monitor
 COPY apps/monitor/ apps/monitor/
 RUN pnpm --filter @skilllane/monitoring-monitor build \

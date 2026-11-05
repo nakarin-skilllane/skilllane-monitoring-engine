@@ -6,9 +6,11 @@
  *   node bench/load/verify.mjs --url http://localhost:5100 --env bench-go
  *   CLICKHOUSE_URL=http://localhost:18123 node bench/load/verify.mjs --url … --env … --delete
  *
- * Rows are matched by (timestamp, trace_id, span_id, message) for logs and (trace_id, span_id) for spans. Columns
- * compared as JSON after normalising: numbers vs numeric strings, null vs 0 for duration, map key order.
- * Span I/O columns are not compared (the prototypes do not port span I/O). Exits 1 on any difference.
+ * Rows are matched by (timestamp, trace_id, span_id, message) for logs and (trace_id, span_id, timestamp) for
+ * spans. Every column is compared (the 18 captured-I/O columns of spans too), as JSON after normalising: numbers
+ * vs numeric strings, null vs 0 for duration, map key order, and the JSON-text columns the ingest builds itself
+ * (headers, binds, events) parsed and re-serialised with sorted keys, so only their content counts. Exits 1 on
+ * any difference.
  */
 import { clickhouse, encode, envelopes, fixtureFile, poster, query, readJsonl } from './common.mjs'
 
@@ -50,10 +52,22 @@ for (let tries = 0; tries < 60; tries++) {
 }
 
 const LOG_COLS = Object.keys(expectedLogs[0])
-const SPAN_COLS = Object.keys(expectedSpans[0]).filter((k) => !/^(req|res|msg)_|_size$|_truncated$|^db_params$|^url_query$|^has_query$/.test(k))
+const SPAN_COLS = Object.keys(expectedSpans[0])
 const sel = (cols) => cols.map((c) => (c === 'duration_ns' ? 'toString(duration_ns) AS duration_ns' : c === 'timestamp' ? "formatDateTime(timestamp, '%Y-%m-%d %H:%i:%S.%f', 'UTC') AS timestamp" : c)).join(', ')
 const gotLogs = await query(ch, `SELECT ${sel(LOG_COLS)} FROM logs WHERE env = {e:String}`, { e: envName })
 const gotSpans = await query(ch, `SELECT ${sel(SPAN_COLS)} FROM spans WHERE env = {e:String}`, { e: envName })
+
+/** String columns holding JSON the ingest built (headers objects, bind lists, events): compared by content. */
+const JSON_TEXT_COLS = new Set(['req_headers', 'res_headers', 'msg_headers', 'db_params', 'events', 'error_cause'])
+const canonical = (v) => (Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, canonical(x)])) : v)
+function jsonText(s) {
+  if (typeof s !== 'string' || !s) return s
+  try {
+    return JSON.stringify(canonical(JSON.parse(s)))
+  } catch {
+    return s
+  }
+}
 
 /** A comparable value: ClickHouse returns numbers for UInt, strings for DateTime64; keep maps as sorted JSON. */
 function norm(col, v, table) {
@@ -69,6 +83,7 @@ function norm(col, v, table) {
   if (col === 'duration_ms') return Math.round(Number(v) * 1000) / 1000
   if (typeof v === 'number') return String(v)
   if (typeof v === 'boolean') return v ? '1' : '0'
+  if (JSON_TEXT_COLS.has(col)) return jsonText(v)
   return String(v)
 }
 
@@ -95,7 +110,7 @@ function compare(table, cols, expected, got, keyOf) {
   }
   const extra = got.length - (expected.length - missing)
   const ok = !missing && !diffs.size && extra === 0
-  console.log(`${table}: expected ${expected.length}, got ${got.length}, missing ${missing}, extra ${extra}, columns differing: ${diffs.size ? [...diffs].map(([c, n]) => `${c}(${n})`).join(' ') : 'none'} → ${ok ? 'OK' : 'FAIL'}`)
+  console.log(`${table}: expected ${expected.length}, got ${got.length}, missing ${missing}, extra ${extra}, columns compared ${cols.length}, differing: ${diffs.size ? [...diffs].map(([c, n]) => `${c}(${n})`).join(' ') : 'none'} → ${ok ? 'OK' : 'FAIL'}`)
   for (const s of samples) console.log('  ', JSON.stringify(s))
   return ok
 }

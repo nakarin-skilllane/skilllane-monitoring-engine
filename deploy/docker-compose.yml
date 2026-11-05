@@ -1,18 +1,62 @@
-# skilllane-monitoring on one machine: ClickHouse + engine + monitor, no reverse proxy.
-# The engine and monitor images are built here from this repo (setup-vm.sh clones it,
+# skilllane-monitoring on one machine: ClickHouse + ingest + engine + monitor, no reverse proxy.
+# The ingest, engine and monitor images are built here from this repo (setup-vm.sh clones it,
 # builds and starts); the SDK and its wire contract come from npm (skilllane-monitoring).
 #
 #   cp ../.env.example ../.env && ln -s ../.env .env   # one .env at the repo root; fill the secrets
-#   docker compose build && docker compose up -d
+#   docker compose --profile rust build && docker compose --profile rust up -d
 #
-# Set ENGINE_IMAGE / MONITOR_IMAGE / IMAGE_TAG to run images pulled from a registry
+# Set INGEST_IMAGE / ENGINE_IMAGE / MONITOR_IMAGE / IMAGE_TAG to run images pulled from a registry
 # instead (deploy/build-push.sh pushes them to GHCR); `docker compose pull` then.
 #
-# The monitor (http://localhost:3300) and the engine (http://localhost:5100) are published on
+# Who ingests = the profile, INGEST in .env (DEPLOY.md "Rollback"):
+#   rust (default)  ingest (apps/ingest, Rust) takes HTTP + the queue on :5100; the engine runs
+#                   ENGINE_ROLE=api with no published port (query API, auth, reports, schema, cold
+#                   storage) and the monitor reaches it as http://engine:5100 on the compose network.
+#   node            the engine ingests itself as before (service engine-all: ENGINE_ROLE=all, :5100,
+#                   network alias `engine`); the ingest service does not run.
+#   bullmq          add it to rust when LOG_EXPORT=bullmq: service bullmq-bridge (apps/bullmq-bridge)
+#                   feeds the BullMQ jobs to the ingest over HTTP.
+#   docker compose --profile $INGEST up -d   · switching: stop the other profile's services first
+#   (compose does not stop a service whose profile is no longer active; DEPLOY.md has the commands).
+#
+# The monitor (http://localhost:3300) and ingest / engine-all (http://localhost:5100) are published on
 # BIND_ADDRESS (default 127.0.0.1: this machine only; plain HTTP, no TLS). ClickHouse is on the
-# compose network only. The engine's queue is the customer's (LOG_* in .env); with none set it
-# is HTTP ingest only.
+# compose network only. The queue is the customer's (LOG_* in .env); with none set it is HTTP
+# ingest only.
 name: skilllane-monitoring
+
+# The engine image and everything that does not depend on the profile; `engine` and `engine-all`
+# below differ only in ENGINE_ROLE and the published port (compose cannot vary `ports` by profile).
+x-engine: &engine
+  image: ${ENGINE_IMAGE:-skilllane-monitoring-engine}:${IMAGE_TAG:-local}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile.engine
+  env_file: .env
+  depends_on:
+    clickhouse:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5100/api/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
+    interval: 15s
+    timeout: 10s
+    retries: 5
+    start_period: 40s
+  deploy:
+    resources:
+      limits:
+        memory: ${ENGINE_MEMORY_LIMIT:-1500m}
+  restart: unless-stopped
+
+# Inside the compose network; these win over anything in .env (ENGINE_ROLE too: the profile sets it).
+x-engine-environment: &engine-environment
+  CLICKHOUSE_URL: http://clickhouse:8123
+  ENGINE_PORT: "5100"
+  ENGINE_CORS_ORIGIN: ${ENGINE_CORS_ORIGIN:-http://localhost:3300}
+  # Only with an S3 URL: without one the tables keep the default policy.
+  CLICKHOUSE_COLD_STORAGE_POLICY: ${CLICKHOUSE_S3_URL:+tiered}
+  # Daily report export (PNG / PDF).
+  GOTENBERG_URL: http://gotenberg:3000
 
 services:
   clickhouse:
@@ -54,38 +98,92 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  engine:
-    image: ${ENGINE_IMAGE:-skilllane-monitoring-engine}:${IMAGE_TAG:-local}
+  # ---- profile rust (INGEST=rust, default) --------------------------------------------------
+  # Rust ingest (apps/ingest): POST /api/ingest/<stream> + the queue consumer, writes ClickHouse.
+  # Reads the same .env as the engine (SPEC.md section 5; LOG_*, ENGINE_INGEST_*, ENGINE_FLUSH_*,
+  # ENGINE_CONCURRENCY, ENGINE_INSERT_INFLIGHT). It does not apply the schema: it waits for the
+  # engine (healthy = schema applied) and then for the tables itself.
+  ingest:
+    image: ${INGEST_IMAGE:-skilllane-monitoring-ingest}:${IMAGE_TAG:-local}
     build:
       context: ..
-      dockerfile: deploy/Dockerfile.engine
+      dockerfile: deploy/Dockerfile.ingest
+    profiles: [rust]
     env_file: .env
     environment:
       # Inside the compose network; these win over anything in .env.
       CLICKHOUSE_URL: http://clickhouse:8123
       ENGINE_PORT: "5100"
-      ENGINE_CORS_ORIGIN: ${ENGINE_CORS_ORIGIN:-http://localhost:3300}
-      # Only with an S3 URL: without one the tables keep the default policy.
-      CLICKHOUSE_COLD_STORAGE_POLICY: ${CLICKHOUSE_S3_URL:+tiered}
-      # Daily report export (PNG / PDF).
-      GOTENBERG_URL: http://gotenberg:3000
-    # HTTP ingest + query API. 127.0.0.1 by default: no TLS, so keep it off the network.
+    # HTTP ingest. 127.0.0.1 by default: no TLS, so keep it off the network.
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:5100:5100"
     depends_on:
       clickhouse:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5100/api/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
+      engine:
+        condition: service_healthy
+    # No healthcheck: the image is distroless (no shell, no curl) and the binary has no health
+    # subcommand. From the host: curl http://localhost:5100/api/health; `docker compose logs ingest`
+    # prints a stats line every 30 s.
     deploy:
       resources:
         limits:
-          memory: ${ENGINE_MEMORY_LIMIT:-1500m}
+          memory: ${INGEST_MEMORY_LIMIT:-512m}
     restart: unless-stopped
+
+  # ---- profile bullmq (with rust, only when LOG_EXPORT=bullmq) ----------------------------------
+  # BullMQ reaches the Rust ingest through this small Node service (apps/bullmq-bridge, the same
+  # bullmq library as the engine's consumer): it takes the jobs from LOG_BULLMQ_REDIS_URL and POSTs
+  # each envelope to the ingest (202 = complete, 400 = unrecoverable, 503 / network = retry).
+  #   docker compose --profile rust --profile bullmq up -d
+  bullmq-bridge:
+    image: ${BULLMQ_BRIDGE_IMAGE:-skilllane-monitoring-bullmq-bridge}:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.bullmq-bridge
+    profiles: [bullmq]
+    env_file: .env
+    environment:
+      # LOG_BULLMQ_REDIS_URL, LOG_BULLMQ_PREFIX, LOG_TOPIC_*, ENGINE_CONCURRENCY and ENGINE_INGEST_TOKEN come from .env.
+      INGEST_URL: http://ingest:5100
+    depends_on:
+      ingest:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5110/api/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: ${BULLMQ_BRIDGE_MEMORY_LIMIT:-256m}
+    restart: unless-stopped
+
+  # The engine next to the Rust ingest: query API, auth, reports, AI, schema apply, cold storage.
+  # No ingest module and no published port; the monitor reaches it as http://engine:5100.
+  engine:
+    <<: *engine
+    profiles: [rust]
+    environment:
+      <<: *engine-environment
+      ENGINE_ROLE: api
+
+  # ---- profile node (INGEST=node: rollback) ---------------------------------------------------
+  # The engine ingests itself as before (HTTP ingest + consumer + query API) on :5100. Same image
+  # and settings as `engine`; the network alias keeps the monitor's ENGINE_URL valid.
+  engine-all:
+    <<: *engine
+    profiles: [node]
+    networks:
+      default:
+        aliases: [engine]
+    environment:
+      <<: *engine-environment
+      ENGINE_ROLE: all
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:5100:5100"
 
   monitor:
     image: ${MONITOR_IMAGE:-skilllane-monitoring-monitor}:${IMAGE_TAG:-local}
@@ -96,9 +194,14 @@ services:
       ENGINE_URL: http://engine:5100
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:3300:3300"
+    # Whichever engine the profile runs (required: false = the other one, not enabled, is ignored).
     depends_on:
       engine:
         condition: service_healthy
+        required: false
+      engine-all:
+        condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3300/login',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"]
       interval: 15s

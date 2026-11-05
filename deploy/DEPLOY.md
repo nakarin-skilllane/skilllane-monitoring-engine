@@ -39,8 +39,9 @@ nano .env
 
 | ตัวแปร | default | คืออะไร / ใส่เมื่อไหร่ |
 |---|---|---|
-| `BIND_ADDRESS` | `127.0.0.1` | IP ที่ monitor (:3300) และ engine (:5100) รับ · `127.0.0.1` = เข้าได้จากเครื่องนี้เท่านั้น (HTTP ไม่เข้ารหัส อย่าเปิดออก network โดยไม่มี proxy ที่ทำ HTTPS) |
-| `ENGINE_IMAGE`, `MONITOR_IMAGE` | build บนเครื่อง | ใส่เมื่อดึง image จาก registry แทนการ build |
+| `INGEST` | `rust` | ใครรับ telemetry (compose profile, ข้อ 4–5): `rust` = process `ingest` (Rust) ที่ :5100 และ engine เป็น `ENGINE_ROLE=api` · `node` = engine รับเอง (`ENGINE_ROLE=all`) ใช้ rollback |
+| `BIND_ADDRESS` | `127.0.0.1` | IP ที่ monitor (:3300) และ ingest (:5100; engine เมื่อ `INGEST=node`) รับ · `127.0.0.1` = เข้าได้จากเครื่องนี้เท่านั้น (HTTP ไม่เข้ารหัส อย่าเปิดออก network โดยไม่มี proxy ที่ทำ HTTPS) |
+| `INGEST_IMAGE`, `ENGINE_IMAGE`, `MONITOR_IMAGE`, `BULLMQ_BRIDGE_IMAGE` | build บนเครื่อง | ใส่เมื่อดึง image จาก registry แทนการ build |
 | `CLICKHOUSE_DATABASE` | `skilllane_monitoring` | ชื่อ database · ตั้งก่อน start ครั้งแรก |
 | `CLICKHOUSE_USER`, `CLICKHOUSE_READER_USER` | `skilllane_monitoring`, `skilllane_monitoring_reader` | ชื่อ user เขียน / อ่าน · ตั้งก่อน start ครั้งแรก |
 | `SKILLLANE_MONITORING_ADMIN_USERNAME` | `admin` | ชื่อ login ของ admin |
@@ -48,19 +49,21 @@ nano .env
 | `ENGINE_INGEST_HTTP` | `true` | รับ log ทาง HTTP (`POST http://localhost:5100/api/ingest/<stream>`) · `false` เมื่อใช้ queue อย่างเดียว |
 | `ENGINE_INGEST_MAX_BYTES` | `2000000` | ขนาด request สูงสุดต่อครั้ง |
 | `ENGINE_INGEST_MAX_INFLIGHT` | `64` | request ที่เขียนพร้อมกันได้ เกินนี้ตอบ 503 |
-| `ENGINE_ROLE` | `all` | `ingest` / `api` / `all` · เครื่องเดียวใช้ `all` |
-| `ENGINE_APPLY_SCHEMA` | `true` | สร้าง/อัปเดตตารางทุกครั้งที่ engine start |
+| `ENGINE_ROLE` | (compose ตั้งเอง) | ค่าใน `.env` ไม่มีผลกับ deploy: profile `rust` ตั้ง engine เป็น `api`, profile `node` ตั้งเป็น `all` |
+| `ENGINE_APPLY_SCHEMA` | `true` | สร้าง/อัปเดตตารางทุกครั้งที่ engine start (ingest ไม่สร้างตาราง รอ engine) |
 | `ENGINE_CONSUMER_GROUP` | `skilllane-monitoring-engine` | consumer group ของ Kafka |
 | `ENGINE_CONCURRENCY` | `50` | จำนวน message ที่ประมวลผลพร้อมกัน |
 | `ENGINE_FLUSH_MS`, `ENGINE_FLUSH_ROWS` | `1000`, `5000` | เขียน ClickHouse ทุกกี่ ms หรือครบกี่แถว |
+| `ENGINE_INSERT_INFLIGHT` | `1` | (ingest Rust เท่านั้น) insert ที่ซ้อนกันได้ต่อตาราง · `1` = ทีละก้อนเหมือน engine |
 | `ENGINE_CORS_ORIGIN` | `http://localhost:3300` | ใส่เมื่อหน้าเว็บอยู่ที่อื่น |
 | `CLICKHOUSE_MEMORY_LIMIT` | `0` | `0` = ไม่จำกัด (ClickHouse จำกัดตัวเองที่ 90% ของ RAM เครื่อง) · ใส่ขนาด เช่น `6g` เมื่อมีงานอื่นบนเครื่องเดียวกัน |
-| `ENGINE_MEMORY_LIMIT`, `MONITOR_MEMORY_LIMIT` | `1500m`, `1g` | เครื่อง 4 GB ใช้ `1g`, `768m` |
+| `INGEST_MEMORY_LIMIT`, `ENGINE_MEMORY_LIMIT`, `MONITOR_MEMORY_LIMIT` | `512m`, `1500m`, `1g` | เครื่อง 4 GB ใช้ `256m`, `1g`, `768m` |
+| `BULLMQ_BRIDGE_MEMORY_LIMIT` | `256m` | service `bullmq-bridge` (profile `bullmq`, เฉพาะ `LOG_EXPORT=bullmq`) |
 | `GOTENBERG_MEMORY_LIMIT` | `1g` | service `gotenberg` (Chromium) ที่แปลงรายงานเป็น PNG / PDF · engine เรียกผ่าน network ของ compose (`GOTENBERG_URL` ตั้งให้แล้ว) |
 | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | –, `anthropic/claude-sonnet-5.5` | ข้อความ AI ในรายงานประจำวัน · ไม่ใส่ key = ไม่มี AI รายงานยังครบ · เครื่องต้องออก `https://openrouter.ai` ได้ |
 | `REPORT_ENVS`, `REPORT_CRON` | `prod`, `0 9 * * *` | env ที่สร้างรายงานประจำวันอัตโนมัติ และเวลาที่สร้าง (เวลาไทย) · ค่ากฎอื่น `REPORT_*` ดู `.env.example` |
 
-### Queue ของแอป (ใส่เมื่อให้ engine อ่าน queue แทน HTTP)
+### Queue ของแอป (ใส่เมื่อให้ ingest อ่าน queue แทน HTTP)
 
 ว่างทั้งหมด = รับทาง HTTP อย่างเดียว (`.env.example` มี queue ของ dev ใส่ไว้ ต้องลบหรือเปลี่ยน) · ค่าต้องตรงกับที่แอปตั้งใน SDK · queue ต้องเข้าถึงได้จากเครื่องนี้ (ควรมี TLS + auth)
 
@@ -98,6 +101,8 @@ cd ~/skilllane-monitoring-deploy/skilllane-monitoring-engine
 TAG=$(git rev-parse --short HEAD)
 sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$TAG/" .env && rm .env.bak   # ใช้ได้ทั้ง Mac และ Linux
 
+docker build -f deploy/Dockerfile.ingest  -t skilllane-monitoring-ingest:$TAG  .   # Rust ingest (รัน cargo test ใน build, ครั้งแรก ~10 นาที)
+docker build -f deploy/Dockerfile.bullmq-bridge -t skilllane-monitoring-bullmq-bridge:$TAG .   # เฉพาะเมื่อ LOG_EXPORT=bullmq
 docker build -f deploy/Dockerfile.engine  -t skilllane-monitoring-engine:$TAG  .
 docker build -f deploy/Dockerfile.monitor -t skilllane-monitoring-monitor:$TAG .
 docker pull gotenberg/gotenberg:8.37.0-chromium     # export PNG / PDF ของรายงาน (~500 MB)
@@ -105,12 +110,41 @@ docker pull gotenberg/gotenberg:8.37.0-chromium     # export PNG / PDF ของ
 
 ## 4. Run และตรวจ
 
+`INGEST` ใน `.env` เลือกว่าใครรับ telemetry (= compose profile): `rust` (default) = process `ingest` (Rust, `apps/ingest`)
+รับ HTTP + queue ที่ :5100 และ engine รัน `ENGINE_ROLE=api` โดยไม่เปิด port (monitor เรียกผ่าน network ของ compose) ·
+`node` = engine รับเองเหมือนเดิม (`ENGINE_ROLE=all`, :5100) ดูข้อ 5 · `LOG_EXPORT=bullmq` กับ `rust` ต้องเพิ่ม profile `bullmq`
+(service `bullmq-bridge` หยิบ job จาก Redis ส่งให้ ingest ทาง HTTP, health ที่ :5110 ใน compose network)
+
 ```sh
 cd deploy
-docker compose up -d --no-build
-docker compose ps                                   # ทุกตัว healthy
-curl http://localhost:5100/api/health               # {"ok":true,"clickhouse":true,...}
+. ./.env 2>/dev/null; INGEST=${INGEST:-rust}
+docker compose --profile $INGEST up -d --no-build   # LOG_EXPORT=bullmq: docker compose --profile rust --profile bullmq up -d --no-build
+docker compose --profile $INGEST ps                 # engine, monitor, clickhouse healthy · ingest ไม่มี healthcheck (image ไม่มี shell)
+curl http://localhost:5100/api/health               # {"ok":true,"clickhouse":true,"role":"ingest","transport":...,"pending":...}
+docker compose logs -f ingest                       # stats line ทุก 30 วินาที (rows/s ต่อตาราง, insert ล่าสุด, lag)
 ```
 
 เปิด `http://localhost:3300` แล้ว login ด้วย `SKILLLANE_MONITORING_ADMIN_USERNAME` / `SKILLLANE_MONITORING_ADMIN_PASSWORD`
-แอปที่ส่งทาง HTTP ตั้ง `LOG_HTTP_URL=http://localhost:5100` และ `LOG_HTTP_TOKEN=<ENGINE_INGEST_TOKEN>`
+แอปที่ส่งทาง HTTP ตั้ง `LOG_HTTP_URL=http://localhost:5100` และ `LOG_HTTP_TOKEN=<ENGINE_INGEST_TOKEN>` (ไม่ต้องแก้ตอนสลับ profile)
+
+ตอนรอบแรกหลังสลับมา `rust`: ดู `curl :5100/api/health` ว่า `ok: true` และ `pending` ไม่โตขึ้นเรื่อย ๆ, ดู stats line ใน
+`docker compose logs ingest` ว่ามี rows/s และไม่มี `insert failed`, แล้วเทียบจำนวนแถวต่อ service ใน monitor กับช่วงก่อนสลับสัก 1 ชั่วโมง
+
+## 5. Rollback (กลับไปให้ engine ingest เอง)
+
+สลับด้วยตัวแปรเดียว: `INGEST=node` · image ไม่ต้อง build ใหม่ · SDK ของแอปไม่ต้องแก้ (port เดิม :5100) · ข้อมูลอยู่ที่ ClickHouse เหมือนเดิม
+compose **ไม่หยุด** service ของ profile ที่ไม่ active แล้ว ต้อง `stop` เองก่อน ไม่งั้น `ingest` กับ `engine-all` แย่ง :5100 และ queue กัน
+
+```sh
+cd deploy
+sed -i.bak 's/^INGEST=.*/INGEST=node/' .env && rm .env.bak
+docker compose stop ingest engine                   # ของ profile rust (LOG_EXPORT=bullmq: stop bullmq-bridge ด้วย)
+docker compose --profile node up -d --no-build      # engine-all: ENGINE_ROLE=all เปิด :5100 · monitor ยังใช้ http://engine:5100 (network alias)
+docker compose --profile node ps
+curl http://localhost:5100/api/health               # role "all"
+```
+
+กลับมาใช้ Rust: `INGEST=rust` ใน `.env`, `docker compose stop engine-all`, `docker compose --profile rust up -d --no-build`
+(ดูทั้งสอง profile พร้อมกัน: `docker compose --profile rust --profile node ps -a` · ลบ container ที่หยุดแล้ว: `docker compose --profile rust --profile node rm -f`)
+
+ถ้าใช้ `setup-vm.sh` หรือ script ที่สั่ง `docker compose up -d` เฉย ๆ ต้องใส่ `--profile $INGEST` ด้วย ไม่งั้นไม่มี engine ขึ้นเลย (monitor จะรอ)

@@ -30,7 +30,10 @@ skilllane-monitoring-engine/
   clickhouse/users.sql      read-only user skilllane_monitoring_reader (docker initdb)
   ../skilllane-monitoring/  skilllane-monitoring (SDK, with the wire contract at `skilllane-monitoring/contract`), a separate repo, installed from npm
   apps/engine/              @skilllane/monitoring-engine: NestJS. ingest (subscribe → ClickHouse) + query API
+  apps/ingest/              skilllane-monitoring-ingest (Rust): the deployed ingest (HTTP + Kafka / RabbitMQ / BullMQ → ClickHouse), same rows as the engine's
   apps/demo-api/            @skilllane/monitoring-demo-api: NestJS sample app (school-core-api-like) + traffic generator
+  apps/bullmq-bridge/       Node: BullMQ jobs → POST to the Rust ingest (the ingest has no BullMQ client); compose profile `bullmq`
+  deploy/                   docker-compose.yml (clickhouse, ingest, engine, monitor, gotenberg, bullmq-bridge), Dockerfile.{ingest,engine,monitor,bullmq-bridge}, DEPLOY.md
   scripts/                  demo.sh, chaos helpers
   docs/                     DATA-DICTIONARY.md (for people and AI)
   design/monitoring-ui/     HTML design mockups (separate track, see design/monitoring-ui/BRIEF.md)
@@ -118,7 +121,10 @@ The publisher must not trace or log-loop itself: every publish runs inside
 
 ## 5. Environment variables
 
-SDK and engine read the same `.env`; `LOG_EXPORT` picks the queue for both.
+SDK, engine and the Rust ingest (`apps/ingest`) read the same `.env`; `LOG_EXPORT` picks the queue for all of them. The
+ingest reads the `engine` rows that concern ingest (`CLICKHOUSE_URL` / `_USER` / `_PASSWORD` / `_DATABASE`, `LOG_*`,
+`ENGINE_PORT`, `ENGINE_CONSUMER_GROUP`, `ENGINE_CONCURRENCY`, `ENGINE_FLUSH_*`, `ENGINE_INGEST_*`) under the same names,
+plus `ENGINE_INSERT_INFLIGHT`; it ignores the rest (`ENGINE_ROLE`, schema, auth, reports).
 
 | Variable | Side | Default | Meaning |
 |---|---|---|---|
@@ -152,6 +158,8 @@ SDK and engine read the same `.env`; `LOG_EXPORT` picks the queue for both.
 | `ENGINE_KAFKA_PARTITIONS` | engine | `3` | partitions of topics the engine creates |
 | `ENGINE_CONCURRENCY` | engine | `50` | RabbitMQ prefetch, BullMQ worker concurrency |
 | `ENGINE_FLUSH_MS` / `ENGINE_FLUSH_ROWS` | engine | `1000` / `5000` | ClickHouse insert batching per table |
+| `ENGINE_INSERT_INFLIGHT` | ingest (Rust) | `1` | ClickHouse inserts in flight per table; `1` = one at a time, the engine's behaviour (the benchmark's ceiling) |
+| `INGEST` | deploy | `rust` | `deploy/docker-compose.yml` profile: `rust` = service `ingest` on :5100 and the engine as `ENGINE_ROLE=api` with no published port; `node` = the engine ingests itself (`ENGINE_ROLE=all`, :5100), the rollback. `INGEST_MEMORY_LIMIT` (`512m`), `INGEST_IMAGE` next to it |
 | `ENGINE_CORS_ORIGIN` | engine | `*` | for the Next.js frontend on :3300 |
 | `ENGINE_INGEST_HTTP` | engine | `true` | `false` = `POST /api/ingest/*` answers 404 |
 | `ENGINE_INGEST_TOKEN` | engine | – | optional bearer tokens, comma-separated (rotation); empty = no token asked (keep the port internal) |
@@ -256,6 +264,21 @@ status and exception text, `db_statement`, `url_path`, `name`; a body or JSON va
 Modules: `ClickhouseModule` (clients, schema apply), `IngestModule` (when role is `ingest` or `all`), `QueryModule` (when role is `api` or `all`; `GET /api/health` always).
 
 ### Ingest
+
+**Deployed ingest = the Rust process `apps/ingest`** (binary `ingest`, port 5100, image `deploy/Dockerfile.ingest`), since
+2026-11-05 (`docs/superpowers/specs/2026-11-05-ingest-rust-design.md`; benchmark `2026-11-05-ingest-bench-design.md`). It
+implements this section's contract, row for row: the same HTTP ingest (status codes, token, limits), the same consumers
+(Kafka and RabbitMQ with the engine's ack / retry semantics; BullMQ reaches the Rust ingest through the small Node
+service `apps/bullmq-bridge`, compose profile `bullmq`, which uses the same `bullmq` library and semantics as the engine's
+consumer and `POST`s each job's envelope to the ingest: 202 = complete, 400 = unrecoverable, 503 / network = retry), the
+same mappers and mask rules (including the span I/O
+columns), the same writer batching, health shape (`role: "ingest"`) and 30 s stats line. In `deploy/docker-compose.yml`
+the engine then runs `ENGINE_ROLE=api` (query API, auth, reports, AI, schema apply, cold storage) with no published port,
+the ingest takes :5100, both read the same `.env`. The ingest never applies the schema: it waits for the engine to be
+healthy and for the tables to exist. Rollback with one variable: `INGEST=node` (profile `node`: the engine runs
+`ENGINE_ROLE=all` on :5100 and ingests itself as described below; the SDK's `LOG_HTTP_URL` does not change).
+The NestJS ingest stays in `apps/engine` as that rollback and as the reference the Rust rows are verified against
+(`bench/load/verify.mjs`); every column rule below binds both.
 
 - Picks the transport with `resolveExportMode()` from the contract; `http` / `otlp` / `stdout` → no consumer (warn, or
   info when HTTP ingest is on).
@@ -434,6 +457,7 @@ Traffic generator: default 8 req/s (`TRAFFIC_RPS`), 25 users, runs until Ctrl-C.
 `design/monitoring-ui/BRIEF.md`. Static HTML only until approved. The screens consume the §8 API shapes.
 
 ## 12. Change log
+- 2026-11-05 · nakarin + Claude · ingest in Rust: `apps/ingest` (was `bench/ingest-rust`) is the deployed ingest (HTTP + Kafka / RabbitMQ / BullMQ → ClickHouse, same rows and env names as the engine's ingest; `ENGINE_INSERT_INFLIGHT`). `deploy/Dockerfile.ingest` (cargo test in the build, distroless nonroot, no shell so no container healthcheck: `curl :5100/api/health`). `deploy/docker-compose.yml` profiles: `rust` (default; `INGEST` in `.env`) = service `ingest` on :5100 + `engine` as `ENGINE_ROLE=api` with no published port; `node` = `engine-all` (`ENGINE_ROLE=all`, :5100, network alias `engine` so the monitor's `ENGINE_URL` stays `http://engine:5100`); the two engine services share one YAML anchor, the monitor's `depends_on` names both with `required: false`; `bullmq` (with `rust`, only when `LOG_EXPORT=bullmq`) = service `bullmq-bridge` (`apps/bullmq-bridge`, `deploy/Dockerfile.bullmq-bridge`, :5110 on the compose network, `INGEST_URL=http://ingest:5100`). `docker compose --profile $INGEST up -d`; rollback = `INGEST=node`, `docker compose stop ingest engine`, `--profile node up -d` (compose does not stop a service whose profile went inactive; DEPLOY.md §5). Dev `docker-compose.yml` gains service `ingest` (profile `ingest`, built from `apps/ingest`, wired to the compose brokers) for `scripts/demo.sh`. Why: the benchmark (2026-11-05) showed the Rust ingest sustaining several times the engine's rows/s at a fraction of the memory; the engine keeps query, auth, reports and schema.
 
 Agents append one line per deviation from this spec: date, who, what, why.
 - 2026-10-17 · foundation agent · engine reads two extra optional vars: `ENGINE_SCHEMA_FILE` (path of schema.sql; default: searched upward from the engine and cwd) and `ENGINE_ENV_FILE` (default: `./.env`, else `<repo root>/.env`; real env vars win). Engine controllers use no global prefix (each declares `api/...`). Why: robust schema apply and one shared `.env` for SDK and engine.

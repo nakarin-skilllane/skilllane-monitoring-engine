@@ -10,6 +10,8 @@
 #   TRAFFIC_RPS=8         traffic generator rate
 #   LOG_PRETTY=true       readable demo-app logs in .demo/ (false = JSON lines)
 #   DEMO_ENGINE_PORT=5100 engine HTTP port
+#   DEMO_INGEST=rust      rust (default): the Rust ingest container (dev compose profile `ingest`, :5105) takes the
+#                         queue and the engine runs ENGINE_ROLE=api · node: the engine ingests itself (ENGINE_ROLE=all)
 #   DEMO_DRAIN_SECONDS=20 on stop, wait up to this long for the engine to drain the queue
 #   CORE_VERSION=0.2.0-demo     service.version of school-core-api (api + worker)
 #   ETL_VERSION=0.2.0-demo      service.version of school-etl-api
@@ -70,6 +72,11 @@ ETL_VERSION="${SERVICE_VERSION:-${ETL_VERSION:-0.2.0-demo}}"
 unset NODE_OPTIONS # only the demo apps load skilllane-monitoring (the engine never does)
 ENGINE_HTTP_PORT="${DEMO_ENGINE_PORT:-5100}"
 ENGINE_URL="http://localhost:$ENGINE_HTTP_PORT"
+DEMO_INGEST="${DEMO_INGEST:-rust}"
+case "$DEMO_INGEST" in rust | node) ;; *) die "DEMO_INGEST must be rust or node" ;; esac
+# The Rust ingest publishes on INGEST_PORT (dev compose); the engine keeps :5100 for the API.
+export INGEST_PORT="${INGEST_PORT:-5105}"
+INGEST_URL="http://localhost:$INGEST_PORT"
 
 for port in "$ENGINE_HTTP_PORT" 5101 5102; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -123,19 +130,28 @@ stop_all() {
   for pid in $pids; do kill -KILL "$pid" 2>/dev/null; done
 }
 
-# wait_drain: the apps flush their last batch on exit; let the engine write it
+# wait_drain: the apps flush their last batch on exit; let the ingest write it
 # (GET /api/health pending = 0) before it stops, so nothing stays on the queue.
+# With DEMO_INGEST=rust the Rust ingest (or the bullmq-bridge for BullMQ) answers.
 wait_drain() {
-  local n p="" pid limit=$((${DEMO_DRAIN_SECONDS:-20} * 2))
+  local n p="" pid limit=$((${DEMO_DRAIN_SECONDS:-20} * 2)) url who
   [ "$TRANSPORT" = stdout ] && return 0
-  pid=$(pid_of engine)
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 0
+  if [ "$DEMO_INGEST" = rust ]; then
+    who=ingest
+    url="$INGEST_URL/api/health"
+    [ "$TRANSPORT" = bullmq ] && url="http://localhost:${BULLMQ_BRIDGE_PORT:-5110}/api/health"
+  else
+    who=engine
+    url="$ENGINE_URL/api/health"
+    pid=$(pid_of engine)
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 0
+  fi
   for ((n = 0; n < limit; n++)); do
-    p=$(curl -fsS --max-time 2 "$ENGINE_URL/api/health" 2>/dev/null | sed -n 's/.*"pending":\([0-9][0-9]*\).*/\1/p')
+    p=$(curl -fsS --max-time 2 "$url" 2>/dev/null | sed -n 's/.*"pending":\([0-9][0-9]*\).*/\1/p')
     [ "$p" = 0 ] && return 0
     sleep 0.5
   done
-  say "the engine still has ${p:-?} message(s) pending; they stay on the queue for the next run"
+  say "the $who still has ${p:-?} message(s) pending; they stay on the queue for the next run"
 }
 
 cleanup() {
@@ -148,6 +164,10 @@ cleanup() {
   [ -n "$TAIL_PID" ] && kill "$TAIL_PID" 2>/dev/null
   stop_all school-core-api school-core-worker school-etl-api
   wait_drain
+  if [ "$DEMO_INGEST" = rust ]; then
+    say "stopping the Rust ingest container…"
+    docker compose --profile ingest stop ingest bullmq-bridge >/dev/null 2>&1
+  fi
   stop_all engine
   wait 2>/dev/null
   [ ${#PIDS[@]} -gt 0 ] && say "stopped. Logs are in .demo/"
@@ -191,9 +211,30 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
     }
 fi
 
-# --- 3. engine -----------------------------------------------------------------
-say "engine (ENGINE_ROLE=all, :$ENGINE_HTTP_PORT, LOG_EXPORT=$TRANSPORT)…"
-start engine "$ENGINE_DIR" env ENGINE_ROLE=all ENGINE_PORT="$ENGINE_HTTP_PORT" NO_COLOR=1 node dist/main.js
+# --- 3. engine (and the Rust ingest) ------------------------------------------------
+if [ "$DEMO_INGEST" = rust ]; then
+  # The container reads LOG_EXPORT from this environment (dev compose); first build ~10 min.
+  say "rust ingest (dev compose profile ingest, :$INGEST_PORT, LOG_EXPORT=$TRANSPORT)…"
+  docker compose --profile ingest up -d --wait ingest >"$LOG_DIR/ingest-up.log" 2>&1 ||
+    {
+      tail -n 25 "$LOG_DIR/ingest-up.log"
+      die "the ingest container did not start; see .demo/ingest-up.log"
+    }
+  if [ "$TRANSPORT" = bullmq ]; then
+    docker compose --profile ingest up -d --wait bullmq-bridge >>"$LOG_DIR/ingest-up.log" 2>&1 || die "bullmq-bridge did not start; see .demo/ingest-up.log"
+  fi
+  for ((n = 0; n < 60; n++)); do
+    curl -fsS -o /dev/null --max-time 2 "$INGEST_URL/api/health" 2>/dev/null && break
+    sleep 1
+  done
+  curl -fsS -o /dev/null --max-time 2 "$INGEST_URL/api/health" 2>/dev/null || die "the Rust ingest did not answer $INGEST_URL/api/health; docker compose logs ingest"
+  docker compose logs -f --no-log-prefix ingest >"$LOG_DIR/ingest.log" 2>&1 &
+  say "engine (ENGINE_ROLE=api, :$ENGINE_HTTP_PORT)…"
+  start engine "$ENGINE_DIR" env ENGINE_ROLE=api ENGINE_PORT="$ENGINE_HTTP_PORT" NO_COLOR=1 node dist/main.js
+else
+  say "engine (ENGINE_ROLE=all, :$ENGINE_HTTP_PORT, LOG_EXPORT=$TRANSPORT)…"
+  start engine "$ENGINE_DIR" env ENGINE_ROLE=all ENGINE_PORT="$ENGINE_HTTP_PORT" NO_COLOR=1 node dist/main.js
+fi
 wait_http engine "$ENGINE_URL/api/health" 90
 
 # --- 4. demo apps --------------------------------------------------------------
@@ -217,6 +258,7 @@ start traffic "$DEMO_DIR" env TRAFFIC_URL=http://localhost:5101 \
 E="env=$DEMO_ENV"
 cat <<INFO
 
+  ingest     $DEMO_INGEST${DEMO_INGEST:+ · }$([ "$DEMO_INGEST" = rust ] && echo "$INGEST_URL/api/health · .demo/ingest.log" || echo "in the engine")
   transport $TRANSPORT · env $DEMO_ENV · version school-core-api $CORE_VERSION, school-etl-api $ETL_VERSION · logs .demo/<name>.log
   engine     $ENGINE_URL/api/health
              $ENGINE_URL/api/overview?$E&from=now-15m

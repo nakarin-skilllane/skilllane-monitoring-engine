@@ -24,7 +24,8 @@ TAG="${TAG:-$sha$dirty}"
 out=(--load)
 [ "$PUSH" = 1 ] && out=(--push)
 
-for app in engine monitor; do
+# APPS: engine monitor ingest, plus bullmq-bridge for a BullMQ deployment
+for app in ${APPS:-engine monitor ingest}; do
   image="$REGISTRY/skilllane-monitoring-$app"
   echo "== building $image:$TAG ($PLATFORM)"
   docker buildx build --platform "$PLATFORM" \
@@ -34,5 +35,5 @@ for app in engine monitor; do
 done
 
 echo
-echo "images: $REGISTRY/skilllane-monitoring-{engine,monitor}:$TAG (also :latest)"
-echo "on the VM: set IMAGE_TAG=$TAG in deploy/.env, then docker compose pull && docker compose up -d"
+echo "images: $REGISTRY/skilllane-monitoring-{${APPS:-engine,monitor,ingest}}:$TAG (also :latest)"
+echo "on the VM: set IMAGE_TAG=$TAG in deploy/.env, then docker compose --profile \$INGEST pull && docker compose --profile \$INGEST up -d"

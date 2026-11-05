@@ -110,10 +110,15 @@ env_get() { grep -E "^$1=" .env | cut -d= -f2-; }
 [ -n "$(env_get CLICKHOUSE_S3_URL)" ] || say "CLICKHOUSE_S3_URL not set: cold storage off, everything stays on this disk"
 
 # ---- 4. build + up -------------------------------------------------------------------------
-say "building images on this machine (first time: several minutes)"
-$DOCKER compose build
-say "starting"
-$DOCKER compose up -d --remove-orphans
+# INGEST=rust (default) starts the Rust ingest + engine as api; node = the engine ingests (rollback). DEPLOY.md §5.
+INGEST="$(env_get INGEST)"
+INGEST="${INGEST:-rust}"
+PROFILES=(--profile "$INGEST")
+[ "$(env_get LOG_EXPORT)" = bullmq ] && [ "$INGEST" = rust ] && PROFILES+=(--profile bullmq)
+say "building images on this machine (first time: several minutes; the Rust ingest alone ~10)"
+$DOCKER compose "${PROFILES[@]}" build
+say "starting (profiles: ${PROFILES[*]})"
+$DOCKER compose "${PROFILES[@]}" up -d --remove-orphans
 say "waiting for the engine and the monitor"
 for _ in $(seq 1 60); do
   st="$($DOCKER compose ps --format '{{.Service}}={{.Health}}' | tr '\n' ' ')"
@@ -128,6 +133,6 @@ cat <<MSG
   engine    http://localhost:5100/api/health
   apps      LOG_HTTP_URL=http://localhost:5100  LOG_HTTP_TOKEN=$(env_get ENGINE_INGEST_TOKEN)
 
-  logs      cd $DEPLOY && docker compose logs -f engine
+  logs      cd $DEPLOY && docker compose logs -f ingest engine
   update    bash $DEPLOY/setup-vm.sh      (pulls $BRANCH, rebuilds, restarts what changed)
 MSG

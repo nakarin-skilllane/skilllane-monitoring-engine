@@ -9,8 +9,9 @@ built on the VM from git**: one script clones this repo, builds the two images t
 
 ```
 VM:  git clone skilllane-monitoring-engine
-     docker compose build          (Dockerfile.engine, Dockerfile.monitor; pnpm install from npm)
-     docker compose up -d          monitor 127.0.0.1:3300 → engine 127.0.0.1:5100 → clickhouse
+     docker compose --profile rust build   (Dockerfile.ingest, Dockerfile.engine, Dockerfile.monitor)
+     docker compose --profile rust up -d   monitor 127.0.0.1:3300 → engine (api) · ingest 127.0.0.1:5100 → clickhouse
+     (INGEST=node in .env + --profile node = the engine ingests itself: the rollback, DEPLOY.md §5)
 ```
 
 The engine does **not** run a queue: it subscribes to the customer's queue (`LOG_*` in `.env`)
@@ -22,7 +23,7 @@ with the bearer token `ENGINE_INGEST_TOKEN`).
 | `setup-vm.sh` | the whole deploy: Docker, clone/pull the repo, `.env`, build, up. Re-run to update. |
 | `push-to-vm.sh` | runs `setup-vm.sh` on the VM over ssh |
 | `docker-compose.yml`, `clickhouse-init/`, `clickhouse-config/` | what runs; `clickhouse-config/storage-s3.xml` moves log / span parts older than 14 days to S3 when `CLICKHOUSE_S3_*` is set in `.env` (optional) |
-| `Dockerfile.engine`, `Dockerfile.monitor` | the images; build context = this repo's root (`.dockerignore` there) |
+| `Dockerfile.ingest`, `Dockerfile.engine`, `Dockerfile.monitor`, `Dockerfile.bullmq-bridge` | the images; build context = this repo's root (`.dockerignore` there) |
 | `../.env.example` | every setting, dev and deploy in one file; `setup-vm.sh` turns it into the root `.env` with random secrets, and `deploy/.env` is a link to it |
 | `build-push.sh` | optional: build on your Mac and push to GHCR, for a VM too small to build |
 
@@ -111,7 +112,7 @@ NODE_OPTIONS="--require skilllane-monitoring/register" node dist/main.js
 ```
 
 With a queue instead: fill the matching `LOG_*` block in `.env` (brokers / URL reachable from the VM,
-TLS + auth) and `docker compose up -d engine`.
+TLS + auth) and `docker compose --profile rust up -d ingest` (`engine-all` with `--profile node`).
 
 ## Security notes
 
@@ -131,4 +132,4 @@ TLS + auth) and `docker compose up -d engine`.
 `deploy/build-push.sh` builds `linux/arm64` images from your working tree and pushes them to
 `ghcr.io/nakarin-skilllane/skilllane-monitoring-{engine,monitor}:<git sha>`. On the VM set
 `ENGINE_IMAGE`, `MONITOR_IMAGE` and `IMAGE_TAG` in `.env`, `docker login ghcr.io` (read:packages PAT),
-then `docker compose pull && docker compose up -d` instead of `build`.
+then `docker compose --profile $INGEST pull && docker compose --profile $INGEST up -d` instead of `build`.

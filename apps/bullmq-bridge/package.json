@@ -1,0 +1,24 @@
+{
+  "name": "@skilllane/monitoring-bullmq-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "skilllane-monitoring BullMQ bridge: consumes the SDK's BullMQ queues and forwards every job to the ingest service over HTTP",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:it": "BULLMQ_IT=1 vitest run test/bridge.it.test.ts"
+  },
+  "dependencies": {
+    "bullmq": "5.81.5",
+    "ioredis": "5.11.1",
+    "skilllane-monitoring": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "3.1.1"
+  }
+}

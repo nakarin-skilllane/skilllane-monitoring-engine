@@ -11,3 +11,5 @@ node_modules
 .DS_Store
 design
 docs
+# cargo build output of the Rust ingest (deploy/Dockerfile.ingest builds inside the image)
+apps/ingest/target

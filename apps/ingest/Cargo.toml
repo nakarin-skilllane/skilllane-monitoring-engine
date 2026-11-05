@@ -1,0 +1,49 @@
+[package]
+name = "skilllane-monitoring-ingest"
+version = "0.1.0"
+edition = "2021"
+description = "skilllane-monitoring ingest: HTTP, Kafka, RabbitMQ and BullMQ envelopes → ClickHouse (replaces the engine's ingest role)"
+publish = false
+
+[lib]
+name = "ingest"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ingest"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "net", "io-util"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
+serde = { version = "1", features = ["derive"] }
+# float_roundtrip: duration_ms text equal to V8's (serde_json's default parser is off in the last bit)
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+indexmap = { version = "2", features = ["serde"] }
+flate2 = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+regex = "1"
+# ssl-vendored: LOG_KAFKA_SSL / SASL SCRAM need OpenSSL, linked statically (the runtime image has no libssl)
+rdkafka = { version = "0.37", default-features = false, features = ["cmake-build", "tokio", "libz-static", "ssl-vendored"] }
+ryu = "1"
+url = "2"
+bytes = "1"
+futures = "0.3"
+# consumers and process (added for the production ingest; each module says which it uses)
+async-trait = "0.1"
+tokio-util = { version = "0.7", features = ["rt"] }
+lapin = { version = "2", default-features = false, features = ["rustls"] }
+redis = { version = "0.27", default-features = false, features = ["tokio-comp", "script"] }
+sha2 = "0.10"
+subtle = "2"
+hex = "0.4"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[dev-dependencies]
+# router tests: `tower::ServiceExt::oneshot` drives the axum Router without a socket
+tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4

@@ -119,7 +119,7 @@ services:
     <<: *target
     profiles: [rust]
     image: bench-ingest-rust
-    build: { context: ./ingest-rust }
+    build: { context: ../apps/ingest }
 
   ingest-dotnet:
     <<: *target

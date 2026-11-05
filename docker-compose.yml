@@ -1,6 +1,8 @@
 # skilllane-monitoring engine infrastructure (SPEC.md section 6). Infra only: the engine
 # and the demo apps run on the host. Kafka / RabbitMQ / redis-telemetry stand
 # in for the customer's queue; redis-app is the demo app's own Redis.
+# Optional (profile `ingest`): the Rust ingest (apps/ingest) in a container, wired to these
+# brokers, for scripts/demo.sh and manual runs: LOG_EXPORT=kafka docker compose --profile ingest up -d ingest
 name: skilllane-monitoring-engine
 
 services:
@@ -128,6 +130,71 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
+
+  # The Rust ingest (apps/ingest) against this stack's brokers; off unless --profile ingest.
+  # Same variables as the engine (SPEC.md section 5); LOG_EXPORT picks the consumer (kafka |
+  # rabbitmq | bullmq; empty = HTTP only) and is taken from the environment or .env, as demo.sh
+  # exports it. The tables come from docker initdb (clickhouse/schema.sql); the ingest does not
+  # apply the schema. Published on :5100 like the engine run on the host (DEMO_ENGINE_PORT): run
+  # that one as ENGINE_ROLE=api on another port, or set INGEST_PORT.
+  ingest:
+    profiles: [ingest]
+    build:
+      context: ./apps/ingest
+    image: skilllane-monitoring-ingest:dev
+    environment:
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: skilllane_monitoring
+      CLICKHOUSE_PASSWORD: skilllane_monitoring
+      CLICKHOUSE_DATABASE: skilllane_monitoring
+      ENGINE_PORT: "5100"
+      LOG_EXPORT: ${LOG_EXPORT:-}
+      LOG_KAFKA_BROKERS: kafka:9092
+      LOG_RABBITMQ_URL: amqp://skilllane_monitoring:skilllane_monitoring@rabbitmq:5672/
+      LOG_BULLMQ_REDIS_URL: redis://redis-telemetry:6379/0
+      LOG_BULLMQ_PREFIX: ${LOG_BULLMQ_PREFIX:-bull}
+      LOG_RABBITMQ_EXCHANGE: ${LOG_RABBITMQ_EXCHANGE:-skilllane-monitoring.telemetry}
+      LOG_TOPIC_LOGS: ${LOG_TOPIC_LOGS:-skilllane-monitoring.logs}
+      LOG_TOPIC_SPANS: ${LOG_TOPIC_SPANS:-skilllane-monitoring.spans}
+      ENGINE_CONSUMER_GROUP: ${ENGINE_CONSUMER_GROUP:-skilllane-monitoring-engine}
+      ENGINE_CONCURRENCY: ${ENGINE_CONCURRENCY:-50}
+      ENGINE_FLUSH_MS: ${ENGINE_FLUSH_MS:-1000}
+      ENGINE_FLUSH_ROWS: ${ENGINE_FLUSH_ROWS:-5000}
+      ENGINE_INSERT_INFLIGHT: ${ENGINE_INSERT_INFLIGHT:-1}
+      ENGINE_INGEST_HTTP: ${ENGINE_INGEST_HTTP:-true}
+      ENGINE_INGEST_TOKEN: ${ENGINE_INGEST_TOKEN:-}
+    ports:
+      - "127.0.0.1:${INGEST_PORT:-5100}:5100"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    # The brokers are optional (HTTP-only runs): the ingest retries the consumer itself at start.
+    restart: unless-stopped
+
+  # BullMQ → ingest bridge (apps/bullmq-bridge): the ingest has no BullMQ consumer; this takes the
+  # jobs from redis-telemetry and POSTs them to the ingest. Only does anything with LOG_EXPORT=bullmq.
+  bullmq-bridge:
+    profiles: [ingest]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.bullmq-bridge
+    image: skilllane-monitoring-bullmq-bridge:dev
+    environment:
+      INGEST_URL: http://ingest:5100
+      LOG_BULLMQ_REDIS_URL: redis://redis-telemetry:6379/0
+      LOG_BULLMQ_PREFIX: ${LOG_BULLMQ_PREFIX:-bull}
+      LOG_TOPIC_LOGS: ${LOG_TOPIC_LOGS:-skilllane-monitoring.logs}
+      LOG_TOPIC_SPANS: ${LOG_TOPIC_SPANS:-skilllane-monitoring.spans}
+      ENGINE_CONCURRENCY: ${ENGINE_CONCURRENCY:-50}
+      ENGINE_INGEST_TOKEN: ${ENGINE_INGEST_TOKEN:-}
+    ports:
+      - "127.0.0.1:${BULLMQ_BRIDGE_PORT:-5110}:5110"
+    depends_on:
+      ingest:
+        condition: service_started
+      redis-telemetry:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

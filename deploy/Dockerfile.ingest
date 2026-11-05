@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+# skilllane-monitoring ingest image (apps/ingest, Rust): HTTP + Kafka / RabbitMQ / BullMQ envelopes → ClickHouse.
+# Build context = this repo's root, like Dockerfile.engine:
+#   docker build -f deploy/Dockerfile.ingest -t skilllane-monitoring-ingest:$TAG .
+# Same stages as apps/ingest/Dockerfile (build → cargo test → distroless), with the repo-root paths.
+# The tests run here: a broken mask rule or mapper never becomes an image.
+
+FROM rust:1-bookworm AS build
+# librdkafka is built from source (cmake); rustls needs no OpenSSL at runtime.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends cmake libssl-dev pkg-config \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+# Dependencies first: this layer is cached until Cargo.toml / Cargo.lock change.
+COPY apps/ingest/Cargo.toml apps/ingest/Cargo.lock ./
+RUN mkdir -p src tests \
+ && echo 'pub fn placeholder() {}' > src/lib.rs \
+ && echo 'fn main() {}' > src/main.rs \
+ && cargo build --release \
+ && cargo test --release --no-run \
+ && rm -rf src tests
+COPY apps/ingest/ ./
+# Every test of the crate (tests/mask_cases.rs = the SDK's mask cases, unit tests of span I/O, mappers,
+# consumers): a test that needs a live broker must skip itself when its env var is unset.
+# chmod: COPY keeps the build host's file modes; under a umask like 007 nonroot could not run the binary.
+RUN touch src/lib.rs src/main.rs \
+ && cargo test --release -- --nocapture --test-threads=1 \
+ && cargo build --release \
+ && strip target/release/ingest \
+ && chmod a+rX target/release/ingest
+
+# No shell, runs as nonroot (uid 65532): no HEALTHCHECK can run inside; check from the host with
+#   curl http://localhost:5100/api/health   → {"ok":true,"clickhouse":true,"role":"ingest",...}
+FROM gcr.io/distroless/cc-debian12:nonroot
+COPY --from=build /src/target/release/ingest /ingest
+# Same variable names as the engine (SPEC.md section 5); compose sets CLICKHOUSE_URL and ENGINE_PORT itself.
+ENV ENGINE_PORT=5100 \
+    PORT=5100 \
+    TZ=UTC
+EXPOSE 5100
+ENTRYPOINT ["/ingest"]

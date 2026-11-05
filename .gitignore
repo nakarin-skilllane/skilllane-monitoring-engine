@@ -6,3 +6,6 @@ dist.next
 *.tsbuildinfo
 .env
 .DS_Store
+
+# cargo build output of the Rust ingest
+apps/ingest/target/

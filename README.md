@@ -277,6 +277,20 @@ scripts/live.sh stop      # หยุดทั้งหมด (drain queue ก�
 cd apps/engine && ENGINE_ROLE=api node dist/main.js     # :5100, ไม่ subscribe queue
 ```
 
+### Ingest ภาษา Rust (`apps/ingest`) และ deploy
+
+บน server ส่วน ingest ไม่ใช่ NestJS แล้ว: process `ingest` (Rust, [`apps/ingest`](apps/ingest/README.md)) รับ HTTP และ queue
+ทั้ง 3 แบบที่ :5100 แล้วเขียน ClickHouse ได้แถวเหมือน engine ทุกคอลัมน์ (อ่าน `.env` ชุดเดียวกัน ชื่อ env เดิม) ส่วน engine
+รัน `ENGINE_ROLE=api` (query API, login, รายงาน, AI, สร้างตาราง) โดยไม่เปิด port เอง ใน `deploy/docker-compose.yml`
+เลือกด้วยตัวแปรเดียว `INGEST` (`rust` default · `node` = engine รับเองเหมือนเดิม ใช้ rollback) ดู [`deploy/DEPLOY.md`](deploy/DEPLOY.md)
+
+```sh
+docker build -f deploy/Dockerfile.ingest -t skilllane-monitoring-ingest:$TAG .   # รัน cargo test ใน build
+cd deploy && docker compose --profile ${INGEST:-rust} up -d                        # rollback: INGEST=node (DEPLOY.md ข้อ 5)
+```
+
+ใน dev: `LOG_EXPORT=kafka docker compose --profile ingest up -d ingest` รัน ingest ใน container ต่อกับ broker ของ compose นี้ (:5100)
+
 ## 4. Query API (engine, `http://localhost:5100`)
 
 JSON แบบ camelCase, param ร่วม: `env` (ไม่ใส่ = ทุก env), `from` / `to` (ISO หรือ `now-15m`, `now-1h`, `now-6h`, `now-24h`, `now-7d`; default 1 ชั่วโมงล่าสุด), `service`, `role`
@@ -343,6 +357,8 @@ skilllane-monitoring-engine/
   clickhouse/users.sql         user read-only skilllane_monitoring_reader
   ../skilllane-monitoring/     skilllane-monitoring (SDK รวม contract ที่ `skilllane-monitoring/contract`) อยู่ repo แยก ติดตั้งจาก npm
   apps/engine/                 @skilllane/monitoring-engine: src/ingest/ (consumer 3 แบบ, mapper, ClickhouseWriter), src/query/ (API), scripts/seed-demo.js, scripts/publish-sample.js
+  apps/ingest/                 skilllane-monitoring-ingest (Rust): ingest ที่ deploy จริง (HTTP + Kafka / RabbitMQ / BullMQ → ClickHouse) แทนส่วน ingest ของ engine
+  deploy/                      docker-compose.yml (profile rust | node), Dockerfile.ingest / .engine / .monitor, DEPLOY.md
   apps/demo-api/               @skilllane/monitoring-demo-api: NestJS app ตัวอย่าง (school-core-api / school-etl-api) + scripts/traffic.js
   apps/monitor/                @skilllane/monitoring-monitor: skilllane monitor (Next.js 16) อ่าน query API ของ engine
   scripts/demo.sh              เดโมครบวง
