@@ -5,7 +5,7 @@
 #   bench/run.sh node go rust dotnet            every target, every profile, 3 runs
 #   RUNS=1 PROFILES=logs bench/run.sh go        a quick pass
 #   STEPS=8,16,32 STEP_SECONDS=10 …             shorter ramps (default 8…256 connections, 30 s each)
-#   BENCH_INFLIGHT=512 KAFKA_RUNS=0 OUT=bench/results-inflight512 PROFILES=mixed STEPS=64,128,256,512 bench/run.sh …
+#   BENCH_INFLIGHT=512 BENCH_FLUSH_ROWS=20000 OUT=bench/results-wide PROFILES=mixed STEPS=64,128,256,512 bench/run.sh …
 #                                               an HTTP-only pass without the engine's 64-in-flight cap
 #
 # Per target: build its image → truncate the bench tables → start it → verify (correctness gate, fails the target)

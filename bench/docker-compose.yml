@@ -22,7 +22,9 @@ x-target: &target
     # envelopes never fill a 5,000-row batch, so at 1 s every request would wait for the timer (p50 ≈ 1,030 ms at
     # any load). The same value for all four targets keeps the comparison about the language.
     ENGINE_FLUSH_MS: "${BENCH_FLUSH_MS:-100}"
-    ENGINE_FLUSH_ROWS: "5000"
+    # one insert in flight per table (every target): 5,000 rows / insert latency is the write ceiling, the same for
+    # all four; BENCH_FLUSH_ROWS=20000 raises it for the supplementary pass
+    ENGINE_FLUSH_ROWS: "${BENCH_FLUSH_ROWS:-5000}"
     ENGINE_INGEST_MAX_INFLIGHT: "${BENCH_INFLIGHT:-64}"
     ENGINE_INGEST_HTTP: "true"
     ENGINE_ROLE: ingest
