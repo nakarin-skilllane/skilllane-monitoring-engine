@@ -23,6 +23,8 @@ export interface EngineConfig {
   role: EngineRole
   port: number
   corsOrigin: string | string[] | boolean
+  /** ENGINE_QUERY_CACHE_MS (default 10000): query API results kept this long per path + params + permission scope; 0 = off. */
+  queryCacheMs: number
   applySchema: boolean
   /** Explicit path of clickhouse/schema.sql (ENGINE_SCHEMA_FILE); else searched. */
   schemaFile?: string
@@ -116,6 +118,12 @@ function int(env: Env, name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback
 }
 
+/** A whole number ≥ 0 (0 = off), else the fallback. */
+function count(env: Env, name: string, fallback: number): number {
+  const value = Number.parseInt(str(env, name) ?? '', 10)
+  return Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
 /** A positive number (decimals allowed), else the fallback. */
 function float(env: Env, name: string, fallback: number): number {
   const value = Number(str(env, name) ?? '')
@@ -158,6 +166,7 @@ export function loadConfig(env: Env = process.env): EngineConfig {
     role: role(env),
     port: int(env, 'ENGINE_PORT', 5100),
     corsOrigin: corsOrigin(env),
+    queryCacheMs: count(env, 'ENGINE_QUERY_CACHE_MS', 10_000),
     applySchema: bool(env, 'ENGINE_APPLY_SCHEMA', true),
     schemaFile: str(env, 'ENGINE_SCHEMA_FILE'),
     clickhouse: {

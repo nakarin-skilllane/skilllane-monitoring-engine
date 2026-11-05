@@ -1,9 +1,30 @@
 //! Message → envelope → rows → writer (apps/engine envelope-handler.ts). `write` resolves once
 //! the rows are inserted (ack / commit on it).
 
+use crate::config::InsertFormat;
 use crate::mappers::{map_log, map_span, parse_envelope, Envelope, Stream};
 use crate::stats::Stats;
 use crate::writer::Writer;
+
+/// A mapped row encoded either way (LogRow and SpanRow, through their Serialize).
+mod erased {
+    use crate::mappers::Stream;
+    use serde::Serialize;
+
+    pub trait Row {
+        fn json(&self) -> Result<Vec<u8>, String>;
+        fn rowbinary(&self, table: Stream) -> Result<Vec<u8>, String>;
+    }
+
+    impl<T: Serialize> Row for T {
+        fn json(&self) -> Result<Vec<u8>, String> {
+            serde_json::to_vec(self).map_err(|e| e.to_string())
+        }
+        fn rowbinary(&self, table: Stream) -> Result<Vec<u8>, String> {
+            crate::rowbinary::encode(table, self)
+        }
+    }
+}
 use flate2::read::GzDecoder;
 use std::io::Read;
 use std::sync::atomic::Ordering;
@@ -28,17 +49,24 @@ impl Ingest {
         parsed
     }
 
-    /// JSONEachRow lines of the envelope's items (bad items are counted and skipped).
-    pub fn rows(&self, envelope: &Envelope) -> Vec<String> {
+    /// The envelope's items as rows in the writer's format: JSONEachRow lines or RowBinary rows (bad items are
+    /// counted and skipped).
+    pub fn rows(&self, envelope: &Envelope) -> Vec<Vec<u8>> {
         let mut out = Vec::with_capacity(envelope.items.len());
+        let format = self.writer.format();
+        let encode = |row: &dyn erased::Row| -> Result<Vec<u8>, String> {
+            match format {
+                InsertFormat::JsonEachRow => row.json(),
+                InsertFormat::RowBinary => row.rowbinary(envelope.stream),
+            }
+        };
         for item in &envelope.items {
-            let line = match envelope.stream {
-                Stream::Logs => map_log(item, &envelope.resource, &envelope.sent_at).map(|row| serde_json::to_string(&row)),
-                Stream::Spans => map_span(item, &envelope.resource).map(|row| serde_json::to_string(&row)),
+            let encoded = match envelope.stream {
+                Stream::Logs => map_log(item, &envelope.resource, &envelope.sent_at).and_then(|row| encode(&row)),
+                Stream::Spans => map_span(item, &envelope.resource).and_then(|row| encode(&row)),
             };
-            match line {
-                Ok(Ok(line)) => out.push(line),
-                Ok(Err(err)) => self.stats.bad_item(envelope.stream, &err.to_string()),
+            match encoded {
+                Ok(bytes) => out.push(bytes),
                 Err(err) => self.stats.bad_item(envelope.stream, &err),
             }
         }

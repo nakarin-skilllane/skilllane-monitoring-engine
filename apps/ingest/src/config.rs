@@ -72,6 +72,25 @@ impl Transport {
     }
 }
 
+/// The wire format of the ClickHouse inserts (CLICKHOUSE_INSERT_FORMAT).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InsertFormat {
+    /// One JSON object per line, `date_time_input_format=best_effort`: what the engine sends.
+    #[default]
+    JsonEachRow,
+    /// RowBinary with the column list (rowbinary.rs): no JSON parsing on the server.
+    RowBinary,
+}
+
+impl InsertFormat {
+    pub fn name(self) -> &'static str {
+        match self {
+            InsertFormat::JsonEachRow => "jsoneachrow",
+            InsertFormat::RowBinary => "rowbinary",
+        }
+    }
+}
+
 /// LOG_KAFKA_SASL_MECHANISM as the engine accepts it (`plain`, `scram-sha-256`, `scram-sha-512`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KafkaSasl {
@@ -104,6 +123,11 @@ pub struct Config {
     pub flush_rows: usize,
     /// ENGINE_INSERT_INFLIGHT (1 = one insert in flight per table, the engine's behaviour).
     pub insert_inflight: usize,
+    /// ENGINE_ASYNC_INSERT: ClickHouse async inserts (`async_insert=1&wait_for_async_insert=1`, the server
+    /// batches the inserts of every ingest; the answer still waits for the rows to be on disk). Default off.
+    pub async_insert: bool,
+    /// CLICKHOUSE_INSERT_FORMAT: `jsoneachrow` (default, the engine's) or `rowbinary` (rowbinary.rs).
+    pub insert_format: InsertFormat,
     // ---- consumers ----
     pub concurrency: usize,
     pub consumer_group: String,
@@ -172,6 +196,11 @@ impl Config {
             flush_ms: env.num_or("ENGINE_FLUSH_MS", 1000),
             flush_rows: env.num_or("ENGINE_FLUSH_ROWS", 5000) as usize,
             insert_inflight: env.num_or("ENGINE_INSERT_INFLIGHT", 1) as usize,
+            async_insert: env.bool_or("ENGINE_ASYNC_INSERT", false),
+            insert_format: match env.str("CLICKHOUSE_INSERT_FORMAT").map(|v| v.to_lowercase()).as_deref() {
+                Some("rowbinary") => InsertFormat::RowBinary,
+                _ => InsertFormat::JsonEachRow,
+            },
             concurrency: env.num_or("ENGINE_CONCURRENCY", 50) as usize,
             consumer_group: env.str_or("ENGINE_CONSUMER_GROUP", "skilllane-monitoring-engine"),
             kafka_brokers: env.list("LOG_KAFKA_BROKERS"),
@@ -210,6 +239,11 @@ mod tests {
         assert!(c.ingest_http && c.ingest_tokens.is_empty());
         assert_eq!((c.ingest_max_bytes, c.ingest_max_inflight), (2_000_000, 64));
         assert_eq!((c.flush_ms, c.flush_rows, c.insert_inflight, c.concurrency), (1000, 5000, 1, 50));
+        assert!(!c.async_insert);
+        assert!(config(&[("ENGINE_ASYNC_INSERT", "1")]).async_insert);
+        assert_eq!(c.insert_format, InsertFormat::JsonEachRow);
+        assert_eq!(config(&[("CLICKHOUSE_INSERT_FORMAT", "RowBinary")]).insert_format, InsertFormat::RowBinary);
+        assert_eq!(config(&[("CLICKHOUSE_INSERT_FORMAT", "csv")]).insert_format, InsertFormat::JsonEachRow);
         assert_eq!(c.clickhouse_password, "skilllane_monitoring");
         assert_eq!(c.consumer_group, "skilllane-monitoring-engine");
         assert_eq!(c.kafka_partitions, 3);

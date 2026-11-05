@@ -53,7 +53,9 @@ but `false` / `0` / `no` / `off` is true. Numbers must be positive, else the def
 | `ENGINE_INGEST_MAX_INFLIGHT` | `64` | requests written at once; more answer 503 |
 | `ENGINE_FLUSH_ROWS` / `ENGINE_FLUSH_MS` | `5000` / `1000` | insert when this many rows wait, or this long after the first buffered row; high-water = 4 × rows |
 | `ENGINE_INSERT_INFLIGHT` | `1` | inserts in flight per table (1 = the engine's behaviour; the benchmark's ceiling) |
-| `ENGINE_CONCURRENCY` | `50` | RabbitMQ prefetch |
+| `ENGINE_ASYNC_INSERT` | `false` | `async_insert=1&wait_for_async_insert=1` on every insert: ClickHouse merges the batches of every ingest into one part per flush of its own, answers once on disk |
+| `CLICKHOUSE_INSERT_FORMAT` | `jsoneachrow` | `rowbinary` = the rows as RowBinary with the column list (`src/rowbinary.rs`); no JSON parsing on the server. `bench/load/verify.mjs` proves both identical |
+| `ENGINE_CONCURRENCY` | `50` | RabbitMQ prefetch; Kafka: inserts waiting at once over the partition tasks |
 | `ENGINE_CONSUMER_GROUP` | `skilllane-monitoring-engine` | Kafka group |
 | `ENGINE_KAFKA_PARTITIONS` | `3` | partitions of a topic this process has to create |
 | `LOG_TOPIC_LOGS` / `LOG_TOPIC_SPANS` | `skilllane-monitoring.logs` / `.spans` | Kafka topics / RabbitMQ queues |
@@ -98,8 +100,10 @@ skipped, never retried; while a table's buffer is full the consumer waits (backp
 started after ClickHouse is ready, retried with backoff (1 s doubling to 30 s) while the queue is unreachable.
 
 - **Kafka** (`src/kafka.rs`, rdkafka with a statically linked librdkafka): group `ENGINE_CONSUMER_GROUP`
-  on both topics (created with `ENGINE_KAFKA_PARTITIONS` partitions when missing), `auto.offset.reset=earliest`,
-  manual offset store + async commit after each batch's insert; a failed insert is retried with backoff
+  on both topics (created with `ENGINE_KAFKA_PARTITIONS` partitions when missing), `auto.offset.reset=earliest`;
+  one task per assigned partition writes its batches in order (like the engine's `partitionsConsumedConcurrently`),
+  at most `ENGINE_CONCURRENCY` inserts waiting over all of them, the offset stored after each batch's insert and
+  committed by librdkafka every second (and once more at stop); a failed insert is retried with backoff
   (0.5 s → 15 s) until it succeeds or the process stops (then nothing is committed and the batch comes again).
   Messages are gzip JSON envelopes (plain JSON accepted). `lag` = `<topic>[<partition>]=<high watermark −
   committed>` for every partition (no commit yet = from the low watermark, like the engine): one committed-offsets

@@ -188,7 +188,7 @@ async fn rabbitmq_consumer_semantics() {
     let stub_url = start_stub(stub.clone()).await;
     let stats = Arc::new(Stats::default());
     let writer = Writer::new(
-        ClickhouseConfig { url: stub_url, user: "u".into(), password: "p".into(), database: "db".into() },
+        ClickhouseConfig { url: stub_url, user: "u".into(), password: "p".into(), database: "db".into(), ..Default::default() },
         1,
         50,
         stats.clone(),

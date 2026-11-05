@@ -17,24 +17,24 @@ COPY apps/demo-api/package.json apps/demo-api/
 COPY apps/bullmq-bridge/package.json apps/bullmq-bridge/
 RUN pnpm install --frozen-lockfile --filter @skilllane/monitoring-monitor
 COPY apps/monitor/ apps/monitor/
+# next.config.ts: output 'standalone' → .next/standalone holds server.js and only the modules it imports
+# (traced from the repo root, so the tree is /app/apps/monitor/…); static files and public/ are copied next to it.
 RUN pnpm --filter @skilllane/monitoring-monitor build \
- && pnpm install --prod --frozen-lockfile --filter @skilllane/monitoring-monitor \
- && rm -rf apps/monitor/.next/cache
+ && test -f apps/monitor/.next/standalone/apps/monitor/server.js \
+ && mkdir -p apps/monitor/.next/standalone/apps/monitor/.next \
+ && cp -r apps/monitor/.next/static apps/monitor/.next/standalone/apps/monitor/.next/static \
+ && cp -r apps/monitor/public apps/monitor/.next/standalone/apps/monitor/public
 # COPY keeps the build host's file modes: under a umask like 007 USER node could not read them.
-RUN find /app -path '*/node_modules' -prune -o -exec chmod a+rX {} +
+RUN find apps/monitor/.next/standalone -exec chmod a+rX {} +
 
 FROM node:20-bookworm-slim
 ARG ENGINE_URL=http://engine:5100
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 ENGINE_URL=$ENGINE_URL
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 ENGINE_URL=$ENGINE_URL \
+    PORT=3300 HOSTNAME=0.0.0.0
+COPY --from=build /app/apps/monitor/.next/standalone /app
 WORKDIR /app/apps/monitor
-COPY --from=build /app/package.json /app/
-COPY --from=build /app/node_modules /app/node_modules
-COPY --from=build /app/apps/monitor/package.json /app/apps/monitor/next.config.ts ./
-COPY --from=build /app/apps/monitor/node_modules ./node_modules
-COPY --from=build /app/apps/monitor/public ./public
-COPY --from=build --chown=node:node /app/apps/monitor/.next ./.next
 USER node
 EXPOSE 3300
 HEALTHCHECK --interval=15s --timeout=10s --start-period=40s --retries=5 \
   CMD node -e "require('http').get('http://127.0.0.1:3300/login',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"
-CMD ["./node_modules/.bin/next", "start", "-p", "3300"]
+CMD ["node", "server.js"]

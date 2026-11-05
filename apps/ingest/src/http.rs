@@ -281,7 +281,7 @@ mod tests {
 
     fn state(config: Config, clickhouse_url: String, consumer: Option<Arc<dyn Consumer>>) -> AppState {
         let config = Arc::new(config);
-        let ch = ClickhouseConfig { url: clickhouse_url, user: "u".into(), password: "p".into(), database: "db".into() };
+        let ch = ClickhouseConfig { url: clickhouse_url, user: "u".into(), password: "p".into(), database: "db".into(), ..Default::default() };
         let stats = Arc::new(Stats::default());
         let writer = Writer::with_inflight(ch, config.flush_rows, config.flush_ms, config.insert_inflight, stats.clone());
         AppState::new(config, Ingest { writer, stats }, consumer)

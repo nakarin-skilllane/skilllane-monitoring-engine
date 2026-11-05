@@ -1,3 +1,4 @@
+import path from 'node:path'
 import type { NextConfig } from 'next'
 
 /**
@@ -10,6 +11,10 @@ const ENGINE_URL = (process.env.ENGINE_URL || 'http://localhost:5100').replace(/
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // deploy/Dockerfile.monitor ships .next/standalone (the server and only the modules it imports) instead of
+  // node_modules. The lockfile is at the repo root, so the standalone tree keeps apps/monitor/ inside it.
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   // `/` → `/overview` as a real 307 (the query string is passed on).
   async redirects() {
     return [{ source: '/', destination: '/overview', permanent: false }]

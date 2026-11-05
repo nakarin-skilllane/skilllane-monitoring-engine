@@ -68,10 +68,19 @@ CREATE TABLE IF NOT EXISTS skilllane_monitoring.logs
         cityHash64(env, service, error_type, error_code, error_hint, origin_function,
                    if(error_type = '' AND error_hint = '', concat(logger, ':', message), '')),
         0),
+    -- The repeat a line belongs to (/api/logs collapse, pattern): service + role + logger + level + event code
+    -- + the message (else the error message) with `[…]` as `[*]` and uuids, hex ids of 8+ and numbers as `*`.
+    -- Computed once at insert, so repeats / bursts never run the regexes per row. The same expression as
+    -- PATTERN_SQL in apps/engine/src/query/noise.ts (the engine tests check they agree): change both, and an
+    -- existing table with `MODIFY COLUMN` (the ADD COLUMN below is a no-op once the column exists).
+    `pattern`           UInt64 MATERIALIZED cityHash64(service, role, logger, level, event_code,
+        replaceRegexpAll(replaceRegexpAll(if(message != '', message, error_message), '\\[[^\\]]*\\]', '[*]'),
+                         '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{8,}|[0-9]+', '*')),
     `ingested_at`       DateTime64(3, 'UTC') DEFAULT now64(3),
     INDEX idx_trace_id trace_id TYPE bloom_filter(0.001) GRANULARITY 1,
     INDEX idx_user_id user_id TYPE bloom_filter(0.01) GRANULARITY 1,
     INDEX idx_fingerprint error_fingerprint TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_pattern pattern TYPE bloom_filter(0.01) GRANULARITY 1,
     INDEX idx_message lower(message) TYPE ngrambf_v1(3, 65536, 2, 0) GRANULARITY 1,
     INDEX idx_error_message lower(error_message) TYPE ngrambf_v1(3, 65536, 2, 0) GRANULARITY 1
 )
@@ -86,6 +95,21 @@ TTL addDays(toDateTime(timestamp), multiIf(env IN ('prod', 'production'), 90, en
 ALTER TABLE skilllane_monitoring.logs
     RENAME COLUMN IF EXISTS `error_hint_detail` TO `error_detail`,
     RENAME COLUMN IF EXISTS `error_fix` TO `error_how_to_fix`;
+
+-- The `pattern` column + index for a logs table created before 5 Nov 2026 (same expression as in the
+-- CREATE above; metadata only). A no-op on a table created from it. Parts written before this ALTER
+-- have no stored `pattern`: ClickHouse computes it from the expression when read (what every query
+-- did before the column existed) and the index cannot prune them; parts written after it store both.
+-- Optional one-off to backfill the old parts (a mutation that reads every message of the table and
+-- writes one UInt64 per row; run by hand when the stored history must be fast at once — the engine
+-- does not run it, since the daily partitions age out under the TTL anyway):
+--   ALTER TABLE skilllane_monitoring.logs MATERIALIZE COLUMN pattern;
+--   ALTER TABLE skilllane_monitoring.logs MATERIALIZE INDEX idx_pattern;
+ALTER TABLE skilllane_monitoring.logs
+    ADD COLUMN IF NOT EXISTS `pattern` UInt64 MATERIALIZED cityHash64(service, role, logger, level, event_code,
+        replaceRegexpAll(replaceRegexpAll(if(message != '', message, error_message), '\\[[^\\]]*\\]', '[*]'),
+                         '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{8,}|[0-9]+', '*')) AFTER `error_fingerprint`,
+    ADD INDEX IF NOT EXISTS idx_pattern pattern TYPE bloom_filter(0.01) GRANULARITY 1;
 
 -- One row per finished span.
 CREATE TABLE IF NOT EXISTS skilllane_monitoring.spans

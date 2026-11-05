@@ -4,6 +4,13 @@
 //! until it succeeds or the consumer stops (no commit: the messages come again); a message that is not an
 //! envelope is counted and skipped, never retried. `lag` / `pending` read committed offsets against the
 //! high watermarks (a few broker round trips; the health endpoint cuts them at 700 ms).
+//!
+//! Like kafkajs's `eachBatch` with `partitionsConsumedConcurrently` (the engine's), the partitions are written
+//! concurrently: one task per assigned partition writes its batches in order and stores the offsets of each
+//! after its insert (so a partition's stored offset only grows), at most ENGINE_CONCURRENCY inserts waiting at
+//! once over all of them; librdkafka commits the stored offsets every second (`enable.auto.commit`, with
+//! `enable.auto.offset.store` off nothing is stored before its insert) and once more at stop. A partition that
+//! is behind holds the fetch loop (its channel is full), which lets librdkafka's queue fill and the fetch pause.
 
 use crate::config::Config;
 use crate::consumer::Consumer;
@@ -16,17 +23,22 @@ use rdkafka::admin::{AdminClient, AdminOptions, NewTopic, TopicReplication};
 use rdkafka::client::DefaultClientContext;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{CommitMode, Consumer as _, StreamConsumer};
-use rdkafka::message::{BorrowedMessage, Message};
+use rdkafka::error::KafkaError;
+use rdkafka::message::{Message, OwnedMessage};
 use rdkafka::metadata::Metadata;
+use rdkafka::types::RDKafkaErrorCode;
 use rdkafka::{Offset, TopicPartitionList};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::{mpsc, Semaphore};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 /// The most messages taken from the queue before one write (what has been fetched already).
 const BATCH_MAX: usize = 256;
+/// Batches a partition's task may hold unwritten before the fetch loop waits for it.
+const PARTITION_QUEUE: usize = 2;
 const MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
 const BROKER_TIMEOUT: Duration = Duration::from_secs(10);
 /// Per broker call while reading the lag (health gives the whole read 700 ms, the stats line 2 s).
@@ -44,7 +56,9 @@ pub fn new(config: &Config, ingest: Ingest) -> Result<Box<dyn Consumer>, String>
         .set("bootstrap.servers", &brokers)
         .set("group.id", &config.consumer_group)
         .set("client.id", &config.kafka_client_id)
-        .set("enable.auto.commit", "false")
+        // Only stored offsets are committed, and an offset is stored after its insert (the loop below).
+        .set("enable.auto.commit", "true")
+        .set("auto.commit.interval.ms", "1000")
         .set("enable.auto.offset.store", "false")
         .set("auto.offset.reset", "earliest")
         .set("session.timeout.ms", "30000")
@@ -74,6 +88,7 @@ pub fn new(config: &Config, ingest: Ingest) -> Result<Box<dyn Consumer>, String>
         group: config.consumer_group.clone(),
         topics: config.topics(),
         partitions: config.kafka_partitions,
+        concurrency: config.concurrency.max(1),
         ingest,
         running: Mutex::new(None),
         partition_list: Mutex::new(Vec::new()),
@@ -92,6 +107,8 @@ pub struct KafkaConsumer {
     group: String,
     topics: Vec<String>,
     partitions: i32,
+    /// ENGINE_CONCURRENCY: inserts waiting at once over every partition task.
+    concurrency: usize,
     ingest: Ingest,
     running: Mutex<Option<Running>>,
     /// (topic, partition) of both topics, from the metadata read at start (refreshed when empty): the lag read
@@ -123,18 +140,22 @@ impl Consumer for KafkaConsumer {
         let topics: Vec<&str> = self.topics.iter().map(String::as_str).collect();
         consumer.subscribe(&topics).map_err(|e| format!("kafka subscribe: {e}"))?;
         let cancel = CancellationToken::new();
-        let task = tokio::spawn(run(consumer.clone(), self.ingest.clone(), cancel.clone()));
+        let task = tokio::spawn(run(consumer.clone(), self.ingest.clone(), cancel.clone(), self.concurrency));
         *self.running.lock().unwrap() = Some(Running { consumer, task, cancel });
-        stats::info(CONTEXT, &format!("Consuming {} as group {} from {}", self.topics.join(", "), self.group, self.brokers));
+        stats::info(
+            CONTEXT,
+            &format!("Consuming {} as group {} from {} (partitions in parallel, {} inserts at once)", self.topics.join(", "), self.group, self.brokers, self.concurrency),
+        );
         Ok(())
     }
 
     async fn stop(&self) {
         let Some(running) = self.running.lock().unwrap().take() else { return };
         running.cancel.cancel();
-        // The loop finishes the write and commit in progress (or gives up a retry without committing).
+        // The loop lets every partition finish the write in progress, stores and commits (or gives up a retry
+        // without committing).
         if tokio::time::timeout(STOP_TIMEOUT, running.task).await.is_err() {
-            stats::warn(CONTEXT, "stop: the batch in progress did not finish in 30 s; leaving it uncommitted");
+            stats::warn(CONTEXT, "stop: the batches in progress did not finish in 30 s; leaving them uncommitted");
         }
         // Closing leaves the group and may wait for the broker: not on the async runtime.
         let consumer = running.consumer;
@@ -265,72 +286,130 @@ fn partitions_of(metadata: &Metadata, topics: &[String]) -> Vec<(String, i32)> {
     out
 }
 
-async fn run(consumer: Arc<StreamConsumer>, ingest: Ingest, cancel: CancellationToken) {
-    loop {
+/// The fetch loop: takes what librdkafka has fetched, splits it by partition and hands each partition's share
+/// to that partition's task (started on its first message). Stopping: the tasks finish what they hold, then
+/// the stored offsets are committed once more.
+async fn run(consumer: Arc<StreamConsumer>, ingest: Ingest, cancel: CancellationToken, concurrency: usize) {
+    let limit = Arc::new(Semaphore::new(concurrency));
+    let mut tasks: HashMap<(String, i32), PartitionTask> = HashMap::new();
+    'fetch: loop {
         let first = tokio::select! {
-            _ = cancel.cancelled() => return,
+            _ = cancel.cancelled() => break,
             received = consumer.recv() => match received {
-                Ok(message) => message,
+                Ok(message) => message.detach(),
                 Err(err) => {
                     stats::error(CONTEXT, &format!("{err}"));
                     tokio::select! {
-                        _ = cancel.cancelled() => return,
+                        _ = cancel.cancelled() => break,
                         _ = tokio::time::sleep(Duration::from_millis(500)) => continue,
                     }
                 }
             },
         };
-        let mut messages: Vec<BorrowedMessage> = vec![first];
-        // Whatever else was fetched already goes into the same write.
+        let mut messages = vec![first];
+        // Whatever else was fetched already goes into the same round.
         while messages.len() < BATCH_MAX {
             match consumer.recv().now_or_never() {
-                Some(Ok(message)) => messages.push(message),
+                Some(Ok(message)) => messages.push(message.detach()),
                 _ => break,
             }
         }
-        let mut envelopes: Vec<Envelope> = Vec::with_capacity(messages.len());
-        for message in &messages {
-            let source = format!("kafka {}[{}]@{}", message.topic(), message.partition(), message.offset());
-            let Some(payload) = message.payload() else {
-                ingest.stats.messages.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                ingest.stats.bad_envelope(&source, "empty message");
-                continue;
-            };
-            let raw = match gunzip_if_needed(payload, MAX_MESSAGE_BYTES) {
-                Ok(raw) => raw,
-                Err(err) => {
-                    ingest.stats.messages.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    ingest.stats.bad_envelope(&source, &err);
-                    continue;
-                }
-            };
-            if let Ok(envelope) = ingest.parse(&raw, &source) {
-                envelopes.push(envelope);
+        let mut batches: Vec<((String, i32), Vec<OwnedMessage>)> = Vec::new();
+        for message in messages {
+            let key = (message.topic().to_string(), message.partition());
+            match batches.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, batch)) => batch.push(message),
+                None => batches.push((key, vec![message])),
             }
         }
-        let mut attempt = 0u32;
-        loop {
-            match ingest.write(&envelopes).await {
-                Ok(()) => break,
-                Err(err) => {
-                    attempt += 1;
-                    let delay = (500u64 * 2u64.pow(attempt.min(5))).min(15_000);
-                    stats::warn(CONTEXT, &format!("insert failed (attempt {attempt}), retrying in {delay} ms: {err}"));
-                    tokio::select! {
-                        // Stopping: nothing committed, the batch comes again after the restart.
-                        _ = cancel.cancelled() => return,
-                        _ = tokio::time::sleep(Duration::from_millis(delay)) => {}
+        for (key, batch) in batches {
+            let task = tasks.entry(key.clone()).or_insert_with(|| PartitionTask::start(key, consumer.clone(), ingest.clone(), cancel.clone(), limit.clone()));
+            tokio::select! {
+                _ = cancel.cancelled() => break 'fetch,
+                sent = task.tx.send(batch) => {
+                    if sent.is_err() {
+                        // Only when its task ended early (never while running): the batch comes again, uncommitted.
+                        stats::warn(CONTEXT, "a partition task has ended; its batch is left for the next fetch");
                     }
                 }
             }
         }
-        for message in &messages {
-            if let Err(err) = consumer.store_offset_from_message(message) {
-                stats::warn(CONTEXT, &format!("store offset: {err}"));
+    }
+    // Stopping: no more batches; every task writes and stores what it holds, then the stored offsets go out.
+    let handles: Vec<JoinHandle<()>> = tasks.into_values().map(|task| task.handle).collect();
+    for handle in handles {
+        let _ = handle.await;
+    }
+    match consumer.commit_consumer_state(CommitMode::Sync) {
+        // Nothing stored since the last auto commit: nothing to do.
+        Ok(()) | Err(KafkaError::ConsumerCommit(RDKafkaErrorCode::NoOffset)) => {}
+        Err(err) => stats::warn(CONTEXT, &format!("commit: {err}")),
+    }
+}
+
+/// One partition's writes, in order. Dropping `tx` ends the task after what it holds is written and stored.
+struct PartitionTask {
+    tx: mpsc::Sender<Vec<OwnedMessage>>,
+    handle: JoinHandle<()>,
+}
+
+impl PartitionTask {
+    fn start((topic, partition): (String, i32), consumer: Arc<StreamConsumer>, ingest: Ingest, cancel: CancellationToken, limit: Arc<Semaphore>) -> PartitionTask {
+        let (tx, mut rx) = mpsc::channel::<Vec<OwnedMessage>>(PARTITION_QUEUE);
+        let handle = tokio::spawn(async move {
+            while let Some(batch) = rx.recv().await {
+                let envelopes = parse_batch(&ingest, &batch);
+                // Bounded by ENGINE_CONCURRENCY over every partition; a stopped consumer closes the semaphore.
+                let Ok(_permit) = limit.acquire().await else { return };
+                let mut attempt = 0u32;
+                loop {
+                    match ingest.write(&envelopes).await {
+                        Ok(()) => break,
+                        Err(err) => {
+                            attempt += 1;
+                            let delay = (500u64 * 2u64.pow(attempt.min(5))).min(15_000);
+                            stats::warn(CONTEXT, &format!("{topic}[{partition}]: insert failed (attempt {attempt}), retrying in {delay} ms: {err}"));
+                            tokio::select! {
+                                // Stopping: nothing stored, the batch comes again after the restart.
+                                _ = cancel.cancelled() => return,
+                                _ = tokio::time::sleep(Duration::from_millis(delay)) => {}
+                            }
+                        }
+                    }
+                }
+                // Batches arrive in offset order and are written one after another, so the stored offset only grows.
+                if let Some(last) = batch.last() {
+                    if let Err(err) = consumer.store_offset(&topic, partition, last.offset()) {
+                        stats::warn(CONTEXT, &format!("store offset {topic}[{partition}]@{}: {err}", last.offset()));
+                    }
+                }
             }
-        }
-        if let Err(err) = consumer.commit_consumer_state(CommitMode::Async) {
-            stats::warn(CONTEXT, &format!("commit: {err}"));
+        });
+        PartitionTask { tx, handle }
+    }
+}
+
+/// The envelopes of a batch; a message that is not one is counted and skipped.
+fn parse_batch(ingest: &Ingest, messages: &[OwnedMessage]) -> Vec<Envelope> {
+    let mut envelopes: Vec<Envelope> = Vec::with_capacity(messages.len());
+    for message in messages {
+        let source = format!("kafka {}[{}]@{}", message.topic(), message.partition(), message.offset());
+        let Some(payload) = message.payload() else {
+            ingest.stats.messages.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            ingest.stats.bad_envelope(&source, "empty message");
+            continue;
+        };
+        let raw = match gunzip_if_needed(payload, MAX_MESSAGE_BYTES) {
+            Ok(raw) => raw,
+            Err(err) => {
+                ingest.stats.messages.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                ingest.stats.bad_envelope(&source, &err);
+                continue;
+            }
+        };
+        if let Ok(envelope) = ingest.parse(&raw, &source) {
+            envelopes.push(envelope);
         }
     }
+    envelopes
 }

@@ -82,10 +82,20 @@ export const CRON = { minRuns: 3, maxGapS: 900 } as const
 export const FREQUENT_CRON_SQL = "runs >= {cronRuns:UInt32} AND dateDiff('second', first, last) <= {cronGapS:UInt32} * (runs - 1)"
 export const cronParams = { cronRuns: CRON.minRuns, cronGapS: CRON.maxGapS }
 
-/** The message (else the error message) with what changes per occurrence turned into `*` (`[GetUsersHandler]` → `[*]`). */
-export const TEMPLATE_SQL =
-  "replaceRegexpAll(replaceRegexpAll(if(message != '', message, error_message), '\\\\[[^\\\\]]*\\\\]', '[*]'), '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{8,}|[0-9]+', '*')"
+/** The message, else the error message. */
+export const MESSAGE_SQL = "if(message != '', message, error_message)"
+/** `expr` (a message) with what changes per occurrence turned into `*` (`[GetUsersHandler]` → `[*]`, uuids, hex ids of 8+, numbers). */
+export const templateSql = (expr: string): string =>
+  `replaceRegexpAll(replaceRegexpAll(${expr}, '\\\\[[^\\\\]]*\\\\]', '[*]'), '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{8,}|[0-9]+', '*')`
+/** The template of a line's message. */
+export const TEMPLATE_SQL = templateSql(MESSAGE_SQL)
+/**
+ * The repeat key of a line, as an expression. Queries read PATTERN_COLUMN instead: the `logs.pattern` MATERIALIZED
+ * column of clickhouse/schema.sql holds this very expression, computed once at insert (+ a bloom filter index), so
+ * repeats, bursts and `pattern=` never run the regexes per row. Keep the two the same (logs.it.test checks).
+ */
 export const PATTERN_SQL = `cityHash64(service, role, logger, level, event_code, ${TEMPLATE_SQL})`
+export const PATTERN_COLUMN = 'pattern'
 /** Lines a repeat may collapse. */
 export const COLLAPSIBLE_SQL = "event_code != 'http.request' AND NOT startsWith(event_code, 'job.')"
 

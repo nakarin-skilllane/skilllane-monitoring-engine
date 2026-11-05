@@ -13,3 +13,4 @@ pub mod writer;
 pub mod config;
 pub mod consumer;
 pub mod rabbitmq;
+pub mod rowbinary;

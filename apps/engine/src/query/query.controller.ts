@@ -1,10 +1,11 @@
-import { Controller, Get, Param, Query, Req } from '@nestjs/common'
+import { Controller, Get, Param, Query, Req, UseInterceptors } from '@nestjs/common'
 import { type AuthedRequest, RequirePermission, viewableEnvs } from '../auth/auth.guard'
 import { ErrorsService } from './errors.service'
 import { LogsService } from './logs.service'
 import { OpsService } from './ops.service'
 import { OverviewService } from './overview.service'
 import type { QueryString } from './params'
+import { QueryCacheInterceptor, SkipQueryCache } from './query-cache'
 import { TopologyService } from './topology.service'
 import { TracesService } from './traces.service'
 
@@ -15,8 +16,11 @@ import { TracesService } from './traces.service'
  * errorRate values are ratios (0.0042 = 0.42 %). Bad input → 400 with a message.
  * Every route needs a session (AuthGuard); each reads with one permission, and
  * a permission limited to some envs needs `env` set to one of them.
+ * Results are kept ENGINE_QUERY_CACHE_MS (10 s) per path + params + permission
+ * scope (query-cache.ts); `meta` is not, its answer is filtered per user.
  */
 @Controller('api')
+@UseInterceptors(QueryCacheInterceptor)
 export class QueryController {
   constructor(
     private readonly overviewService: OverviewService,
@@ -28,6 +32,7 @@ export class QueryController {
   ) {}
 
   /** Any signed-in user; envs the user cannot read with any permission are left out. */
+  @SkipQueryCache()
   @Get('meta')
   async meta(@Query() q: QueryString, @Req() req: AuthedRequest) {
     const meta = await this.overviewService.meta(q)

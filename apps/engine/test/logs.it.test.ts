@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ClickhouseService } from '../src/clickhouse/clickhouse.service'
 import { config } from '../src/config'
 import { LogsService } from '../src/query/logs.service'
+import { PATTERN_COLUMN, PATTERN_SQL } from '../src/query/noise'
 import type { LogRow } from '../src/query/rows'
 import { Reader } from '../src/query/sql'
 
@@ -202,6 +203,28 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
   })
 
   describe('collapse', () => {
+    it('the stored pattern column is the pattern expression, indexed', async () => {
+      const col = await (await writer.query({
+        query: `SELECT type, default_kind FROM system.columns WHERE database = currentDatabase() AND table = 'logs' AND name = '${PATTERN_COLUMN}'`,
+        format: 'JSONEachRow',
+      })).json<{ type: string; default_kind: string }>()
+      expect(col).toEqual([{ type: 'UInt64', default_kind: 'MATERIALIZED' }])
+      const idx = await (await writer.query({
+        query: `SELECT type FROM system.data_skipping_indices WHERE database = currentDatabase() AND table = 'logs' AND name = 'idx_${PATTERN_COLUMN}'`,
+        format: 'JSONEachRow',
+      })).json<{ type: string }>()
+      expect(idx).toEqual([{ type: 'bloom_filter' }])
+      // every fixture line (brackets, hex ids, uuids, numbers, an error message, an empty message) hashes the same way
+      const rows = await (await writer.query({
+        query: `SELECT count() AS n, countIf(${PATTERN_COLUMN} = ${PATTERN_SQL}) AS same, uniq(${PATTERN_COLUMN}) AS patterns FROM logs WHERE env = '${ENV}'`,
+        format: 'JSONEachRow',
+        clickhouse_settings: { output_format_json_quote_64bit_integers: 0 },
+      })).json<{ n: number; same: number; patterns: number }>()
+      expect(rows[0].n).toBe(TOTAL)
+      expect(rows[0].same).toBe(TOTAL)
+      expect(rows[0].patterns).toBeGreaterThan(10)
+    })
+
     it('keeps the latest line of each fast repeat, marked with its count', async () => {
       const r = await logs.search({ ...range, hide: ALL, collapse: '1', limit: '500' })
       expect(r.collapse).toEqual({ patterns: 3, bursts: 3, lines: 900 + 450 + 150 - 3 + 14 - 2 + 8 - 1, skipped: null })

@@ -24,10 +24,11 @@ import {
   STARTUP_MAX_MS,
   STARTUP_TAIL_MS,
   windowParams,
+  MESSAGE_SQL,
   NOISE_GROUPS,
   NOISE_SQL,
-  PATTERN_SQL,
-  TEMPLATE_SQL,
+  PATTERN_COLUMN,
+  templateSql,
   parseCollapse,
   parseHide,
   parsePattern,
@@ -88,11 +89,14 @@ interface Hiding {
 
 const EXCLUDE_SQL = 'lower(message) LIKE {excludeLike:String}'
 
-/** timestamp, template and pattern key of the collapsible lines the variants match (logs.repeats, logs.bursts). */
+/**
+ * timestamp, message and pattern key (the stored `pattern` column) of the collapsible lines the variants match
+ * (logs.repeats, logs.bursts). The template text is made from `msg` once per pattern, not per line.
+ */
 function patternBranches(variants: Where[]): string {
   return variants
     .map(
-      (v) => `SELECT timestamp, ${TEMPLATE_SQL} AS tpl, cityHash64(service, role, logger, level, event_code, tpl) AS pk
+      (v) => `SELECT timestamp, ${MESSAGE_SQL} AS msg, ${PATTERN_COLUMN} AS pk
        FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${COLLAPSIBLE_SQL}`,
     )
     .join('\n UNION ALL \n')
@@ -248,9 +252,10 @@ export class LogsService {
 
     // One branch per variant, so each LIKE can use its own ngram skip index. A steady repeat or a burst leaves
     // the normal branches and comes back once: its latest line, on the page that line falls on (a burst's last
-    // millisecond may hold several of its lines: one of them).
+    // millisecond may hold several of its lines: one of them). `pattern_id`, not `pattern`: an alias named like
+    // the column would shadow it in the WHERE.
     const folding = repeats.length > 0 || bursts.length > 0
-    const keyCols = folding ? `${PATTERN_SQL} AS pk, toString(pk) AS pattern` : `0 AS pk, '' AS pattern`
+    const keyCols = folding ? `${PATTERN_COLUMN} AS pk, toString(pk) AS pattern_id` : `0 AS pk, '' AS pattern_id`
     const notSteady = repeats.length ? ' AND pk NOT IN {collapsed:Array(UInt64)}' : ''
     const notInBurst = bursts.length
       ? ' AND NOT arrayExists((p, f, l) -> p = pk AND ms >= f AND ms <= l, {bp:Array(UInt64)}, {bf:Array(Int64)}, {bl:Array(Int64)})'
@@ -266,8 +271,8 @@ export class LogsService {
         .map((v) => `SELECT ${LOG_SELECT}, ${keyCols}, toUnixTimestamp64Milli(timestamp) AS ms FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${where}`)
         .join('\n UNION ALL \n')}) ORDER BY timestamp DESC LIMIT 1 BY ${by})${afterCursor}`
     const latest = [
-      ...(repeats.length ? [kept('pk IN {collapsed:Array(UInt64)}', 'pattern')] : []),
-      ...(bursts.length ? [kept('arrayExists((p, l) -> p = pk AND ms = l, {bp:Array(UInt64)}, {bl:Array(Int64)})', 'pattern, ms')] : []),
+      ...(repeats.length ? [kept('pk IN {collapsed:Array(UInt64)}', 'pattern_id')] : []),
+      ...(bursts.length ? [kept('arrayExists((p, l) -> p = pk AND ms = l, {bp:Array(UInt64)}, {bl:Array(Int64)})', 'pattern_id, ms')] : []),
     ]
     const rowsSql = [...normal, ...latest].join('\n UNION ALL \n')
     const histogramSql = variants
@@ -296,7 +301,7 @@ export class LogsService {
     const COUNTS = ['debug', 'info', 'warn', 'error', 'fatal', 'request_error', ...NOISE_GROUPS.map((g) => `noise_${g}`), 'noise_exclude', 'hidden_total']
 
     const [rows, histogram, counts] = await Promise.all([
-      this.reader.rows<LogDb & { pattern: string; ms: number }>('logs', `SELECT * EXCEPT (pk) FROM (${rowsSql}) ORDER BY timestamp DESC LIMIT {limit:UInt32}`, params),
+      this.reader.rows<LogDb & { pattern_id: string; ms: number }>('logs', `SELECT * EXCEPT (pk) FROM (${rowsSql}) ORDER BY timestamp DESC LIMIT {limit:UInt32}`, params),
       this.reader.rows<{ t: number; debug: number; info: number; warn: number; error: number; fatal: number }>(
         'logs.histogram',
         `SELECT t, sum(debug) AS debug, sum(info) AS info, sum(warn) AS warn, sum(error) AS error, sum(fatal) AS fatal
@@ -311,8 +316,8 @@ export class LogsService {
       this.reader,
       rows.map((db) => {
         const row = toLogRow(db)
-        const r = db.pattern ? bySteady.get(db.pattern) : undefined
-        const b = db.pattern && !r ? byBurstEnd.get(`${db.pattern}@${db.ms}`) : undefined
+        const r = db.pattern_id ? bySteady.get(db.pattern_id) : undefined
+        const b = db.pattern_id && !r ? byBurstEnd.get(`${db.pattern_id}@${db.ms}`) : undefined
         if (r) row.repeat = { kind: 'steady', pattern: r.pattern, count: num(r.total), firstSeen: iso(r.first_ts) ?? '', lastSeen: iso(r.last_ts) ?? '', template: r.template }
         else if (b) row.repeat = { kind: 'burst', pattern: b.pattern, count: num(b.n), firstSeen: iso(b.first_ts) ?? '', lastSeen: iso(b.last_ts) ?? '', template: b.template }
         return row
@@ -385,7 +390,8 @@ export class LogsService {
     return {
       startup: rows
         .filter((r) => r.event_code === 'app.started')
-        .map((r) => win(r, num(r.ms) - Math.min(num(r.d), STARTUP_MAX_MS), num(r.ms) + STARTUP_TAIL_MS)),
+        // duration_ms may be fractional; the window bounds go to ClickHouse as Int64
+        .map((r) => win(r, num(r.ms) - Math.min(Math.round(num(r.d)), STARTUP_MAX_MS), num(r.ms) + STARTUP_TAIL_MS)),
       shutdown: rows.filter((r) => r.event_code === 'app.shutdown').map((r) => win(r, num(r.ms), num(r.ms) + SHUTDOWN_MS)),
     }
   }
@@ -416,9 +422,9 @@ export class LogsService {
     const branches = patternBranches(variants)
     return this.reader.rows<RepeatDb>(
       'logs.repeats',
-      `SELECT toString(pk) AS pattern, sum(n) AS total, min(f) AS first_ts, max(l) AS last_ts, any(t1) AS template
+      `SELECT toString(pk) AS pattern, sum(n) AS total, min(f) AS first_ts, max(l) AS last_ts, ${templateSql('any(m)')} AS template
        FROM (
-         SELECT pk, toStartOfMinute(timestamp) AS minute, count() AS n, min(timestamp) AS f, max(timestamp) AS l, any(tpl) AS t1
+         SELECT pk, toStartOfMinute(timestamp) AS minute, count() AS n, min(timestamp) AS f, max(timestamp) AS l, any(msg) AS m
          FROM (${branches}) GROUP BY pk, minute
        )
        GROUP BY pk
@@ -441,11 +447,11 @@ export class LogsService {
     return this.reader.rows<BurstDb>(
       'logs.bursts',
       `SELECT toString(pk) AS pattern, count() AS n, min(timestamp) AS first_ts, max(timestamp) AS last_ts,
-              toUnixTimestamp64Milli(first_ts) AS f_ms, toUnixTimestamp64Milli(last_ts) AS l_ms, any(tpl) AS template
+              toUnixTimestamp64Milli(first_ts) AS f_ms, toUnixTimestamp64Milli(last_ts) AS l_ms, ${templateSql('any(msg)')} AS template
        FROM (
-         SELECT pk, timestamp, tpl, sum(gap) OVER (PARTITION BY pk ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS run
+         SELECT pk, timestamp, msg, sum(gap) OVER (PARTITION BY pk ORDER BY timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS run
          FROM (
-           SELECT pk, timestamp, tpl,
+           SELECT pk, timestamp, msg,
                   dateDiff('millisecond', lagInFrame(timestamp) OVER (PARTITION BY pk ORDER BY timestamp ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), timestamp) > {gapMs:UInt32} AS gap
            FROM (${patternBranches(variants)})
          )
@@ -524,7 +530,7 @@ export class LogsService {
     const fingerprint = optString(q, 'fingerprint', 24)
     if (fingerprint) w.add('error_fingerprint = {fp:UInt64}', { fp: parseFingerprint(fingerprint) })
     const pattern = parsePattern(q)
-    if (pattern !== undefined) w.add(`${PATTERN_SQL} = {pattern:UInt64}`, { pattern })
+    if (pattern !== undefined) w.add(`${PATTERN_COLUMN} = {pattern:UInt64}`, { pattern })
     return w
   }
 }

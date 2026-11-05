@@ -54,7 +54,10 @@ nano .env
 | `ENGINE_CONSUMER_GROUP` | `skilllane-monitoring-engine` | consumer group ของ Kafka |
 | `ENGINE_CONCURRENCY` | `50` | จำนวน message ที่ประมวลผลพร้อมกัน |
 | `ENGINE_FLUSH_MS`, `ENGINE_FLUSH_ROWS` | `1000`, `5000` | เขียน ClickHouse ทุกกี่ ms หรือครบกี่แถว |
-| `ENGINE_INSERT_INFLIGHT` | `1` | (ingest Rust เท่านั้น) insert ที่ซ้อนกันได้ต่อตาราง · `1` = ทีละก้อนเหมือน engine |
+| `ENGINE_INSERT_INFLIGHT` | `1` | (ingest Rust เท่านั้น) insert ที่ซ้อนกันได้ต่อตาราง · `1` = ทีละก้อนเหมือน engine · `.env.example` ตั้ง `2` |
+| `ENGINE_ASYNC_INSERT` | `false` | (ingest Rust เท่านั้น) ใช้ async insert ของ ClickHouse (`async_insert=1`, `wait_for_async_insert=1`): server รวม batch จากทุก ingest เป็น part เดียวต่อรอบ flush ของมันเอง ตอบเมื่อลงดิสก์แล้ว (ack/commit เหมือนเดิม) |
+| `CLICKHOUSE_INSERT_FORMAT` | `jsoneachrow` | (ingest Rust เท่านั้น) `rowbinary` = ส่งแถวเป็น RowBinary แทน JSON (server ไม่ต้อง parse JSON) · เปลี่ยนหลังรัน `node bench/load/verify.mjs` ผ่านกับ ClickHouse รุ่นที่ใช้ |
+| `ENGINE_QUERY_CACHE_MS` | `10000` | engine เก็บผลลัพธ์ของ query API ไว้ในหน่วยความจำนานเท่านี้ (ต่อ path + พารามิเตอร์ + สิทธิ์ของผู้เรียก) · `0` = ปิด |
 | `ENGINE_CORS_ORIGIN` | `http://localhost:3300` | ใส่เมื่อหน้าเว็บอยู่ที่อื่น |
 | `CLICKHOUSE_MEMORY_LIMIT` | `0` | `0` = ไม่จำกัด (ClickHouse จำกัดตัวเองที่ 90% ของ RAM เครื่อง) · ใส่ขนาด เช่น `6g` เมื่อมีงานอื่นบนเครื่องเดียวกัน |
 | `INGEST_MEMORY_LIMIT`, `ENGINE_MEMORY_LIMIT`, `MONITOR_MEMORY_LIMIT` | `512m`, `1500m`, `1g` | เครื่อง 4 GB ใช้ `256m`, `1g`, `768m` |
@@ -148,3 +151,14 @@ curl http://localhost:5100/api/health               # role "all"
 (ดูทั้งสอง profile พร้อมกัน: `docker compose --profile rust --profile node ps -a` · ลบ container ที่หยุดแล้ว: `docker compose --profile rust --profile node rm -f`)
 
 ถ้าใช้ `setup-vm.sh` หรือ script ที่สั่ง `docker compose up -d` เฉย ๆ ต้องใส่ `--profile $INGEST` ด้วย ไม่งั้นไม่มี engine ขึ้นเลย (monitor จะรอ)
+
+### Reader user limits (ClickHouse)
+
+`clickhouse-init/01-reader.sh` creates the read-only user with `max_execution_time 55`, `max_memory_usage 2 GB`,
+`max_threads 8`, `max_concurrent_queries_for_user 16` at first start. A ClickHouse that already exists keeps its old
+settings until this runs once (as the admin user):
+
+```sh
+docker compose exec clickhouse clickhouse-client --user skilllane_monitoring --password "$CLICKHOUSE_PASSWORD" -q \
+  "ALTER USER skilllane_monitoring_reader SETTINGS readonly = 2, max_execution_time = 55, max_memory_usage = 2000000000, max_result_rows = 100000, max_threads = 8, max_concurrent_queries_for_user = 16"
+```
