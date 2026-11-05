@@ -24,6 +24,17 @@ ch() { $C exec -T clickhouse clickhouse-client --user skilllane_monitoring --pas
 load() { $C --profile load run --rm -T loadgen "$@"; }
 
 truncate_tables() { for t in logs spans; do ch "TRUNCATE TABLE skilllane_monitoring.$t"; done; }
+# Empty the Kafka topics: a target's fresh consumer group would otherwise start at the beginning of what earlier runs
+# produced (and consume it while the HTTP ramp runs, or drain 1.5M rows while being credited for 500k).
+reset_topics() {
+  for t in skilllane-monitoring.logs skilllane-monitoring.spans; do
+    $C exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --delete --topic "$t" >/dev/null 2>&1 || true
+  done
+  sleep 3
+  for t in skilllane-monitoring.logs skilllane-monitoring.spans; do
+    $C exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic "$t" --partitions 3 --replication-factor 1 >/dev/null
+  done
+}
 apply_schema() {
   ch "CREATE DATABASE IF NOT EXISTS skilllane_monitoring"
   $C exec -T clickhouse clickhouse-client --user skilllane_monitoring --password skilllane_monitoring --multiquery < clickhouse/schema.sql
@@ -55,6 +66,7 @@ for target in "$@"; do
   say "$target: build"
   $C --profile "$target" build "$svc"
   truncate_tables
+  reset_topics
   say "$target: start"
   $C --profile "$target" up -d "$svc"
   wait_healthy "$target"
@@ -80,8 +92,9 @@ for target in "$@"; do
 
   for run in $(seq 1 "$RUNS"); do
     say "$target: kafka run $run (produce, then restart the consumer with a fresh group)"
-    truncate_tables
     $C --profile "$target" stop "$svc"
+    truncate_tables
+    reset_topics
     group="bench-$target-$run"
     load load/load.mjs kafka --rows "$KAFKA_ROWS" --profile logs --env bench-load --consumer-group "$group" --topic-wait 900 --out "results/$target-kafka-$run.json" &
     loadpid=$!
