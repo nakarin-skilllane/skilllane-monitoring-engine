@@ -5,6 +5,8 @@
 #   bench/run.sh node go rust dotnet            every target, every profile, 3 runs
 #   RUNS=1 PROFILES=logs bench/run.sh go        a quick pass
 #   STEPS=8,16,32 STEP_SECONDS=10 …             shorter ramps (default 8…256 connections, 30 s each)
+#   BENCH_INFLIGHT=512 KAFKA_RUNS=0 OUT=bench/results-inflight512 PROFILES=mixed STEPS=64,128,256,512 bench/run.sh …
+#                                               an HTTP-only pass without the engine's 64-in-flight cap
 #
 # Per target: build its image → truncate the bench tables → start it → verify (correctness gate, fails the target)
 # → for each profile and run: HTTP ramp with docker stats sampled every second → Kafka drain (produce first, then
@@ -17,7 +19,9 @@ PROFILES=${PROFILES:-logs spans mixed}
 STEPS=${STEPS:-8,16,32,64,128,256}
 STEP_SECONDS=${STEP_SECONDS:-30}
 KAFKA_ROWS=${KAFKA_ROWS:-500000}
-OUT=bench/results
+# KAFKA_RUNS=0 skips the Kafka part (an HTTP-only pass); OUT keeps a pass apart (bench/results-inflight512)
+KAFKA_RUNS=${KAFKA_RUNS:-$RUNS}
+OUT=${OUT:-bench/results}
 mkdir -p "$OUT"
 say() { printf '\n[bench %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 ch() { $C exec -T clickhouse clickhouse-client --user skilllane_monitoring --password skilllane_monitoring -q "$1"; }
@@ -90,7 +94,7 @@ for target in "$@"; do
     done
   done
 
-  for run in $(seq 1 "$RUNS"); do
+  for run in $(seq 1 "$KAFKA_RUNS"); do
     say "$target: kafka run $run (produce, then restart the consumer with a fresh group)"
     $C --profile "$target" stop "$svc"
     truncate_tables

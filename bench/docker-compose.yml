@@ -23,7 +23,7 @@ x-target: &target
     # any load). The same value for all four targets keeps the comparison about the language.
     ENGINE_FLUSH_MS: "${BENCH_FLUSH_MS:-100}"
     ENGINE_FLUSH_ROWS: "5000"
-    ENGINE_INGEST_MAX_INFLIGHT: "64"
+    ENGINE_INGEST_MAX_INFLIGHT: "${BENCH_INFLIGHT:-64}"
     ENGINE_INGEST_HTTP: "true"
     ENGINE_ROLE: ingest
     ENGINE_APPLY_SCHEMA: "false"

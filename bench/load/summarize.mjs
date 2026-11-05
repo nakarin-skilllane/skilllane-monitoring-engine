@@ -7,7 +7,7 @@ import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fmt } from './common.mjs'
 
-const dir = join('bench', 'results')
+const dir = process.env.OUT ?? join('bench', 'results')
 const files = readdirSync(dir)
 const targets = [...new Set(files.map((f) => f.split('-')[0]))].filter((t) => files.some((f) => f.startsWith(`${t}-http-`)))
 const median = (xs) => {
@@ -75,6 +75,6 @@ for (const t of targets) {
   }
   if (krows.length) s.kafka = { runs: krows.length, rowsPerS: median(krows.map((x) => x.rowsPerS)), drainSeconds: median(krows.map((x) => x.drainSeconds)), cpuAvg: median(krows.map((x) => x.cpuAvg)), cpuMax: median(krows.map((x) => x.cpuMax)), rssMax: median(krows.map((x) => x.rssMax)) }
 }
-writeFileSync(join('bench', 'RESULTS.md'), md)
+writeFileSync(process.env.OUT ? join(dir, 'RESULTS.md') : join('bench', 'RESULTS.md'), md)
 writeFileSync(join(dir, 'summary.json'), JSON.stringify(summary, null, 1))
 console.log(`targets: ${targets.join(', ')} → bench/RESULTS.md, ${join(dir, 'summary.json')}`)
