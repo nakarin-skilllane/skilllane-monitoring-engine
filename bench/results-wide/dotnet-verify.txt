@@ -1,0 +1,4 @@
+posted 2000 envelopes → 202×2000
+logs: expected 57078, got 57078, missing 0, extra 0, columns differing: none → OK
+spans: expected 8651, got 8651, missing 0, extra 0, columns differing: none → OK
+rows deleted

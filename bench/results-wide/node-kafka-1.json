@@ -1,0 +1,10 @@
+{
+ "mode": "kafka",
+ "profile": "logs",
+ "group": "bench-node-1",
+ "rows": 500028,
+ "drainSeconds": 21.098,
+ "rowsPerS": 23700.25594843113,
+ "lagLeft": 0,
+ "at": "2026-11-05T06:29:12.299Z"
+}

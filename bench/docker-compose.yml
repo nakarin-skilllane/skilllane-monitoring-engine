@@ -139,7 +139,8 @@ services:
       CLICKHOUSE_DATABASE: skilllane_monitoring
       LOG_KAFKA_BROKERS: kafka:9092
     volumes:
-      - ./results:/app/results
+      # run.sh points this at its OUT dir, so a pass never overwrites another's files
+      - ${BENCH_OUT:-./results}:/app/results
     depends_on:
       clickhouse:
         condition: service_healthy

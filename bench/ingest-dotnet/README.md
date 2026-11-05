@@ -182,9 +182,9 @@ the goal (the expected files were written by the engine's own `mapLog` / `mapSpa
 | --- | --- |
 | Lines of code (`wc -l`) | **3,283** C# in `src/Ingest` (Js 403 · Mappers 496 · Program 250 · Writer 228 · Stats 104 · Envelope 102 · Kafka 143 · Mask: Value 649, Sql 458, Web 246, Keys 118, Io 52, Redis 34) + 127 test + 52 csproj + 45 Dockerfile + 106 tools |
 | Mask coverage | `mask: required 5/5 · optional 10/11 (skipped: redisCommand)` — expected from the port (56 required + 28 optional cases; the 3 `redisCommand` cases are the skipped ones). *Unverified: `dotnet test` did not run on this host.* |
-| Image size | *unverified* — expected ≈ 17.6 MB base + the trimmed self-contained app (typically 35–45 MB for Kestrel + System.Text.Json + Confluent.Kafka with its 15 MB librdkafka) |
-| Build time | *unverified* (the first `dotnet restore` + build of the test project in the SDK container took 2 min 19 s on an overloaded host before the disk filled) |
-| Rows (`env = 'bench-dotnet'`) | *unverified* — must be 57,078 logs / 8,651 spans, 2,000 × 202 |
+| Image size | **116 MB** (`docker images`, linux/amd64, built on 10.101.62.52, trimmed self-contained on runtime-deps chiseled) — more than the estimate: librdkafka and the trimmed BCL add up (see note: the `≈ 17.6 MB base + the trimmed self-contained app (typically 35–45 MB for Kestrel + System.Text.Json + Confluent.Kafka with its 15 MB librdkafka) |
+| Build time | about 3 min for the first build on the server (restore + test + trimmed publish), 45 s cached (the first `dotnet restore` + build of the test project in the SDK container took 2 min 19 s on an overloaded host before the disk filled) |
+| Rows (`env = 'bench-dotnet'`) | **verified 2026-11-05**: 2,000 × 202, 57,078 logs / 8,651 spans, every column equal to the Node mappers (`bench/load/verify.mjs` on the server). One build fix: `EnableRequestDelegateGenerator` off (CS9144: the generator mis-intercepts `HttpContext`-only handlers) |
 
 The optional rule counts assume the `maskNumber` cases (string inputs: the SDK returns a non-number unchanged) and
 the `maskHeaderJson` case (no byte cap: `int.MaxValue`) are read the way `generate.mjs` produced them.

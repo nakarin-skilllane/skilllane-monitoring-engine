@@ -1,0 +1,110 @@
+{
+ "dotnet": {
+  "image": 110.80004978179932,
+  "verify": true,
+  "http": {
+   "mixed": {
+    "runs": 1,
+    "rowsPerS": 47833.85,
+    "reqPerS": 1455.5,
+    "mbPerS": 25.604044699999996,
+    "p50": 371.583754,
+    "p95": 472.522395,
+    "p99": 534.108758,
+    "connections": 512,
+    "cpuAvg": 111.21851063829786,
+    "cpuMax": 226.14,
+    "rssMax": 573.9
+   }
+  },
+  "kafka": {
+   "runs": 1,
+   "rowsPerS": 19137.630128597673,
+   "drainSeconds": 26.128,
+   "cpuAvg": 73.10933333333334,
+   "cpuMax": 162.59,
+   "rssMax": 269.3
+  }
+ },
+ "go": {
+  "image": 18.785593032836914,
+  "verify": true,
+  "http": {
+   "mixed": {
+    "runs": 1,
+    "rowsPerS": 37415.8,
+    "reqPerS": 1138.55,
+    "mbPerS": 20.02826055,
+    "p50": 492.711313,
+    "p95": 584.14675,
+    "p99": 638.739767,
+    "connections": 512,
+    "cpuAvg": 179.46446808510643,
+    "cpuMax": 299.87,
+    "rssMax": 211.9
+   }
+  },
+  "kafka": {
+   "runs": 1,
+   "rowsPerS": 35568.9287238583,
+   "drainSeconds": 14.058,
+   "cpuAvg": 145.15500000000003,
+   "cpuMax": 258.93,
+   "rssMax": 527.3
+  }
+ },
+ "node": {
+  "image": 466.6905698776245,
+  "verify": true,
+  "http": {
+   "mixed": {
+    "runs": 1,
+    "rowsPerS": 18538.4,
+    "reqPerS": 564.1,
+    "mbPerS": 9.923572199999999,
+    "p50": 1032.927619,
+    "p95": 1087.398358,
+    "p99": 1360.145788,
+    "connections": 512,
+    "cpuAvg": 97.8585106382979,
+    "cpuMax": 131.97,
+    "rssMax": 227.4
+   }
+  },
+  "kafka": {
+   "runs": 1,
+   "rowsPerS": 23700.25594843113,
+   "drainSeconds": 21.098,
+   "cpuAvg": 114.94749999999999,
+   "cpuMax": 146.69,
+   "rssMax": 512.4
+  }
+ },
+ "rust": {
+  "image": 47.43221092224121,
+  "verify": true,
+  "http": {
+   "mixed": {
+    "runs": 1,
+    "rowsPerS": 56261.3,
+    "reqPerS": 1712,
+    "mbPerS": 30.115932750000002,
+    "p50": 323.496412,
+    "p95": 378.077984,
+    "p99": 426.607601,
+    "connections": 512,
+    "cpuAvg": 101.79297872340426,
+    "cpuMax": 210.16,
+    "rssMax": 348.8
+   }
+  },
+  "kafka": {
+   "runs": 1,
+   "rowsPerS": 19132.504304572412,
+   "drainSeconds": 26.135,
+   "cpuAvg": 40.09357142857142,
+   "cpuMax": 58.87,
+   "rssMax": 404.4
+  }
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "mode": "kafka",
+ "profile": "logs",
+ "group": "bench-rust-1",
+ "rows": 500028,
+ "drainSeconds": 26.135,
+ "rowsPerS": 19132.504304572412,
+ "lagLeft": 0,
+ "at": "2026-11-05T06:35:08.771Z"
+}

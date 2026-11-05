@@ -1,0 +1,74 @@
+{
+ "mode": "http",
+ "profile": "mixed",
+ "url": "http://ingest-dotnet:5100",
+ "gzip": false,
+ "at": "2026-11-05T06:37:23.621Z",
+ "steps": [
+  {
+   "connections": 64,
+   "seconds": 20,
+   "requests": 10176,
+   "rows": 334380,
+   "reqPerS": 508.8,
+   "rowsPerS": 16719,
+   "mbPerS": 8.95121455,
+   "errorShare": 0,
+   "p50": 123.227649,
+   "p95": 154.715043,
+   "p99": 165.839208
+  },
+  {
+   "connections": 128,
+   "seconds": 20,
+   "requests": 19431,
+   "rows": 638566,
+   "reqPerS": 971.55,
+   "rowsPerS": 31928.3,
+   "mbPerS": 17.0902818,
+   "errorShare": 0,
+   "p50": 128.256974,
+   "p95": 190.15094,
+   "p99": 210.976679
+  },
+  {
+   "connections": 256,
+   "seconds": 20,
+   "requests": 22800,
+   "rows": 749266,
+   "reqPerS": 1140,
+   "rowsPerS": 37463.3,
+   "mbPerS": 20.05356085,
+   "errorShare": 0,
+   "p50": 243.140368,
+   "p95": 283.831145,
+   "p99": 305.243853
+  },
+  {
+   "connections": 512,
+   "seconds": 20,
+   "requests": 29110,
+   "rows": 956677,
+   "reqPerS": 1455.5,
+   "rowsPerS": 47833.85,
+   "mbPerS": 25.604044699999996,
+   "errorShare": 0,
+   "p50": 371.583754,
+   "p95": 472.522395,
+   "p99": 534.108758
+  }
+ ],
+ "peak": {
+  "connections": 512,
+  "seconds": 20,
+  "requests": 29110,
+  "rows": 956677,
+  "reqPerS": 1455.5,
+  "rowsPerS": 47833.85,
+  "mbPerS": 25.604044699999996,
+  "errorShare": 0,
+  "p50": 371.583754,
+  "p95": 472.522395,
+  "p99": 534.108758
+ }
+}

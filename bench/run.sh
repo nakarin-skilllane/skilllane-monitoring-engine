@@ -22,6 +22,8 @@ KAFKA_ROWS=${KAFKA_ROWS:-500000}
 # KAFKA_RUNS=0 skips the Kafka part (an HTTP-only pass); OUT keeps a pass apart (bench/results-inflight512)
 KAFKA_RUNS=${KAFKA_RUNS:-$RUNS}
 OUT=${OUT:-bench/results}
+# the loadgen container writes to /app/results: mount OUT there (a path relative to bench/, where the compose file is)
+export BENCH_OUT="./$(basename "$OUT")"
 mkdir -p "$OUT"
 say() { printf '\n[bench %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 ch() { $C exec -T clickhouse clickhouse-client --user skilllane_monitoring --password skilllane_monitoring -q "$1"; }
