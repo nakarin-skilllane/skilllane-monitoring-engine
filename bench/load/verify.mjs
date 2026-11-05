@@ -38,7 +38,8 @@ if (statuses.get(202) !== enc.length) {
 
 const ch = clickhouse()
 const expectedLogs = (await readJsonl(fixtureFile('expected-logs'))).map((r) => ({ ...r, env: envName }))
-const expectedSpans = (await readJsonl(fixtureFile('expected-spans'))).map((r) => ({ ...r, env: envName }))
+// the span row keeps the whole resource map: its env was rewritten in the posted envelopes too
+const expectedSpans = (await readJsonl(fixtureFile('expected-spans'))).map((r) => ({ ...r, env: envName, resource: { ...r.resource, 'deployment.environment.name': envName } }))
 
 // wait for the last batch to land (flush 1 s + insert)
 for (let tries = 0; tries < 60; tries++) {
@@ -100,7 +101,8 @@ function compare(table, cols, expected, got, keyOf) {
 }
 
 const okLogs = compare('logs', LOG_COLS, expectedLogs, gotLogs, (r) => `${norm('timestamp', r.timestamp, 'logs')}|${r.trace_id}|${r.span_id}|${r.message}`)
-const okSpans = compare('spans', SPAN_COLS, expectedSpans, gotSpans, (r) => `${r.trace_id}|${r.span_id}`)
+// the fixture generator's ids repeat (weak RNG): the time makes the key unique
+const okSpans = compare('spans', SPAN_COLS, expectedSpans, gotSpans, (r) => `${r.trace_id}|${r.span_id}|${norm('timestamp', r.timestamp, 'spans')}`)
 
 if (args.delete) {
   for (const t of ['logs', 'spans']) await ch.command({ query: `ALTER TABLE ${t} DELETE WHERE env = '${envName.replace(/[^a-z0-9_-]/gi, '')}'`, clickhouse_settings: { mutations_sync: '2' } })
