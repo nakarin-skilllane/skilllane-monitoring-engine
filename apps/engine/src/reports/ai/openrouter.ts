@@ -29,6 +29,12 @@ export interface ChatClient {
 
 type Fetch = typeof fetch
 
+/**
+ * Room for the answer, and for the thinking of a model that reasons. With reasoning on,
+ * deepseek-v4-pro spent 2,000-3,700 tokens thinking before ~600 of answer (2026-11-10).
+ */
+export const MAX_TOKENS = 8000
+
 /** HTTP status → state: a key problem is an error, money or rate limits are quota, the rest a retry later. */
 function failure(status: number, detail: string): AiError {
   if (status === 401 || status === 403) return new AiError('error', `API key ใช้ไม่ได้ (${status})`)
@@ -40,7 +46,8 @@ function failure(status: number, detail: string): AiError {
 
 export class OpenRouterClient implements ChatClient {
   constructor(
-    private readonly opts: { apiKey: string; model: string; url: string; timeoutMs: number },
+    /** `reasoning`: let the model think first (OPENROUTER_REASONING); off asks OpenRouter to skip it. */
+    private readonly opts: { apiKey: string; model: string; url: string; timeoutMs: number; reasoning?: boolean },
     private readonly fetchImpl: Fetch = fetch,
   ) {}
 
@@ -58,7 +65,10 @@ export class OpenRouterClient implements ChatClient {
           model: this.opts.model,
           messages,
           temperature: 0.2,
-          max_tokens: 2000,
+          max_tokens: MAX_TOKENS,
+          // A model that reasons by default thinks for a minute here and answers no better
+          // (the guard keeps nearly the same notes); off is ignored by models that never reason.
+          ...(this.opts.reasoning ? {} : { reasoning: { enabled: false } }),
           response_format: { type: 'json_schema', json_schema: { name: 'report_notes', strict: true, schema } },
         }),
         signal: AbortSignal.timeout(this.opts.timeoutMs),
@@ -70,13 +80,20 @@ export class OpenRouterClient implements ChatClient {
     const body = (await res.json().catch(() => null)) as {
       error?: { code?: number | string; message?: string }
       model?: string
-      choices?: Array<{ message?: { content?: string | null } }>
-      usage?: { prompt_tokens?: number; completion_tokens?: number }
+      choices?: Array<{ finish_reason?: string | null; message?: { content?: string | null } }>
+      usage?: { prompt_tokens?: number; completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } }
     } | null
     if (!res.ok) throw failure(res.status, body?.error?.message ?? '')
     // OpenRouter passes a provider's failure on in a 200 body
     if (body?.error) throw failure(Number(body.error.code) || 500, body.error.message ?? '')
-    const content = body?.choices?.[0]?.message?.content
+    const choice = body?.choices?.[0]
+    if (choice?.finish_reason === 'length') {
+      // cut at max_tokens: empty, or JSON that stops mid-way
+      const thought = body?.usage?.completion_tokens_details?.reasoning_tokens
+      const spent = body?.usage?.completion_tokens ?? MAX_TOKENS
+      throw new AiError('error', `AI ตอบไม่จบ: ใช้ครบ ${spent} token${thought ? ` (คิดไป ${thought})` : ''} ลองปิด OPENROUTER_REASONING หรือเปลี่ยนโมเดล`)
+    }
+    const content = choice?.message?.content
     if (typeof content !== 'string' || !content.trim()) throw new AiError('error', 'คำตอบของ AI ไม่มีเนื้อหา')
     return {
       content,

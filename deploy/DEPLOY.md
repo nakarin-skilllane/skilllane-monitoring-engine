@@ -64,6 +64,7 @@ nano .env
 | `BULLMQ_BRIDGE_MEMORY_LIMIT` | `256m` | service `bullmq-bridge` (profile `bullmq`, เฉพาะ `LOG_EXPORT=bullmq`) |
 | `GOTENBERG_MEMORY_LIMIT` | `1g` | service `gotenberg` (Chromium) ที่แปลงรายงานเป็น PNG / PDF · engine เรียกผ่าน network ของ compose (`GOTENBERG_URL` ตั้งให้แล้ว) |
 | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | –, `anthropic/claude-sonnet-5.5` | ข้อความ AI ในรายงานประจำวัน · ไม่ใส่ key = ไม่มี AI รายงานยังครบ · เครื่องต้องออก `https://openrouter.ai` ได้ |
+| `OPENROUTER_REASONING` | `false` | `true` = ให้โมเดลแบบ reasoning คิดก่อนตอบ (ช้าราว 70 วินาที แทน ~15 และข้อความไม่ได้ดีขึ้น) · ถ้ารายงานขึ้น "AI ตอบไม่จบ: ใช้ครบ … token" ให้ปิดค่านี้หรือเปลี่ยนโมเดล |
 | `REPORT_ENVS`, `REPORT_CRON` | `prod`, `0 9 * * *` | env ที่สร้างรายงานประจำวันอัตโนมัติ และเวลาที่สร้าง (เวลาไทย) · ค่ากฎอื่น `REPORT_*` ดู `.env.example` |
 
 ### Queue ของแอป (ใส่เมื่อให้ ingest อ่าน queue แทน HTTP)

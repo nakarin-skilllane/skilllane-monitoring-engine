@@ -93,6 +93,27 @@ describe('OpenRouterClient', () => {
     expect((sent?.init.headers as Record<string, string>).authorization).toBe('Bearer k')
     const body = JSON.parse(String(sent?.init.body))
     expect(body).toMatchObject({ model: 'm', response_format: { type: 'json_schema', json_schema: { strict: true } } })
+    // a reasoning model (deepseek-v4-pro) spent all of max_tokens 2000 thinking and answered nothing
+    expect(body).toMatchObject({ max_tokens: 8000, reasoning: { enabled: false } })
+  })
+
+  it('OPENROUTER_REASONING: the model reasons as it does by default (no reasoning field)', async () => {
+    let body: Record<string, unknown> = {}
+    const f = async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body))
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"notes":[]}' } }] }), { status: 200 })
+    }
+    await new OpenRouterClient({ apiKey: 'k', model: 'm', url: 'https://x/api/v1', timeoutMs: 1000, reasoning: true }, f as unknown as typeof fetch).chat(msgs, NOTES_SCHEMA)
+    expect(body).not.toHaveProperty('reasoning')
+    expect(body.max_tokens).toBe(8000)
+  })
+
+  it('an answer cut at max_tokens says so, with the tokens spent thinking', async () => {
+    const statusOf = (c: OpenRouterClient) => c.chat(msgs, NOTES_SCHEMA).then(() => 'ok', (e: AiError) => `${e.status}: ${e.message}`)
+    const cut = (content: string) =>
+      reply(200, { choices: [{ finish_reason: 'length', message: { content } }], usage: { completion_tokens: 8000, completion_tokens_details: { reasoning_tokens: 7400 } } })
+    expect(await statusOf(client(cut('')))).toBe('error: AI ตอบไม่จบ: ใช้ครบ 8000 token (คิดไป 7400) ลองปิด OPENROUTER_REASONING หรือเปลี่ยนโมเดล')
+    expect(await statusOf(client(cut('{"notes":[{"target":"a"')))).toBe('error: AI ตอบไม่จบ: ใช้ครบ 8000 token (คิดไป 7400) ลองปิด OPENROUTER_REASONING หรือเปลี่ยนโมเดล')
   })
 
   it('sorts failures: key → error, money / rate → quota, server / network / timeout → unavailable', async () => {

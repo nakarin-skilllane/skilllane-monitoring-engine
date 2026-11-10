@@ -8,8 +8,9 @@ import { NOTES_SCHEMA, promptMessages } from './prompt'
 
 /** Injection token of a ChatClient other than OpenRouter (tests). */
 export const REPORT_AI_CLIENT = 'REPORT_AI_CLIENT'
-/** The spec's limit for one call. */
+/** The spec's limit for one call; a model that reasons first took 70-77 s (2026-11-10). */
 const TIMEOUT_MS = 60_000
+const REASONING_TIMEOUT_MS = 180_000
 
 export interface AiOutcome {
   aiStatus: AiStatus
@@ -32,7 +33,7 @@ export class ReportAi {
 
   constructor(@Optional() @Inject(REPORT_AI_CLIENT) client?: ChatClient) {
     const ai = config.report.ai
-    this.client = client ?? (ai.apiKey ? new OpenRouterClient({ apiKey: ai.apiKey, model: ai.model, url: ai.url, timeoutMs: TIMEOUT_MS }) : undefined)
+    this.client = client ?? (ai.apiKey ? new OpenRouterClient({ apiKey: ai.apiKey, model: ai.model, url: ai.url, timeoutMs: ai.reasoning ? REASONING_TIMEOUT_MS : TIMEOUT_MS, reasoning: ai.reasoning }) : undefined)
   }
 
   /** Why the AI will not run for this report (disabled + reason), or undefined when it will. */

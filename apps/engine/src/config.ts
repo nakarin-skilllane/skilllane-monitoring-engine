@@ -102,6 +102,8 @@ export interface EngineConfig {
       url: string
       /** REPORT_AI_ON_OK: also analyse a report whose status is ok (default false). */
       onOk: boolean
+      /** OPENROUTER_REASONING: let a reasoning model think before answering (default false: slower, no better notes). */
+      reasoning: boolean
     }
     /** The scheduled report posted to Slack (bot token); no token or channel = not posted. */
     slack: {
@@ -245,6 +247,7 @@ export function loadConfig(env: Env = process.env): EngineConfig {
         model: str(env, 'OPENROUTER_MODEL') ?? 'anthropic/claude-sonnet-5.5',
         url: (str(env, 'OPENROUTER_URL') ?? 'https://openrouter.ai/api/v1').replace(/\/+$/, ''),
         onOk: bool(env, 'REPORT_AI_ON_OK', false),
+        reasoning: bool(env, 'OPENROUTER_REASONING', false),
       },
       slack: {
         token: str(env, 'SLACK_BOT_TOKEN'),
