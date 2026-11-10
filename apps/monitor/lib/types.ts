@@ -315,16 +315,20 @@ export interface LogRow {
 export type LogOrigin = 'request' | 'job' | 'dependency' | 'startup' | 'shutdown' | 'background'
 
 /**
- * A collapsed repeat: `steady` = over the whole range, `burst` = one run of lines each within 1 s of the one before;
- * `pattern` = id for the `pattern` filter, `template` = its message with `*`.
+ * A collapsed repeat: `steady` = over the whole range, `burst` = one run of lines each within 1 s of the one before,
+ * `check` = a caller on a schedule (an uptime script: same route and user agent, 2xx, not signed in, steady interval);
+ * `pattern` = id for the `pattern` filter (for `check`: the `check` filter), `template` = its message with `*`
+ * (for `check`: `METHOD /route`). `check` only: `everyS` = median seconds between calls, `client` = its user agent.
  */
 export interface LogRepeat {
-  kind: 'steady' | 'burst'
+  kind: 'steady' | 'burst' | 'check'
   pattern: string
   count: number
   firstSeen: string
   lastSeen: string
   template: string
+  everyS?: number
+  client?: string
 }
 
 export interface SpanRow {
@@ -444,6 +448,8 @@ export interface LogsQuery extends CommonQuery {
   collapse?: '1'
   /** Repeat id (`LogRepeat.pattern`): every line of that repeat. */
   pattern?: string
+  /** Scheduled check id (`LogRepeat.pattern` of kind check): every line of its calls. */
+  check?: string
   /** 1–500, default 100. */
   limit?: number
   /** Cursor: `nextBefore` of the previous page. */
@@ -477,8 +483,8 @@ export interface LogsResponse {
   nextBefore: string | null
   /** Lines of each noise group / the exclude text (with the level filter), hidden or not; `total` = hidden by this request. */
   hidden: LogsHidden
-  /** Steady repeats (`patterns`) and bursts collapsed to their latest line; null without collapse. */
-  collapse: { patterns: number; bursts: number; lines: number; skipped: 'range' | null } | null
+  /** Steady repeats (`patterns`), bursts and scheduled checks (`checks`) collapsed to their latest line; null without collapse. */
+  collapse: { patterns: number; bursts: number; checks: number; lines: number; skipped: 'range' | null } | null
 }
 
 export interface LogsHidden {

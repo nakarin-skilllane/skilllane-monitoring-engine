@@ -227,7 +227,7 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
 
     it('keeps the latest line of each fast repeat, marked with its count', async () => {
       const r = await logs.search({ ...range, hide: ALL, collapse: '1', limit: '500' })
-      expect(r.collapse).toEqual({ patterns: 3, bursts: 3, lines: 900 + 450 + 150 - 3 + 14 - 2 + 8 - 1, skipped: null })
+      expect(r.collapse).toEqual({ patterns: 3, bursts: 3, checks: 0, lines: 900 + 450 + 150 - 3 + 14 - 2 + 8 - 1, skipped: null })
       // the import burst's latest line is 20 minutes old: it sits on a later page, where its time is
       const marked = (await allRows({ ...range, hide: ALL, collapse: '1', limit: '500' })).filter((x) => x.repeat)
       const counts = (kind: string) => marked.filter((x) => x.repeat!.kind === kind).map((x) => x.repeat!.count).sort((a, b) => a - b)
@@ -277,7 +277,7 @@ describe.skipIf(!process.env.LOGS_IT)('logs noise + repeats on ClickHouse (LOGS_
 
     it('a range over 7 days is not collapsed', async () => {
       const r = await logs.search({ env: ENV, from: 'now-8d', hide: ALL, collapse: '1', limit: '1' })
-      expect(r.collapse).toEqual({ patterns: 0, bursts: 0, lines: 0, skipped: 'range' })
+      expect(r.collapse).toEqual({ patterns: 0, bursts: 0, checks: 0, lines: 0, skipped: 'range' })
     })
   })
 })

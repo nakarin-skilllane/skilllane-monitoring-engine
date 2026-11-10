@@ -108,9 +108,12 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const fingerprint = p.fingerprint()
   const patternRaw = p.str('pattern', 24)
   const pattern = patternRaw && /^\d{1,20}$/.test(patternRaw) ? patternRaw : undefined
+  const checkRaw = p.str('check', 24)
+  const check = checkRaw && /^\d{1,20}$/.test(checkRaw) ? checkRaw : undefined
   const exclude = p.str('exclude')
-  // noise hidden and repeats collapsed by default; everything shown while narrowed to one trace, job, error group, route or repeat
-  const narrowed = !!(traceId || jobId || fingerprint || route || pattern || host)
+  // noise hidden and repeats collapsed by default; everything shown while narrowed to one trace, job, error group, route,
+  // repeat or scheduled caller
+  const narrowed = !!(traceId || jobId || fingerprint || route || pattern || check || host)
   const shownGroups = shownNoise(p.str('show', 64), narrowed)
   const hide = NOISE_GROUPS.filter((g) => !shownGroups.includes(g))
   const collapse = collapsesRepeats(p.str('repeats', 16), narrowed)
@@ -132,6 +135,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     category,
     fingerprint,
     pattern,
+    check,
     exclude,
     hide: hide.length ? hide.join(',') : undefined,
     collapse: collapse ? '1' : undefined,
@@ -194,7 +198,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const svc = scope.service ? `${scope.service}${scope.role ? `/${scope.role}` : ''}` : ''
   const envText = scope.env ?? 'ทุก env'
   const rangeShort = fmtRangeShort(scope.fromMs, scope.toMs, scope.nowMs)
-  const resetKey = JSON.stringify([scope.env, scope.from, scope.to, scope.service, scope.role, levelParam, q, event, traceId, userId, jobId, host, route, category, fingerprint, pattern, exclude, hide, collapse, limit, before])
+  const resetKey = JSON.stringify([scope.env, scope.from, scope.to, scope.service, scope.role, levelParam, q, event, traceId, userId, jobId, host, route, category, fingerprint, pattern, check, exclude, hide, collapse, limit, before])
   const hidden = res.ok ? res.data.hidden : null
   const collapsed = res.ok ? res.data.collapse : null
   const showAllHref = withParams('/logs', sp, { show: 'all', repeats: 'all', exclude: null, before: null, limit: null, drawer: null })
@@ -214,6 +218,10 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   if (traceId) applied.push({ param: 'traceId', label: 'trace', value: traceId })
   if (fingerprint) applied.push({ param: 'fingerprint', label: 'error group', value: fingerprint })
   if (pattern) applied.push({ param: 'pattern', label: 'log ซ้ำ', value: lines[0] ? logTitle(lines[0].row).title : pattern })
+  if (check) {
+    const call = lines.find((l) => l.row.eventCode === 'http.request' && l.row.http)?.row.http
+    applied.push({ param: 'check', label: 'เรียกตามตารางเวลา', value: call ? `${call.method} ${call.route}` : check })
+  }
   if (exclude) applied.push({ param: 'exclude', label: 'ซ่อนคำ', value: exclude })
   if (before) applied.push({ param: 'before', label: 'ก่อน', value: atText(before) })
   const clearHref = buildHref('/logs', keep)
@@ -233,6 +241,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     traceId ? `ใน trace ${shortId(traceId)}` : '',
     fingerprint ? `ของ error group นี้` : '',
     pattern ? 'ของ log ซ้ำนี้' : '',
+    check ? 'ของการเรียกตามตารางเวลานี้' : '',
     q ? `ที่มีคำว่า "${q}"` : '',
   ]
     .filter(Boolean)
@@ -407,9 +416,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                 <span>
                   {[
                     hidden && hidden.total > 0 ? `ซ่อน noise ${fmtCount(hidden.total)} แถว` : '',
-                    collapsed && collapsed.patterns + collapsed.bursts > 0
-                      ? `ยุบ log ซ้ำ ${fmtCount(collapsed.patterns + collapsed.bursts)} ชุด (${fmtCount(collapsed.lines)} แถว) เหลือบรรทัดล่าสุด (ป้าย ⟲ ซ้ำ)`
-                      : '',
+                    collapsed && collapsed.lines > 0 ? foldedText(collapsed) : '',
                     collapsed?.skipped === 'range' ? 'ไม่ยุบ log ซ้ำเพราะช่วงเวลาเกิน 7 วัน' : '',
                   ]
                     .filter(Boolean)
@@ -496,4 +503,11 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
       ) : null}
     </>
   )
+}
+
+/** `ยุบ log ซ้ำ 3 ชุด และการเรียกตามตารางเวลา 1 ราย (1,516 แถว) เหลือบรรทัดล่าสุด (ป้าย ⟲)` */
+function foldedText(c: { patterns: number; bursts: number; checks: number; lines: number }): string {
+  const sets = c.patterns + c.bursts
+  const what = [sets ? `log ซ้ำ ${fmtCount(sets)} ชุด` : '', c.checks ? `การเรียกตามตารางเวลา ${fmtCount(c.checks)} ราย` : ''].filter(Boolean).join(' และ')
+  return `ยุบ${what} (${fmtCount(c.lines)} แถว) เหลือบรรทัดล่าสุด (ป้าย ⟲)`
 }

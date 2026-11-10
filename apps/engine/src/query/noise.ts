@@ -104,6 +104,43 @@ export const COLLAPSE = { minCount: 20, perMinute: 10, peakPerMinute: 60, maxPat
 /** A burst = lines of one pattern each at most `gapMs` after the one before; it collapses at `minCount` lines. */
 export const BURST = { gapMs: 1000, minCount: 4, maxBursts: 500 } as const
 
+/**
+ * Scheduled checks: one caller (service + role + method + route + user agent) that got 2xx without signing in (no
+ * Authorization or Cookie header), at least `minCalls` times in the range, with at least `regularShare` of the gaps
+ * between its calls within `tolerance` of their median, at least `minEveryS` apart (an uptime script, another team's
+ * monitor). Nothing names the caller: the schedule is the trait. A signed-in page polling on a timer is a person and
+ * stays. /api/logs collapse=1 folds their quiet lines to the latest http.request line (`repeat.kind: 'check'`).
+ * Ranges up to COLLAPSE.maxRangeMs, like the other folds.
+ */
+export const CHECK = { minCalls: 5, tolerance: 0.1, regularShare: 0.8, minEveryS: 1, maxGroups: 50 } as const
+
+/** The span's user agent: the current semconv key, else the older one the SDK's http instrumentation writes. */
+const USER_AGENT = "if(attributes['user_agent.original'] != '', attributes['user_agent.original'], attributes['http.user_agent'])"
+/** A call that may belong to a scheduled check: a successful HTTP entry made without signing in. */
+export const CHECK_SPAN_SQL = `is_entry = 1 AND kind = 'SERVER' AND http_method != '' AND http_status BETWEEN 200 AND 299 AND status_code != 'ERROR' AND NOT match(req_headers, '(?i)"(authorization|cookie)"[[:space:]]*:')`
+/** The caller of a span (the check's id). */
+export const CHECK_KEY_SQL = `cityHash64(service, role, http_method, http_route, ${USER_AGENT})`
+/** The span's user agent, for the check's `client`. */
+export const CHECK_CLIENT_SQL = USER_AGENT
+
+/**
+ * Lines of the traces of checks: `scope` = a WHERE over the logs' own scope params (env, service, role, fromMs,
+ * toMs: the same names on spans), `keys` = the right side for the check id (`IN {checkIds:Array(UInt64)}`).
+ * Logs carry no user agent, so a line belongs to a check through its trace; ClickHouse finds the traces itself (a
+ * day of a 3-minute check is 480 trace ids, too many to send as a parameter).
+ */
+export const checkTracesSql = (scope: string, keys: string): string =>
+  `trace_id != '' AND trace_id IN (SELECT trace_id FROM skilllane_monitoring.spans WHERE ${scope} AND ${CHECK_SPAN_SQL} AND ${CHECK_KEY_SQL} ${keys})`
+/** The lines collapse folds: debug / info only, so a warning or an error written during a check stays. */
+export const checkLinesSql = (scope: string): string => `${QUIET} AND ${checkTracesSql(scope, 'IN {checkIds:Array(UInt64)}')}`
+
+export function parseCheck(q: QueryString): bigint | undefined {
+  const value = optString(q, 'check', 24)
+  if (value === undefined) return undefined
+  if (!/^\d{1,20}$/.test(value) || BigInt(value) > MAX_UINT64) bad("check must be a check id (decimal UInt64): a row's repeat.pattern of kind check")
+  return BigInt(value)
+}
+
 export function parseHide(q: QueryString): NoiseGroup[] {
   return optList(q, 'hide', NOISE_GROUPS) ?? []
 }

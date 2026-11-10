@@ -89,11 +89,38 @@ function RouteCell({ row, route, keep }: { row: LogRow; route: string; keep: Kee
   )
 }
 
+/** `ทุก ~3 นาที`, `ทุก ~30 วิ`, `ทุก ~1.5 ชม.`: the median interval of a scheduled caller. */
+function everyText(s: number): string {
+  const one = (n: number) => {
+    const r = Math.round(n * 10) / 10
+    return Number.isInteger(r) ? String(r) : r.toFixed(1)
+  }
+  if (s < 90) return `ทุก ~${Math.round(s)} วิ`
+  if (s < 5400) return `ทุก ~${one(s / 60)} นาที`
+  return `ทุก ~${one(s / 3600)} ชม.`
+}
+
 /**
  * On the latest line of a collapsed repeat, opening every line of it: `⟲ ซ้ำ ×11,840 · ตั้งแต่ 15:01` (steady, the
- * page's range) or `⟲ ซ้ำ ×7 ใน 0.3 วิ` (a burst, its own few seconds).
+ * page's range), `⟲ ซ้ำ ×7 ใน 0.3 วิ` (a burst, its own few seconds) or `⟲ ตามตารางเวลา ×480 · ทุก ~3 นาที` (a
+ * scheduled caller such as an uptime script: every line of its calls).
  */
 export function RepeatMark({ repeat, keep, withDate }: { repeat: LogRepeat; keep: Keep; withDate?: boolean }) {
+  if (repeat.kind === 'check') {
+    // its lines come a few ms after the call starts: the range runs a minute past the last call
+    const href = buildHref('/logs', keep, { check: repeat.pattern, from: repeat.firstSeen, to: new Date(Date.parse(repeat.lastSeen) + 60_000).toISOString() })
+    const every = repeat.everyS ? ` · ${everyText(repeat.everyS)}` : ''
+    return (
+      <Link
+        className="tag lg-repeat"
+        href={href}
+        title={`เรียก ${repeat.template} ตามตารางเวลา ${fmtCount(repeat.count)} ครั้ง${repeat.client ? ` โดย ${repeat.client}` : ''} (ได้ 2xx, ไม่ได้ login): แสดงทุกครั้ง`}
+      >
+        ⟲ ตามตารางเวลา ×{fmtCount(repeat.count)}
+        {every}
+      </Link>
+    )
+  }
   const burst = repeat.kind === 'burst'
   const spanMs = Date.parse(repeat.lastSeen) - Date.parse(repeat.firstSeen)
   const href = burst

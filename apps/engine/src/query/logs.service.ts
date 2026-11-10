@@ -27,6 +27,13 @@ import {
   MESSAGE_SQL,
   NOISE_GROUPS,
   NOISE_SQL,
+  CHECK,
+  CHECK_CLIENT_SQL,
+  CHECK_KEY_SQL,
+  CHECK_SPAN_SQL,
+  checkLinesSql,
+  checkTracesSql,
+  parseCheck,
   PATTERN_COLUMN,
   templateSql,
   parseCollapse,
@@ -53,11 +60,24 @@ export interface LogsResponse {
    */
   hidden: { probe: number; preflight: number; middleware: number; cache: number; cron: number; startup: number; exclude: number; total: number }
   /**
-   * `collapse=1`: steady repeats (`patterns`) and bursts (`bursts`) kept to their latest line (its `repeat`);
-   * `lines` = the lines they stood for minus those latest lines. The histogram and levelCounts still count
-   * every line. null without collapse.
+   * `collapse=1`: steady repeats (`patterns`), bursts (`bursts`) and scheduled checks (`checks`) kept to their
+   * latest line (its `repeat`); `lines` = the lines they stood for minus those latest lines. The histogram and
+   * levelCounts still count every line. null without collapse.
    */
-  collapse: { patterns: number; bursts: number; lines: number; skipped: 'range' | null } | null
+  collapse: { patterns: number; bursts: number; checks: number; lines: number; skipped: 'range' | null } | null
+}
+
+/** One scheduled check (logs.checks). */
+interface CheckDb {
+  id: string
+  method: string
+  route: string
+  client: string
+  n: number
+  every_s: number
+  first_ts: string
+  last_ts: string
+  latest: string
 }
 
 /** One collapsed burst (logs.bursts). */
@@ -233,20 +253,31 @@ export class LogsService {
     const [frequentCron, life] = await Promise.all([this.frequentCron(c), this.lifecycle(c)])
     const hiding = hidingOf(q, frequentCron, life.startup)
     const levels = parseLevels(q)
-    const variants = this.variants(q, c, true, hiding)
+    const checkId = parseCheck(q)
+    // the logs' own scope (env, service, role, fromMs, toMs): the check subqueries read spans with the same params
+    const scope = scoped(c).sql
+    const only = checkId === undefined ? undefined : new Where().add(checkTracesSql(scope, '= {checkId:UInt64}'), { checkId })
+    const variants = this.variants(q, c, true, hiding, only)
     // levelCounts: every level, hidden lines counted apart (countIf)
-    const allLevels = this.variants(q, c, false)
+    const allLevels = this.variants(q, c, false, undefined, only)
     const params: Params = Object.assign({ limit, ...seriesParams(c) }, ...variants.map((v) => v.params))
-    const countParams = Object.assign({}, ...allLevels.map((v) => v.params), hiding.params, levels ? { levels } : {})
+    const countParams: Params = Object.assign({}, ...allLevels.map((v) => v.params), hiding.params, levels ? { levels } : {})
     if (before !== undefined) params.beforeMs = before
     const cursor = before !== undefined ? ` AND timestamp < ${msParam('beforeMs')}` : ''
 
     const collapse = parseCollapse(q)
     const tooLong = c.toMs - c.fromMs > COLLAPSE.maxRangeMs
-    const [repeats, allBursts] = collapse && !tooLong ? await Promise.all([this.repeats(variants, c), this.bursts(variants)]) : [[], []]
+    // scheduled checks first: their quiet lines leave every other fold (one check stands for them)
+    const checks = collapse && !tooLong && checkId === undefined ? await this.checks(c) : []
+    const checkParams = checks.length ? { checkIds: checks.map((k) => BigInt(k.id)), checkKeep: checks.map((k) => k.latest) } : {}
+    const folded = checks.length
+      ? variants.map((v) => new Where().add(v.sql, v.params).add(`NOT (${checkLinesSql(scope)})`, checkParams))
+      : variants
+    const [repeats, allBursts] = collapse && !tooLong ? await Promise.all([this.repeats(folded, c), this.bursts(folded)]) : [[], []]
     // a steady repeat already stands for every line of its pattern
     const steady = new Set(repeats.map((r) => r.pattern))
     const bursts = allBursts.filter((b) => !steady.has(b.pattern))
+    Object.assign(params, checkParams)
     if (repeats.length) params.collapsed = repeats.map((r) => BigInt(r.pattern))
     if (bursts.length) Object.assign(params, { bp: bursts.map((b) => BigInt(b.pattern)), bf: bursts.map((b) => b.f_ms), bl: bursts.map((b) => b.l_ms) })
 
@@ -254,25 +285,29 @@ export class LogsService {
     // the normal branches and comes back once: its latest line, on the page that line falls on (a burst's last
     // millisecond may hold several of its lines: one of them). `pattern_id`, not `pattern`: an alias named like
     // the column would shadow it in the WHERE.
-    const folding = repeats.length > 0 || bursts.length > 0
+    const folding = repeats.length > 0 || bursts.length > 0 || checks.length > 0
     const keyCols = folding ? `${PATTERN_COLUMN} AS pk, toString(pk) AS pattern_id` : `0 AS pk, '' AS pattern_id`
     const notSteady = repeats.length ? ' AND pk NOT IN {collapsed:Array(UInt64)}' : ''
     const notInBurst = bursts.length
       ? ' AND NOT arrayExists((p, f, l) -> p = pk AND ms >= f AND ms <= l, {bp:Array(UInt64)}, {bf:Array(Int64)}, {bl:Array(Int64)})'
       : ''
-    const normal = variants.map(
+    const normal = folded.map(
       (v) =>
         `SELECT ${LOG_SELECT}, ${keyCols}, toUnixTimestamp64Milli(timestamp) AS ms FROM skilllane_monitoring.logs
          WHERE ${v.sql}${notSteady}${notInBurst}${cursor} ORDER BY timestamp DESC LIMIT {limit:UInt32}`,
     )
     const afterCursor = before !== undefined ? ` WHERE timestamp < ${msParam('beforeMs')}` : ''
-    const kept = (where: string, by: string) =>
-      `SELECT * FROM (SELECT * FROM (${variants
+    const kept = (where: string, by: string, from = folded) =>
+      `SELECT * FROM (SELECT * FROM (${from
         .map((v) => `SELECT ${LOG_SELECT}, ${keyCols}, toUnixTimestamp64Milli(timestamp) AS ms FROM skilllane_monitoring.logs WHERE ${v.sql} AND ${where}`)
         .join('\n UNION ALL \n')}) ORDER BY timestamp DESC LIMIT 1 BY ${by})${afterCursor}`
     const latest = [
       ...(repeats.length ? [kept('pk IN {collapsed:Array(UInt64)}', 'pattern_id')] : []),
       ...(bursts.length ? [kept('arrayExists((p, l) -> p = pk AND ms = l, {bp:Array(UInt64)}, {bl:Array(Int64)})', 'pattern_id, ms')] : []),
+      // a check's latest call: its http.request line (a quiet one: a failed call is not part of the check)
+      ...(checks.length
+        ? [kept("event_code = 'http.request' AND level IN ('debug', 'info') AND trace_id IN {checkKeep:Array(String)}", 'trace_id', variants)]
+        : []),
     ]
     const rowsSql = [...normal, ...latest].join('\n UNION ALL \n')
     const histogramSql = variants
@@ -294,12 +329,14 @@ export class LogsService {
                 countIf(level = 'error' AND event_code = 'http.request' AND ${shown}) AS request_error,
                 ${NOISE_GROUPS.map((g) => `countIf(${lv} AND ${NOISE_SQL[g]}) AS noise_${g}`).join(',\n                ')},
                 countIf(${lv} AND ${hiding.exclude ? EXCLUDE_SQL : '0'}) AS noise_exclude,
-                countIf(${lv} AND ${hiding.sql ? `(${hiding.sql})` : '0'}) AS hidden_total
+                countIf(${lv} AND ${hiding.sql ? `(${hiding.sql})` : '0'}) AS hidden_total,
+                countIf(${lv} AND ${shown} AND ${checks.length ? checkLinesSql(scope) : '0'}) AS check_lines
          FROM skilllane_monitoring.logs WHERE ${v.sql}`,
       )
       .join('\n UNION ALL \n')
-    const COUNTS = ['debug', 'info', 'warn', 'error', 'fatal', 'request_error', ...NOISE_GROUPS.map((g) => `noise_${g}`), 'noise_exclude', 'hidden_total']
+    const COUNTS = ['debug', 'info', 'warn', 'error', 'fatal', 'request_error', ...NOISE_GROUPS.map((g) => `noise_${g}`), 'noise_exclude', 'hidden_total', 'check_lines']
 
+    Object.assign(countParams, checkParams)
     const [rows, histogram, counts] = await Promise.all([
       this.reader.rows<LogDb & { pattern_id: string; ms: number }>('logs', `SELECT * EXCEPT (pk) FROM (${rowsSql}) ORDER BY timestamp DESC LIMIT {limit:UInt32}`, params),
       this.reader.rows<{ t: number; debug: number; info: number; warn: number; error: number; fatal: number }>(
@@ -310,15 +347,22 @@ export class LogsService {
       ),
       this.reader.rows<Record<string, number>>('logs.levels', `SELECT ${COUNTS.map((k) => `sum(${k}) AS ${k}`).join(', ')} FROM (${countsSql})`, countParams),
     ])
+    const byCheck = new Map(checks.map((k) => [k.latest, k]))
     const bySteady = new Map(repeats.map((r) => [r.pattern, r]))
     const byBurstEnd = new Map(bursts.map((b) => [`${b.pattern}@${b.l_ms}`, b]))
     const mapped = await withRequests(
       this.reader,
       rows.map((db) => {
         const row = toLogRow(db)
-        const r = db.pattern_id ? bySteady.get(db.pattern_id) : undefined
-        const b = db.pattern_id && !r ? byBurstEnd.get(`${db.pattern_id}@${db.ms}`) : undefined
-        if (r) row.repeat = { kind: 'steady', pattern: r.pattern, count: num(r.total), firstSeen: iso(r.first_ts) ?? '', lastSeen: iso(r.last_ts) ?? '', template: r.template }
+        const k = db.event_code === 'http.request' ? byCheck.get(db.trace_id) : undefined
+        const r = db.pattern_id && !k ? bySteady.get(db.pattern_id) : undefined
+        const b = db.pattern_id && !k && !r ? byBurstEnd.get(`${db.pattern_id}@${db.ms}`) : undefined
+        if (k) {
+          row.repeat = {
+            kind: 'check', pattern: k.id, count: num(k.n), firstSeen: iso(k.first_ts) ?? '', lastSeen: iso(k.last_ts) ?? '',
+            template: `${k.method} ${k.route}`, everyS: Math.round(num(k.every_s)), client: k.client,
+          }
+        } else if (r) row.repeat = { kind: 'steady', pattern: r.pattern, count: num(r.total), firstSeen: iso(r.first_ts) ?? '', lastSeen: iso(r.last_ts) ?? '', template: r.template }
         else if (b) row.repeat = { kind: 'burst', pattern: b.pattern, count: num(b.n), firstSeen: iso(b.first_ts) ?? '', lastSeen: iso(b.last_ts) ?? '', template: b.template }
         return row
       }),
@@ -362,7 +406,11 @@ export class LogsService {
         ? {
             patterns: repeats.length,
             bursts: bursts.length,
-            lines: repeats.reduce((a, r) => a + num(r.total) - 1, 0) + bursts.reduce((a, b) => a + num(b.n) - 1, 0),
+            checks: checks.length,
+            lines:
+              repeats.reduce((a, r) => a + num(r.total) - 1, 0) +
+              bursts.reduce((a, b) => a + num(b.n) - 1, 0) +
+              Math.max(0, num(lc.check_lines) - checks.length),
             skipped: tooLong ? 'range' : null,
           }
         : null,
@@ -394,6 +442,36 @@ export class LogsService {
         .map((r) => win(r, num(r.ms) - Math.min(Math.round(num(r.d)), STARTUP_MAX_MS), num(r.ms) + STARTUP_TAIL_MS)),
       shutdown: rows.filter((r) => r.event_code === 'app.shutdown').map((r) => win(r, num(r.ms), num(r.ms) + SHUTDOWN_MS)),
     }
+  }
+
+  /** The scheduled checks in the range (noise.ts CHECK), most calls first; `latest` = the trace of the last call. */
+  private checks(c: Common): Promise<CheckDb[]> {
+    const w = scoped(c)
+    return this.reader.rows<CheckDb>(
+      'logs.checks',
+      `SELECT id, method, route, client, n, every_s, first_ts, last_ts, latest FROM (
+         SELECT toString(key) AS id, any(http_method) AS method, any(http_route) AS route, any(ua) AS client, count() AS n,
+                arrayMap(x -> x / 1000, arrayPopFront(arrayDifference(arraySort(groupArray(toUnixTimestamp64Milli(timestamp)))))) AS gaps,
+                arrayReduce('median', gaps) AS every_s,
+                min(timestamp) AS first_ts, max(timestamp) AS last_ts, argMax(trace_id, timestamp) AS latest
+         FROM (
+           SELECT ${CHECK_KEY_SQL} AS key, http_method, http_route, ${CHECK_CLIENT_SQL} AS ua, timestamp, trace_id
+           FROM skilllane_monitoring.spans WHERE ${w.sql} AND ${CHECK_SPAN_SQL}
+         )
+         GROUP BY key
+         HAVING n >= {checkMin:UInt32} AND every_s >= {checkMinEvery:Float64}
+            AND arrayCount(g -> abs(g - every_s) <= {checkTol:Float64} * every_s, gaps) >= {checkShare:Float64} * length(gaps)
+         ORDER BY n DESC LIMIT {checkMax:UInt32}
+       )`,
+      {
+        ...w.params,
+        checkMin: CHECK.minCalls,
+        checkMinEvery: CHECK.minEveryS,
+        checkTol: CHECK.tolerance,
+        checkShare: CHECK.regularShare,
+        checkMax: CHECK.maxGroups,
+      },
+    )
   }
 
   /** `<queue> <type>` of the crons that ran often enough in the range to be noise (noise.ts CRON). */
@@ -472,9 +550,10 @@ export class LogsService {
    * the unindexed columns share a third. The branches are disjoint, so no row comes twice.
    * `hiding` leaves out the lines `hide` / `exclude` asked to hide.
    */
-  private variants(q: QueryString, c: Common, withLevel = true, hiding?: Hiding): Where[] {
+  private variants(q: QueryString, c: Common, withLevel = true, hiding?: Hiding, only?: Where): Where[] {
     const base = this.filters(q, c, withLevel)
     if (hiding?.sql) base.add(`NOT (${hiding.sql})`, hiding.params)
+    if (only) base.add(only.sql, only.params)
     const text = optString(q, 'q', 200)
     if (!text) return [base]
     const qLike = likePattern(text)

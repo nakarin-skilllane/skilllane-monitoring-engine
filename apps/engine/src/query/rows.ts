@@ -162,16 +162,20 @@ export const isCatchAllRoute = (route: string): boolean => /\{\*|\(\.\*\)|(^|\/)
 export type LogOrigin = 'request' | 'job' | 'dependency' | 'startup' | 'shutdown' | 'background'
 
 /**
- * A collapsed repeat: `steady` = over the whole range, `burst` = one run of lines each within 1 s of the one before;
- * `pattern` = id for the `pattern` filter, `template` = its message with `*`.
+ * A collapsed repeat: `steady` = over the whole range, `burst` = one run of lines each within 1 s of the one before,
+ * `check` = a caller on a schedule (noise.ts CHECK: its calls and the lines written in them); `pattern` = id for the
+ * `pattern` filter (for `check`: the `check` filter), `template` = its message with `*` (for `check`: `METHOD /route`).
+ * `check` only: `everyS` = median seconds between calls, `client` = the caller's user agent.
  */
 export interface LogRepeat {
-  kind: 'steady' | 'burst'
+  kind: 'steady' | 'burst' | 'check'
   pattern: string
   count: number
   firstSeen: string
   lastSeen: string
   template: string
+  everyS?: number
+  client?: string
 }
 
 export function toLogRow(r: LogDb): LogRow {
