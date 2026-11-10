@@ -5,6 +5,7 @@ import { ReportAi } from './ai/report-ai'
 import { FeatureStore } from './feature-store'
 import { ReportBuilder } from './report-builder'
 import { ReportExport } from './report-export'
+import { ReportNotifier } from './report-notifier'
 import { ReportQueries } from './report-queries'
 import { ReportScheduler } from './report-scheduler'
 import { ReportStore } from './report-store'
@@ -12,10 +13,10 @@ import { ReportsController } from './reports.controller'
 import { ReportsService } from './reports.service'
 import { UsageBackfill } from './usage-backfill'
 
-/** Daily report (roles api / all): snapshots, the 09:00 @Cron, /api/reports/daily*. */
+/** Daily report (roles api / all): snapshots, the 09:00 @Cron, the Slack message, /api/reports/daily*. */
 @Module({
   imports: [ScheduleModule.forRoot(), QueryModule],
   controllers: [ReportsController],
-  providers: [ReportQueries, ReportBuilder, ReportStore, FeatureStore, ReportsService, ReportAi, ReportExport, ReportScheduler, UsageBackfill],
+  providers: [ReportQueries, ReportBuilder, ReportStore, FeatureStore, ReportsService, ReportAi, ReportExport, ReportNotifier, ReportScheduler, UsageBackfill],
 })
 export class ReportsModule {}

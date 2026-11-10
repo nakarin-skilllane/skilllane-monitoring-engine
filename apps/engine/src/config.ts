@@ -103,6 +103,17 @@ export interface EngineConfig {
       /** REPORT_AI_ON_OK: also analyse a report whose status is ok (default false). */
       onOk: boolean
     }
+    /** The scheduled report posted to Slack (bot token); no token or channel = not posted. */
+    slack: {
+      /** SLACK_BOT_TOKEN (xoxb-…, scopes chat:write + files:write). */
+      token?: string
+      /** SLACK_REPORT_CHANNEL: the channel ID (C…), the bot invited to it. */
+      channel?: string
+      /** MONITOR_PUBLIC_URL: base URL of the monitor for the link in the message; unset = no link. */
+      publicUrl?: string
+      /** REPORT_SLACK_AI_WAIT_S (default 300, 0 = no wait): how long the message waits for the AI notes before it goes without them. */
+      aiWaitMs: number
+    }
   }
 }
 
@@ -234,6 +245,12 @@ export function loadConfig(env: Env = process.env): EngineConfig {
         model: str(env, 'OPENROUTER_MODEL') ?? 'anthropic/claude-sonnet-5.5',
         url: (str(env, 'OPENROUTER_URL') ?? 'https://openrouter.ai/api/v1').replace(/\/+$/, ''),
         onOk: bool(env, 'REPORT_AI_ON_OK', false),
+      },
+      slack: {
+        token: str(env, 'SLACK_BOT_TOKEN'),
+        channel: str(env, 'SLACK_REPORT_CHANNEL'),
+        publicUrl: str(env, 'MONITOR_PUBLIC_URL')?.replace(/\/+$/, ''),
+        aiWaitMs: count(env, 'REPORT_SLACK_AI_WAIT_S', 300) * 1000,
       },
       rules: {
         badErrorRateX: float(env, 'REPORT_BAD_ERROR_RATE_X', 2),

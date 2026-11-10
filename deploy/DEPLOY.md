@@ -95,6 +95,46 @@ nano .env
 
 เปิดใช้แล้วอย่าลบค่า S3 ออก: query ที่แตะข้อมูลที่ย้ายไปแล้วจะ error
 
+### รายงานประจำวันใน Slack (ไม่บังคับ)
+
+ใส่ = หลังสร้างรายงานตาม `REPORT_CRON` engine ส่งรายงานล่าสุดของแต่ละ env ใน `REPORT_ENVS` เข้า channel
+ครั้งเดียวต่อ env ต่อวัน: รูป infographic ภาพรวมกับรายละเอียด และลิงก์ไปหน้ารายงาน · รอ AI (ความเห็นอยู่ในรูป)
+ได้ไม่เกิน `REPORT_SLACK_AI_WAIT_S` แล้วส่งเลย · แปลงรูปไม่ได้ก็ส่งลิงก์อย่างเดียวพร้อมบอกเหตุผล ·
+ส่งแล้วจดใน `<config db>.report_notifications` restart จึงไม่ส่งซ้ำ
+ว่าง = ไม่ส่ง
+
+| ตัวแปร | คืออะไร |
+|---|---|
+| `SLACK_BOT_TOKEN` | Bot User OAuth Token (`xoxb-…`) ของ Slack app ที่มี scope `chat:write` และ `files:write` |
+| `SLACK_REPORT_CHANNEL` | channel ID (`C…`) ไม่ใช่ชื่อ channel · ต้อง invite bot เข้า channel ก่อน |
+| `MONITOR_PUBLIC_URL` | URL ของหน้า monitor ที่คนอ่าน Slack เปิดได้ เช่น `http://10.101.62.52:3300` · ว่าง = ไม่ใส่ลิงก์ |
+| `REPORT_SLACK_AI_WAIT_S` | รอความเห็น AI กี่วินาที (default `300`) · `0` = ไม่รอ |
+
+ตั้ง Slack app ครั้งแรก:
+
+1. https://api.slack.com/apps → Create New App → From a manifest → เลือก workspace แล้ววาง
+   ```yaml
+   display_information:
+     name: Skilllane Monitoring
+   features:
+     bot_user:
+       display_name: skilllane-monitoring
+   oauth_config:
+     scopes:
+       bot: [chat:write, files:write]
+   settings:
+     token_rotation_enabled: false
+   ```
+2. Install App → Install to Workspace (ขึ้น Request to Install = รอ admin ของ workspace อนุมัติ)
+3. OAuth & Permissions → คัดลอก Bot User OAuth Token ใส่ `SLACK_BOT_TOKEN`
+4. ใน channel พิมพ์ `/invite @<ชื่อ bot>` แล้วคลิกชื่อ channel → ล่างสุดของ About คือ channel ID ใส่ `SLACK_REPORT_CHANNEL`
+5. `docker compose up -d --no-build engine` (แค่ `restart` ไม่อ่าน `.env` ใหม่) · log engine ต้องมี
+   `daily report of … , sent to Slack` · ครั้งแรกส่งรายงานล่าสุดภายในราว 30 วินาทีถึง 5 นาที (รอ AI)
+
+ส่งไม่ได้ดูที่ log `[ReportSlack]`: `not_in_channel` = ยังไม่ invite bot · `channel_not_found` = ใช้ชื่อแทน ID ·
+`missing_scope` = เพิ่ม scope แล้ว Reinstall to Workspace · `invalid_auth` = token ผิดหรือถูก revoke ·
+เครื่องต้องออก `https://slack.com` และ `https://files.slack.com` ได้
+
 ## 3. Build
 
 รันจาก root ของ repo · tag ต้องตรงกับ `IMAGE_TAG` ใน `.env`

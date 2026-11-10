@@ -59,3 +59,22 @@ describe('ReportsService with the AI', () => {
     expect(saved.at(-1)?.aiMessage).toBe('new')
   })
 })
+
+describe('ReportsService.aiSettled', () => {
+  it('true at once without an AI run, false while it runs past the wait, true once it ends', async () => {
+    const { service, pendingAi } = setup()
+    expect(await service.aiSettled('prod', '2026-10-21', 10)).toBe(true)
+    await service.generate('prod', '2026-10-21')
+    await flush()
+    expect(await service.aiSettled('prod', '2026-10-21', 20)).toBe(false)
+    const waiting = service.aiSettled('prod', '2026-10-21', 5_000)
+    pendingAi[0]({ aiStatus: 'ok', aiMessage: '', aiNotes: [], featureNames: {} })
+    expect(await waiting).toBe(true)
+  })
+
+  it('a normal day without the AI has nothing to wait for', async () => {
+    const { service } = setup('สถานะปกติ จึงไม่ได้เรียก AI')
+    await service.generate('prod', '2026-10-21')
+    expect(await service.aiSettled('prod', '2026-10-21', 5_000)).toBe(true)
+  })
+})

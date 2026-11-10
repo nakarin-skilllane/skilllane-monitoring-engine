@@ -1,8 +1,9 @@
 import { Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { config } from '../config'
+import { ReportNotifier } from './report-notifier'
 import { ReportsService } from './reports.service'
-import { dueDates } from './rules'
+import { dueDates, latestReportDate } from './rules'
 
 /** After boot, wait for ClickHouse and the other modules before catching up. */
 const CATCH_UP_DELAY_MS = 30_000
@@ -14,14 +15,19 @@ const CATCH_UP_DAYS = 7
  * ended is built for each env, and any of the last 7 that is missing (engine down at 09:00).
  * The same catch-up runs 30 s after boot. @nestjs/schedule keeps no state and fires on every
  * instance, so it runs only on the instance that applies the schema, as ColdStorageMover.
+ * Then the latest report of each env goes to Slack (ReportNotifier: once per env + date).
  */
 @Injectable()
 export class ReportScheduler implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger('DailyReport')
   private boot?: NodeJS.Timeout
   private running = false
+  private notifying = false
 
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    private readonly notifier: ReportNotifier,
+  ) {}
 
   private get enabled(): boolean {
     return config.applySchema && config.report.envs.length > 0
@@ -29,7 +35,9 @@ export class ReportScheduler implements OnApplicationBootstrap, OnApplicationShu
 
   onApplicationBootstrap(): void {
     if (!this.enabled) return
-    this.logger.log(`daily report of ${config.report.envs.join(', ')} at "${config.report.cron}" Asia/Bangkok`)
+    this.logger.log(
+      `daily report of ${config.report.envs.join(', ')} at "${config.report.cron}" Asia/Bangkok${this.notifier.enabled ? ', sent to Slack' : ''}`,
+    )
     this.boot = setTimeout(() => void this.tick(), CATCH_UP_DELAY_MS)
     this.boot.unref()
   }
@@ -46,10 +54,25 @@ export class ReportScheduler implements OnApplicationBootstrap, OnApplicationShu
   private async tick(): Promise<void> {
     if (this.running) return
     this.running = true
+    const now = Date.now()
     try {
-      await this.runDue(Date.now())
+      await this.runDue(now)
     } finally {
       this.running = false
+    }
+    // apart from `running`: waiting for the AI must not make the next 09:00 build skip
+    await this.notifyLatest(now)
+  }
+
+  /** Sends the latest report of each env that has not been sent yet. */
+  async notifyLatest(nowMs: number, envs: string[] = config.report.envs): Promise<void> {
+    if (!this.notifier.enabled || this.notifying) return
+    this.notifying = true
+    try {
+      const date = latestReportDate(nowMs)
+      for (const env of envs) await this.notifier.notify(env, date)
+    } finally {
+      this.notifying = false
     }
   }
 

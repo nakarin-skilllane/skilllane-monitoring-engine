@@ -50,6 +50,14 @@ export class ReportStore implements OnModuleInit {
           updated_at     DateTime64(3, 'UTC')
         ) ENGINE = ReplacingMergeTree(updated_at) ORDER BY (env, report_date)`,
       })
+      await this.clickhouse.writer.command({
+        query: `CREATE TABLE IF NOT EXISTS ${this.db}.report_notifications (
+          env         LowCardinality(String),
+          report_date Date,
+          target      String,
+          sent_at     DateTime64(3, 'UTC')
+        ) ENGINE = ReplacingMergeTree(sent_at) ORDER BY (env, report_date, target)`,
+      })
     } catch (err) {
       this.logger.error(`daily_reports schema apply failed: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -109,6 +117,27 @@ export class ReportStore implements OnModuleInit {
       aiStatus: row.ai_status as AiStatus,
       aiMessage: row.ai_message,
     }
+  }
+
+  /** Whether the report of env + date was already sent to `target` (e.g. `slack:C123`). */
+  async notified(env: string, reportDate: string, target: string): Promise<boolean> {
+    const result = await this.clickhouse.writer.query({
+      query: `SELECT count() AS n FROM ${this.db}.report_notifications
+              WHERE env = {env:String} AND report_date = {date:Date} AND target = {target:String}`,
+      query_params: { env, date: reportDate, target },
+      format: 'JSONEachRow',
+      clickhouse_settings: { output_format_json_quote_64bit_integers: 0 },
+    })
+    const rows = await result.json<{ n: number }>()
+    return Number(rows[0]?.n ?? 0) > 0
+  }
+
+  async markNotified(env: string, reportDate: string, target: string): Promise<void> {
+    await this.clickhouse.writer.insert({
+      table: `${this.db}.report_notifications`,
+      format: 'JSONEachRow',
+      values: [{ env, report_date: reportDate, target, sent_at: toCh(new Date().toISOString()) }],
+    })
   }
 
   async dates(env: string): Promise<ReportDateItem[]> {

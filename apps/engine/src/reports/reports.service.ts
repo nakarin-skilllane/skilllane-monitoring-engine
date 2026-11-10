@@ -21,6 +21,8 @@ export class ReportsService {
   private readonly building = new Map<string, Promise<StoredReport>>()
   /** generatedAt of the newest snapshot per env + date: an older AI run must not overwrite a rebuild. */
   private readonly newest = new Map<string, string>()
+  /** The AI run of the newest snapshot per env + date while it runs (the Slack message waits on it). */
+  private readonly aiRuns = new Map<string, Promise<void>>()
 
   constructor(
     private readonly builder: ReportBuilder,
@@ -86,8 +88,37 @@ export class ReportsService {
     if (skip) return first
     const key = `${report.env}\u0000${report.reportDate}`
     this.newest.set(key, first.generatedAt)
-    void this.finishAi(first, groups, key)
+    const run = this.finishAi(first, groups, key)
+    this.aiRuns.set(key, run)
+    void run.finally(() => {
+      if (this.aiRuns.get(key) === run) this.aiRuns.delete(key)
+    })
     return first
+  }
+
+  /**
+   * Waits for the AI run of env + date started by this process, at most `timeoutMs`.
+   * True when none is running (any more); false when the time ran out first.
+   */
+  async aiSettled(env: string, reportDate: string, timeoutMs: number): Promise<boolean> {
+    const key = `${env}\u0000${reportDate}`
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+      const run = this.aiRuns.get(key)
+      if (!run) return true
+      const left = deadline - Date.now()
+      if (left <= 0) return false
+      let timer: NodeJS.Timeout | undefined
+      const timedOut = await Promise.race([
+        run.then(() => false),
+        new Promise<boolean>((resolve) => {
+          timer = setTimeout(() => resolve(true), left)
+        }),
+      ]).finally(() => clearTimeout(timer))
+      if (timedOut) return false
+      // a rebuild may have started a newer run meanwhile: loop to wait on that one
+      await Promise.resolve()
+    }
   }
 
   private async finishAi(report: StoredReport, groups: RankedGroup[], key: string): Promise<void> {
