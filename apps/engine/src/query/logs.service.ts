@@ -27,6 +27,7 @@ import {
   MESSAGE_SQL,
   NOISE_GROUPS,
   NOISE_SQL,
+  UPTIME_SPAN_SQL,
   PATTERN_COLUMN,
   templateSql,
   parseCollapse,
@@ -102,14 +103,17 @@ function patternBranches(variants: Where[]): string {
     .join('\n UNION ALL \n')
 }
 
-/** `frequentCron` / `startup` = what the `cron` / `startup` groups may hide (LogsService.frequentCron, lifecycle). */
-function hidingOf(q: QueryString, frequentCron: string[], startup: LifeWindow[]): Hiding {
+/**
+ * `frequentCron` / `startup` / `uptimeTraces` = what the `cron` / `startup` / `probe` groups may hide
+ * (LogsService.frequentCron, lifecycle, uptimeTraces).
+ */
+function hidingOf(q: QueryString, frequentCron: string[], startup: LifeWindow[], uptimeTraces: string[]): Hiding {
   const parts = parseHide(q).map((g) => `(${NOISE_SQL[g]})`)
   const exclude = optString(q, 'exclude', 200)
   if (exclude) parts.push(EXCLUDE_SQL)
   return {
     sql: parts.length ? parts.join(' OR ') : null,
-    params: { frequentCron, ...windowParams('su', startup), ...(exclude ? { excludeLike: likePattern(exclude) } : {}) },
+    params: { frequentCron, uptimeTraces, ...windowParams('su', startup), ...(exclude ? { excludeLike: likePattern(exclude) } : {}) },
     exclude: !!exclude,
   }
 }
@@ -230,8 +234,8 @@ export class LogsService {
     const limit = optInt(q, 'limit', 1, 500, 100)
     const beforeRaw = optString(q, 'before', 40)
     const before = beforeRaw === undefined ? undefined : parseTime('before', beforeRaw, Date.now())
-    const [frequentCron, life] = await Promise.all([this.frequentCron(c), this.lifecycle(c)])
-    const hiding = hidingOf(q, frequentCron, life.startup)
+    const [frequentCron, life, uptimeTraces] = await Promise.all([this.frequentCron(c), this.lifecycle(c), this.uptimeTraces(c)])
+    const hiding = hidingOf(q, frequentCron, life.startup, uptimeTraces)
     const levels = parseLevels(q)
     const variants = this.variants(q, c, true, hiding)
     // levelCounts: every level, hidden lines counted apart (countIf)
@@ -394,6 +398,22 @@ export class LogsService {
         .map((r) => win(r, num(r.ms) - Math.min(Math.round(num(r.d)), STARTUP_MAX_MS), num(r.ms) + STARTUP_TAIL_MS)),
       shutdown: rows.filter((r) => r.event_code === 'app.shutdown').map((r) => win(r, num(r.ms), num(r.ms) + SHUTDOWN_MS)),
     }
+  }
+
+  /**
+   * Trace ids of the uptime checks in the range (noise.ts UPTIME_SPAN_SQL), from a minute before it: a check's span
+   * starts before its lines. About 480 a day for a check every 3 minutes.
+   */
+  private async uptimeTraces(c: Common): Promise<string[]> {
+    const w = scopeOnly(c).add(`timestamp >= ${msParam('upFrom')} AND timestamp <= ${msParam('upTo')}`, { upFrom: c.fromMs - 60_000, upTo: c.toMs })
+    const rows = await this.reader.rows<{ trace_id: string }>(
+      'logs.uptime',
+      `SELECT DISTINCT trace_id FROM skilllane_monitoring.spans
+       WHERE ${w.sql} AND is_entry = 1 AND ${UPTIME_SPAN_SQL}
+       LIMIT 50000`,
+      w.params,
+    )
+    return rows.map((r) => r.trace_id)
   }
 
   /** `<queue> <type>` of the crons that ran often enough in the range to be noise (noise.ts CRON). */
