@@ -7,7 +7,7 @@
  * and job.* lines are never collapsed (one line = one request / one job). A repeat collapses when it is
  * steady (many lines over the range) or a burst (more than 3 in a row, each within 1 s of the one before).
  */
-import { PROBE_SEGMENTS, UPTIME_AGENTS } from '../probes'
+import { PROBE_SEGMENTS } from '../probes'
 import { bad, optList, optString, type QueryString } from './params'
 
 export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron', 'startup'] as const
@@ -21,23 +21,8 @@ const LAST_SEGMENT = "arrayElement(arrayFilter(s -> s != '', splitByChar('/', lo
 
 const IS_PROBE_ROUTE = `${LAST_SEGMENT} IN (${PROBE_SEGMENTS.map((s) => `'${s}'`).join(', ')})`
 
-/** The span's user agent: the current semconv key, else the older one the SDK's http instrumentation writes. */
-const USER_AGENT = "if(attributes['user_agent.original'] != '', attributes['user_agent.original'], attributes['http.user_agent'])"
-/**
- * An uptime check (probes.ts UPTIME_AGENTS) that got a 2xx for `GET /`: a SERVER span. Anything else it gets
- * (a 5xx, a redirect to a login page) means the API is in trouble, so it stays.
- */
-export const UPTIME_SPAN_SQL = `kind = 'SERVER' AND http_method = 'GET' AND http_route = '/' AND http_status BETWEEN 200 AND 299 AND status_code != 'ERROR' AND arrayExists(a -> startsWith(${USER_AGENT}, a), [${UPTIME_AGENTS.map((a) => `'${a}'`).join(', ')}])`
-
-/**
- * Logs carry no user agent: a line belongs to an uptime check through its trace (`uptimeTraces`, the trace ids of
- * UPTIME_SPAN_SQL spans in the range: LogsService.uptimeTraces), so its http.request line and what the app writes
- * around it go together.
- */
-const IN_UPTIME_CHECK = "trace_id != '' AND trace_id IN {uptimeTraces:Array(String)}"
-
 export const NOISE_SQL: Record<NoiseGroup, string> = {
-  probe: `${QUIET} AND ((${OK_REQUEST} AND ${IS_PROBE_ROUTE}) OR (${IN_UPTIME_CHECK}))`,
+  probe: `${QUIET} AND ${OK_REQUEST} AND ${IS_PROBE_ROUTE}`,
   preflight: `${QUIET} AND ${OK_REQUEST} AND http_method = 'OPTIONS'`,
   middleware: `${QUIET} AND ${FREE_TEXT} AND positionCaseInsensitive(message, 'middleware') > 0`,
   cache: `${QUIET} AND ${FREE_TEXT} AND (positionCaseInsensitive(logger, 'cache') > 0 OR match(message, '(?i)^cache (hit|miss|set|get|del)'))`,
@@ -135,7 +120,7 @@ const SPAN_OK = "NOT (status_code = 'ERROR' OR http_status >= 500)"
 const OK_SERVER = `${SPAN_OK} AND kind = 'SERVER' AND http_status < 400`
 
 export const TRACE_NOISE_SQL: Record<TraceNoiseGroup, string> = {
-  probe: `${OK_SERVER} AND (${IS_PROBE_ROUTE} OR (${UPTIME_SPAN_SQL}))`,
+  probe: `${OK_SERVER} AND ${IS_PROBE_ROUTE}`,
   preflight: `${OK_SERVER} AND http_method = 'OPTIONS'`,
   cron: `${SPAN_OK} AND name IN {frequentCron:Array(String)}`,
   outside: `${SPAN_OK} AND kind = 'CLIENT' AND parent_span_id = ''`,

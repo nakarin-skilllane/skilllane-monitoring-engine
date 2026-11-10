@@ -12,7 +12,7 @@ export const NOISE_GROUPS = ['probe', 'preflight', 'middleware', 'cache', 'cron'
 export type NoiseGroup = (typeof NOISE_GROUPS)[number]
 
 export const NOISE_LABEL: Record<NoiseGroup, { label: string; hint: string }> = {
-  probe: { label: 'Health check / probe ที่ตอบสำเร็จ', hint: '/health, /ready, /metrics, /ping … ตอบต่ำกว่า 400 · GET / ของ uptime checker (python-requests) ที่ได้ 2xx' },
+  probe: { label: 'Health check / probe ที่ตอบสำเร็จ', hint: '/health, /ready, /metrics, /ping … ตอบต่ำกว่า 400' },
   preflight: { label: 'CORS preflight', hint: 'OPTIONS ที่ตอบต่ำกว่า 400' },
   middleware: { label: 'Middleware', hint: 'log ทั่วไปที่ข้อความมีคำว่า middleware' },
   cache: { label: 'Cache hit / set', hint: 'logger ที่ชื่อมี cache หรือข้อความ Cache hit / miss / set …' },
