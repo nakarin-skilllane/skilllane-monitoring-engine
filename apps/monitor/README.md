@@ -111,7 +111,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
     <>
       <PageHead scope={scope} title="Log" question="ทุกบรรทัด log ตามเวลา: …" actions={<AutoRefresh />} />
       <ParamProblems problems={[...scope.problems, ...p.problems]} />
-      {res.ok ? <LogTable rows={res.data.rows} order={order} keep={scope.keep} /> : <EngineErrorState error={res.error} />}
+      {res.ok ? <LogList rows={res.data.rows} order={order} keep={scope.keep} /> : <EngineErrorState error={res.error} />}  {/* a screen component in app/logs/_components */}
     </>
   )
 }
@@ -119,8 +119,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
 
 ### Fetching
 
-- **Server components call `engine.*`** from `lib/engine.ts` (`health, meta, overview, logs, traces, trace(id),
-  errors, error(fp), jobs, dependencies, topology`; `engineGet<T>(path, query)` for anything new). Every call resolves to
+- **Server components call `engine.*`** from `lib/engine.ts` (`health, meta, overview, logs, logTraces, logPods,
+  traces, trace(id), errors, error(fp), jobs, dependencies, topology`; `engineGet<T>(path, query)` for anything new). Every call resolves to
   `{ ok: true, data, ms } | { ok: false, error }`, `no-store`, 60 s timeout. Run independent calls with `Promise.all`.
 - **A failed call is a normal state**: render `<EngineErrorState error={res.error} />` (Thai, names the engine URL,
   retry button; 400 shows the engine's message, 404 says not found). Never throw for engine errors; `app/error.tsx`
@@ -164,13 +164,16 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
 - Never hand-build query strings. `buildHref(path, scope.keep, extra)` keeps env / from / to **only when they are in
   the URL** (so Errors keeps its 24 h default unless the user picked a range): `buildHref('/traces', scope.keep, { route: 'GET /me' })`.
 - Same screen, change filters: `withParams(pathname, sp, { level: 'error', before: null })` (null / '' removes).
-- Detail pages: `/traces/<32-hex traceId>` (`?span=<spanId>` selects a span; `?view=network` shows the Network table;
-  `?io=<spanId>` opens that span's request / response panel in either view (a span without I/O opens its nearest
+- Detail pages: `/traces/<32-hex traceId>` (`?span=<spanId>` selects a span; `?view=waterfall` / `?view=network` the
+  Waterfall / Network instead of the Timeline (none = the view this browser used last, cookie `sm-trace-view`);
+  `?io=<spanId>` opens that span's request / response panel in any view (a span without I/O opens its nearest
   ancestor that has; the page removes `io` when the panel closes, so a reload or a copied link shows what was on
   screen), `&tab=headers|payload|preview|response|timing|query|message` a tab of it; the default tab of the span's
   type is left out), `/errors/<fingerprint>`; logs of a user
-  `/logs?userId=u_1029`, of a trace `/logs?traceId=…`, of a group `/logs?fingerprint=…`, of a job (every attempt)
-  `/logs?jobId=2009&route=report report:generate`; jobs sections `/jobs#queues`, `#failures`, `#dependencies`, one
+  `/logs?userId=u_1029`, of a trace `/logs?traceId=…` (every service and pod), of a group `/logs?fingerprint=…`, of a
+  job (every attempt) `/logs?jobId=2009&route=report report:generate`, of services `/logs?service=school-core-api&role=api`
+  or `/logs?service=school-core-api/api,school-core-api/worker` (the Log console's own params: below); jobs sections
+  `/jobs#queues`, `#failures`, `#dependencies`, one
   dependency row `#${depAnchor(name)}` (lib/params.ts); `/about` (also the brand link) describes the system. Use `next/link` (`<Link>`), `scroll={false}` for in-page filter changes.
 - Jump box (top bar): 32 hex → `/traces/<id>`, `u_…` → `/logs?userId=`, else `/logs?q=`. `/` focuses it.
 
@@ -178,7 +181,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
 
 - `app/design-system.css` is generated: never edit it. Use its classes and tokens (`var(--…)`, never hex).
 - Screen CSS = the mockup's `<style>` block, ported into **`app/<route>/screen.css`**, imported by that page only.
-  Keep the mockup's prefix: overview `ov-`, logs `lg-`, traces `tr-`, trace detail `td-`, errors `eg-`,
+  Keep the mockup's prefix: overview `ov-`, logs `lc-` / `ln-` / `tg__` / `lp-` (logs-console.html), traces `tr-`, trace detail `td-`, errors `eg-`,
   error detail `ed-`, jobs `jb-`. No unprefixed / global selectors, no `:root` tokens in screen CSS.
 - A class two screens need belongs in the design (`design/monitoring-ui/assets/styles.css`, DESIGN.md §5b): ask the
   design owner, then `sync-design`. App-only shared CSS (not in the mockups) goes in `app/app.css` with `ui-`
@@ -192,7 +195,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
 | Import | Signature (props) | Notes |
 |---|---|---|
 | `PageHead` | `{ scope, title, question?, when?, crumbs?: {label, href?, mono?, title?}[], meta?, metaClassName?, metaFirst?, actions?, copyLink? = true }` | crumbs start with "skilllane monitor"; subline = question · env · range (`when` replaces the range on detail pages) |
-| `CopyButton`, `CopyLinkButton` | `{ text? \| targetId? \| currentUrl?, label?, ariaLabel?, variant?: default\|quiet\|primary\|cta\|icon\|icon-md, size?: 'sm', icon?: copy\|link }` | "คัดลอกแล้ว" for 1.6 s + live region (`.is-copied`; `.is-copy-manual` 4 s without clipboard); copy-link copies the real URL. `cta` = SkillLane orange `.btn--cta`, at most one per page (the page-head "คัดลอกให้ AI" in errors, error detail, trace detail; the drawer-foot CTA in logs and jobs) |
+| `CopyButton`, `CopyLinkButton` | `{ text? \| targetId? \| currentUrl?, label?, ariaLabel?, variant?: default\|quiet\|primary\|cta\|icon\|icon-md, size?: 'sm', icon?: copy\|link }` · `copyText(value, target?) → Promise<boolean>` | "คัดลอกแล้ว" for 1.6 s + live region (`.is-copied`; `.is-copy-manual` 4 s without clipboard); copy-link copies the real URL. `cta` = SkillLane orange `.btn--cta`, at most one per page (the page-head "คัดลอกให้ AI" in errors, error detail, trace detail; the drawer-foot CTA in jobs). The Log console copies with `copyText` from the line detail ("คัดลอกให้ AI", terminal format, JSON) |
 | `badges` | `LevelBadge {level}` · `Method {method}` · `HttpStatus {status}` · `CategoryChip {category}` · `NewBadge {since?}` · `EnvTag {env?}` · `Tag` · `StateChip {state: ok\|warn\|down\|unknown}` · `ServiceChip {service, role?, order?}` · `ServiceDots {services, order?}` · `Ts {value, format?: ms\|sec\|min\|date\|date-ms}` · `Live {children? = 'สด', title?}` | service colour = fixed slot (`lib/services.ts`); `Live` = `.live` pulsing dot |
 | `Panel`, `Section` | `Section { id?, title, meta?, actions? }` · `Panel { title?, meta?, actions?, foot?, flush?, as? }` | `flush` for tables / lists edge to edge |
 | `Kpis`, `Kpi` | `Kpis { cols?: 3\|4\|5, label? }` · `Kpi { label, icon?, value: number\|node, decimals?, unit?, foot?, delta?: {text, tone?: bad\|good}, spark?: number[], sparkBad?, tone?: alert\|warn, href?, linkLabel? }` | numbers count up (`AnimatedNumber`) |
@@ -260,9 +263,43 @@ scrolls the plot instead of shrinking the text. Series colour by job: service �
   links with the router, and destroy renderer + context on unmount. Callbacks / `highlight` need a client parent.
   `/overview` (placeholder) and `/dev/components` show both with live data. Types: `lib/3d/system-map.d.ts`.
 
+### Log console (`/logs`, design/monitoring-ui/logs-console.html)
+
+- Files: `app/logs/page.tsx` (server: reads the URL with `_lib/query.ts`, calls the engine),
+  `_components/LogConsole.tsx` (client: the stream, follow, older pages, keys), `ConsoleLines.tsx` (a line `.ln`, a
+  separator, a request block `.tg`, the detail under a line `.ln-x`), `ConsoleControls.tsx` (Service / Pod dropdowns,
+  minute strip), `ServicePicker.tsx` (first visit), `_lib/console.ts` (line ids, request blocks, separators; pure),
+  `_lib/lines.ts` (key=value, terminal copy, raw JSON, outages), `_lib/noise.ts`.
+- URL (every filter; a copied link opens the same view): `service=svc/role,svc/role` or `all` (`service=svc&role=r`
+  from other screens still works; a bare `service` = every role of it), `pod=host,host` (none = every pod; unticking
+  every pod shows "ยังไม่ได้เลือก pod" without changing the URL), `view=raw` (none = Timeline, or the remembered view),
+  `level=`, `show=all&repeats=all` ("แสดง noise"), the grep box = `q exclude traceId userId route job jobId event
+  fingerprint category pattern check` (typed as `route:"GET /me" trace:<id> user:u_… job:report -word words`;
+  `job:` = part of a job's name `queue type #id`, `job:#<id>` = one job, the `jobId` of links from Jobs; a bare 32-hex
+  id or `u_…` works too; typing applies after a 450 ms pause or with the next change), `pick=1` the service picker. A
+  trace filter shows every service and every pod.
+- No `service` in the URL: the remembered one (cookie `sm-log-sources`, a redirect), every service when a link narrows
+  the page (trace, user, group, job …), else the picker. The view is remembered in `sm-log-view`. `lib/prefs.ts` reads
+  the cookies on the server (the first paint is right) and writes them on the client; the URL always wins.
+- Engine calls: `/api/logs` (`sources`, `host`, 300 lines; older pages with `before` from the client),
+  `/api/logs/pods` (Pod dropdown, ERR / WRN per service), `/api/errors` (NEW badge, counts in a detail),
+  `/api/dependencies` (outage separators and minute-strip bands, only those a shown service reported); Timeline: `/api/logs/traces` with the trace ids of the page (≤ 100 per
+  call), so a block shows every line of its request in every service and pod even when the filters matched one of
+  them. The picker: `/api/logs?limit=1` per service / role (counts, spark) + `/api/logs/pods` + `/api/errors`.
+- A refresh of the same filters (top bar auto refresh) merges new lines in at the bottom (stable line ids
+  `<ms>-<hash>`); a new filter starts a fresh stream. Only a scroll changes following: reading back stops it, reaching
+  the bottom starts it again; `F` / the button set it either way. While not following, new lines wait behind "↓ N
+  บรรทัดใหม่" (Timeline: "↓ N request ใหม่", the blocks do not move under the reader).
+- Keys: `/` grep, `j k` move, Enter open, `v` view, `t` trace, `l` the request as raw lines, `y` copy in the terminal
+  format, `e` WRN + ERR only, `f` follow, `1–9` `0` one service / every service, `p` cycle pods, `?` help, Esc. Not
+  while the phone menu or a dialog is open (the console is inert), and Enter on a focused link or button is that
+  control's own.
+
 ### Network view (captured request / response, SQL binds, messages)
 
-The trace detail's section has a Waterfall | Network switch (`?view=network`). Data:
+The trace detail's section has a Timeline | Waterfall | Network switch (`?view=waterfall|network`, none = the
+remembered view, else Timeline: `TraceTimeline` draws `buildTimeline()` of `app/traces/_lib/timeline.ts`, one row per
+thing that happened, top to bottom; a row of a span picks it like a waterfall row). Data of the Network view:
 - Rows: `netRowsOf(wfSpans)` (`lib/io.ts`) keeps the spans with I/O (`ioTypeOf`: `http-in` SERVER, `http-out` CLIENT
   HTTP, `db`, `redis`, `queue` PRODUCER / CONSUMER / job) in waterfall order. Sizes come from `SpanRow.io` of
   `GET /api/traces/:id` (lengths only); an all-zero `io` = recorded before capture, shown as `–`, never `0 B`.
@@ -281,12 +318,12 @@ The trace detail's section has a Waterfall | Network switch (`?view=network`). D
 | `QueryView` | `{ db: SpanDbIo, id, redis? }` | formatted statement (copy = original), bind table (key · column · type · value, a date also read in ICT), FULL QUERY (`buildFullQuery(statement, params, dialect)`; shown on the formatted statement, copy = on the original lines) with warnings that count the `[REDACTED]` values to replace before running, the values the SDK cut (`DbParam.truncated`) and the placeholders without a value; a date bind is written as its UTC instant converted to the session time zone when it runs (Oracle `CAST(FROM_TZ(TIMESTAMP '…', '+00:00') AT TIME ZONE SESSIONTIMEZONE AS TIMESTAMP)`, PostgreSQL `TIMESTAMPTZ '…+00'`, MySQL `CONVERT_TZ(…, '+00:00', @@session.time_zone)`, SQL Server `DATETIMEOFFSET`), as the driver binds a JS Date; Oracle `:n` binds of an array (keys 1..n) match by position, `:2` before `:1` included; an Oracle string over 4,000 bytes is `TO_CLOB('…') \|\| TO_CLOB('…')`; the tab count leaves out the SDK's `…` cut marker; Redis: the command with its arguments |
 | `Masked` | `MaskedText { text }` · `Pairs { pairs, label, empty? }` · `MASKED_TITLE` | every `[REDACTED]` drawn as the `ui-nw-masked` chip (masked by the SDK in the app, or by the engine's fallback at ingest) |
 
-- Links into it (`?view=network&span=<line span>&io=<span>`): every Logs drawer line with a span. An `http.request`
+- Links into it (`?view=network&span=<line span>&io=<span>`): every Log console line detail with a span. An `http.request`
   line opens its request; a line about a failure (error / fatal level, an error or fingerprint) opens the failing I/O
   under its span, failed_step first (`ioSpanOf(wf, spanId, true)` in `app/traces/_lib/model.ts`: the INSERT behind
   ORA-12899, the 429 call of a job attempt); any other line its span or the nearest one above it with I/O. The button
   names what it opens (ดู request/response · ดู query · ดูคำสั่ง Redis · ดู message ของ job). The Jobs drawer ("ดู
-  message") opens the attempt's Message tab. A waterfall click on a span with I/O opens the same panel.
+  message") opens the attempt's Message tab. A Timeline or waterfall click on a span with I/O opens the same panel.
 - `curlOf(http)` → `{ text, redacted, partial, files }` leaves out host, content-length, hop headers, the trace
   context (`traceparent`, `tracestate`, `baggage`: a replay starts its own trace instead of joining this one) and,
   when it sends the stored (decoded) body, content-encoding. It adds `--globoff` when the URL has `[ ] { }` (`ids[]=`,
@@ -305,7 +342,7 @@ failed`, the job as `where` of a job line, the stack through `lib/stack.ts`: app
 the message; the prefix is the event code (the logger on `app.log`). PII rule: never user id, organization, role, body, query
 string, IP or headers. Put the Markdown in a `pre.code.code--wrap` with an id and a
 `<CopyButton targetId=… label="คัดลอกให้ AI" variant="cta" />` (the orange CTA: the page-head one in errors, error
-detail and trace detail, the drawer-foot one in logs and jobs; at most one per page, `primary` for any other).
+detail and trace detail, the drawer-foot one in jobs; at most one per page, `primary` for any other).
 
 ### Overview rules (ต้องดู · เงียบ · ต้องดูตอนนี้)
 

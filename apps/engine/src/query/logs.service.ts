@@ -7,9 +7,12 @@ import {
   optString,
   parseCommon,
   parseFingerprint,
+  parseHosts,
   parseLevels,
+  parseLogScope,
   parseTime,
   parseTraceId,
+  parseTraceIds,
   bad,
 } from './params'
 import {
@@ -65,6 +68,88 @@ export interface LogsResponse {
    * levelCounts still count every line. null without collapse.
    */
   collapse: { patterns: number; bursts: number; checks: number; lines: number; skipped: 'range' | null } | null
+}
+
+/** GET /api/logs/traces: every line of the traces, newest first; `truncated` = the trace ids that had more lines. */
+export interface LogTracesResponse {
+  rows: LogRow[]
+  truncated: string[]
+}
+
+/** One pod (host) of a service / role in the range (GET /api/logs/pods). */
+export interface LogPod {
+  service: string
+  role: string
+  host: string
+  lines: number
+  /** error + fatal lines. */
+  errors: number
+  warns: number
+  firstSeen: string
+  lastSeen: string
+  /** It stopped writing before the end of the range (podsOf). */
+  gone: boolean
+}
+
+/** One pod of logs.pods; `shutdown_ms` = its last app.shutdown (0 = none). */
+export interface PodDb {
+  service: string
+  role: string
+  host: string
+  lines: number
+  errors: number
+  warns: number
+  first_ts: string
+  last_ts: string
+  last_ms: number
+  shutdown_ms: number
+}
+
+/** /api/logs/traces: the range is widened by this on both sides, so a request that crosses `from` / `to` is whole. */
+const TRACE_PAD_MS = 10 * 60_000
+/** /api/logs/traces: lines per trace (its newest) and in all. */
+const TRACE_LINES = { perTrace: 100, total: 3000 } as const
+/** A pod whose last line is this much older than the newest line of its service / role is gone. */
+const POD_GONE_MS = 5 * 60_000
+const MAX_PODS = 1000
+
+const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+
+/**
+ * The pods with `gone`: the pod wrote app.shutdown and nothing more than SHUTDOWN_MS after it, or its last line is
+ * POD_GONE_MS or more older than the newest line of its service / role. Ordered by service, role, then the live
+ * pods by host, then the gone ones by lastSeen (oldest first).
+ */
+export function podsOf(rows: PodDb[]): LogPod[] {
+  const key = (r: PodDb) => `${r.service}\u0000${r.role}`
+  const newest = new Map<string, number>()
+  for (const r of rows) newest.set(key(r), Math.max(newest.get(key(r)) ?? 0, num(r.last_ms)))
+  return rows
+    .map((r) => {
+      const last = num(r.last_ms)
+      const shutdown = num(r.shutdown_ms)
+      const gone = (shutdown > 0 && last - shutdown <= SHUTDOWN_MS) || (newest.get(key(r)) ?? last) - last >= POD_GONE_MS
+      return { r, last, gone }
+    })
+    .sort(
+      (a, b) =>
+        byText(a.r.service, b.r.service) ||
+        byText(a.r.role, b.r.role) ||
+        Number(a.gone) - Number(b.gone) ||
+        (a.gone ? a.last - b.last : byText(a.r.host, b.r.host)) ||
+        byText(a.r.host, b.r.host),
+    )
+    .map(({ r, gone }) => ({
+      service: r.service,
+      role: r.role,
+      host: r.host,
+      lines: num(r.lines),
+      errors: num(r.errors),
+      warns: num(r.warns),
+      firstSeen: iso(r.first_ts) ?? '',
+      lastSeen: iso(r.last_ts) ?? '',
+      gone,
+    }))
 }
 
 /** One scheduled check (logs.checks). */
@@ -246,7 +331,7 @@ export class LogsService {
   constructor(private readonly reader: Reader) {}
 
   async search(q: QueryString): Promise<LogsResponse> {
-    const c = parseCommon(q)
+    const c = parseLogScope(q)
     const limit = optInt(q, 'limit', 1, 500, 100)
     const beforeRaw = optString(q, 'before', 40)
     const before = beforeRaw === undefined ? undefined : parseTime('before', beforeRaw, Date.now())
@@ -415,6 +500,63 @@ export class LogsService {
           }
         : null,
     }
+  }
+
+  /**
+   * Every line of the traces `traceIds` (the Timeline), of every service, role and host: the range widened by
+   * TRACE_PAD_MS on both sides, `hide` as in search, at most TRACE_LINES.perTrace lines per trace (its newest) and
+   * TRACE_LINES.total in all, newest first. Enriched like search (withRequests, origin `request`).
+   */
+  async traceLines(q: QueryString): Promise<LogTracesResponse> {
+    const common = parseCommon(q)
+    const traceIds = parseTraceIds(q)
+    const c: Common = { ...common, service: undefined, role: undefined, fromMs: common.fromMs - TRACE_PAD_MS, toMs: common.toMs + TRACE_PAD_MS }
+    const hide = parseHide(q)
+    const [frequentCron, life] = await Promise.all([
+      hide.includes('cron') ? this.frequentCron(c) : [],
+      hide.includes('startup') ? this.lifecycle(c) : { startup: [], shutdown: [] },
+    ])
+    // `hide` only: this endpoint has no `exclude`
+    const hiding = hidingOf({ hide: q.hide }, frequentCron, life.startup)
+    const w = scoped(c).add('trace_id IN {traceIds:Array(String)}', { traceIds })
+    if (hiding.sql) w.add(`NOT (${hiding.sql})`, hiding.params)
+    const [rows, counts] = await Promise.all([
+      this.reader.rows<LogDb>(
+        'logs.traces',
+        `SELECT ${LOG_SELECT} FROM skilllane_monitoring.logs WHERE ${w.sql}
+         ORDER BY timestamp DESC LIMIT {perTrace:UInt32} BY trace_id LIMIT {total:UInt32}`,
+        { ...w.params, ...TRACE_LINES },
+      ),
+      this.reader.rows<{ trace_id: string; n: number }>(
+        'logs.traces.counts',
+        `SELECT trace_id, count() AS n FROM skilllane_monitoring.logs WHERE ${w.sql} GROUP BY trace_id`,
+        w.params,
+      ),
+    ])
+    const shown = new Map<string, number>()
+    for (const r of rows) shown.set(r.trace_id, (shown.get(r.trace_id) ?? 0) + 1)
+    const lines = new Map(counts.map((t) => [t.trace_id, num(t.n)]))
+    const mapped = await withRequests(this.reader, rows.map(toLogRow))
+    for (const row of mapped) if (row.requestRoute) row.origin = 'request'
+    return { rows: mapped, truncated: traceIds.filter((id) => (lines.get(id) ?? 0) > (shown.get(id) ?? 0)) }
+  }
+
+  /** The pods (hosts) of the services / roles in scope with their lines in the range; `gone` and order: podsOf. */
+  async pods(q: QueryString): Promise<{ pods: LogPod[] }> {
+    const w = scoped(parseLogScope(q))
+    const rows = await this.reader.rows<PodDb>(
+      'logs.pods',
+      `SELECT service, role, host, count() AS lines,
+              countIf(level IN ('error', 'fatal')) AS errors, countIf(level = 'warn') AS warns,
+              min(timestamp) AS first_ts, max(timestamp) AS last_ts, toUnixTimestamp64Milli(last_ts) AS last_ms,
+              toUnixTimestamp64Milli(maxIf(timestamp, event_code = 'app.shutdown')) AS shutdown_ms
+       FROM skilllane_monitoring.logs
+       WHERE ${w.sql} AND host != ''
+       GROUP BY service, role, host
+       ORDER BY service, role, last_ts DESC LIMIT {maxPods:UInt32}`,
+      { ...w.params, maxPods: MAX_PODS },
+    )
+    return { pods: podsOf(rows) }
   }
 
   /**
@@ -596,8 +738,16 @@ export class LogsService {
     }
     const jobId = optString(q, 'jobId', 128)
     if (jobId) w.add('job_id = {jobId:String}', { jobId })
-    const host = optName(q, 'host')
-    if (host) w.add('host = {host:String}', { host })
+    // part of a job's name as the console shows it (`queue type #id`, any case); lines of jobs only
+    const job = optString(q, 'job', 200)
+    if (job) {
+      w.add(
+        "(job_id != '' OR job_type != '' OR job_queue != '') AND positionCaseInsensitiveUTF8(concat(job_queue, ' ', job_type, ' #', job_id), {job:String}) > 0",
+        { job },
+      )
+    }
+    const hosts = parseHosts(q)
+    if (hosts) w.add('host IN {hosts:Array(String)}', { hosts })
     const traceId = optString(q, 'traceId', 64)
     if (traceId) w.add('trace_id = {traceId:String}', { traceId: parseTraceId(traceId) })
     const userId = optString(q, 'userId', 128)

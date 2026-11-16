@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { Fragment, type ReactNode } from 'react'
 import { CopyButton } from '@/components/CopyButton'
@@ -11,6 +12,7 @@ import { EmptyState, EngineErrorState, ParamProblems } from '@/components/states
 import { engine, getMeta } from '@/lib/engine'
 import { fmtCount, fmtDuration, fmtMs, fmtNumber, fmtRange, fmtTimeMs, fmtTimeSec, shortId } from '@/lib/format'
 import { buildHref, isTraceId, Params, parseScope, type RawSearchParams, type Scope, withParams } from '@/lib/params'
+import { PREF, readPref } from '@/lib/prefs'
 import { actualError, type Kv, logDetail, logKvs, logTitle, logWhatFix } from '@/lib/readable'
 import { normalizeSpanDetail } from '@/lib/io'
 import { serviceOrder } from '@/lib/services'
@@ -18,7 +20,6 @@ import type { LogRow, SpanDetail } from '@/lib/types'
 import {
   aiTraceMarkdown,
   buildWaterfall,
-  descendants,
   failedSpan,
   fmtOff,
   ioSpanOf,
@@ -30,10 +31,11 @@ import {
   servicePath,
   spanLabel,
   stepOf,
+  timeSplit,
   type Waterfall,
-  type WfSpan,
   withRequest,
 } from '../_lib/model'
+import { buildTimeline, TRACE_VIEWS } from '../_lib/timeline'
 import { type LogMarker, type SpanErrorRef, TraceView, type WfModel } from './_components/TraceView'
 import './screen.css'
 
@@ -141,8 +143,9 @@ export default async function TraceDetailPage({ params, searchParams }: Props) {
   const spanParam = get16(p.str('span', 64))
   // the open Network panel, in either view (`span` alone only selects)
   const ioParam = get16(p.str('io', 64))
-  const view = p.oneOf('view', ['waterfall', 'network'] as const) ?? 'waterfall'
-  // a trace id is unique: ask for it in every env, then show its own env (a user limited to some envs: in the selected one)
+  // ?view= wins, then the view this browser used last (cookie), then Timeline
+  const pref = readPref(await cookies(), PREF.traceView)
+  const view = p.oneOf('view', TRACE_VIEWS) ?? TRACE_VIEWS.find((v) => v === pref) ?? 'timeline'
   const res = await engine.trace(traceId, meta.ok && meta.data.envsLimited ? { env: scope.env } : {})
   if (!res.ok) {
     if (res.error.status === 404)
@@ -263,19 +266,22 @@ export default async function TraceDetailPage({ params, searchParams }: Props) {
     initialSpanId: initial,
     failedSpanId: failed?.span.spanId ?? null,
     spanErrors,
-    view,
     openSpanId,
     openDetail,
     openMissing: !!ioRes && !ioRes.ok && ioRes.error.status === 404,
+    view,
+    timeline: buildTimeline({
+      wf,
+      logs,
+      failed,
+      errLog,
+      recovered,
+      hrefs: { error: (fp) => buildHref(`/errors/${fp}`, scope.keep), user: (userId) => buildHref('/logs', scope.keep, { userId }) },
+    }),
   }
 
   // KPI 4: time in the other service, else the longest step
-  const hop = wf.spans.find((w) => w.hop && w.railAt !== null)
-  const hopSpans = hop ? wf.spans.filter((w) => w.hop && w.span.service === hop.span.service && w.span.role === hop.span.role) : []
-  const hopMs = hopSpans.reduce((a, w) => a + w.span.durationMs, 0)
-  const longestLeaf = (list: WfSpan[]) => list.filter((w) => w.childCount === 0).reduce<WfSpan | null>((a, b) => (!a || b.span.durationMs > a.span.durationMs ? b : a), null)
-  const hopLeaf = hop ? longestLeaf(hopSpans.flatMap((w) => [w, ...descendants(wf, w)])) : null
-  const leaf = longestLeaf(wf.spans.slice(1)) ?? root
+  const { hop, hopMs, hopLeaf, leaf } = timeSplit(wf)
   const counts = group ? `group ${fmtCount(group.count)} times${group.users ? ` · ${fmtCount(group.users)} users` : ''} in 24 h` : undefined
   // the request of a trace that also ran queued jobs (CONSUMER spans): its own time is what the route p95 measures
   const withJobs = isHttp && wf.spans.some((w) => w.span.kind === 'CONSUMER')

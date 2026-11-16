@@ -12,6 +12,8 @@ export interface Common {
   env?: string
   service?: string
   role?: string
+  /** /api/logs scope `sources` (parseLogScope), instead of service / role; role '' = every role of the service. */
+  sources?: Source[]
   fromMs: number
   toMs: number
   /**
@@ -26,6 +28,12 @@ export interface Common {
    * so buckets line up with the range start (14:20, 15:20 … for an hourly step).
    */
   originMs: number
+}
+
+/** One `sources` item: `service/role`, or a bare `service` (role ''). */
+export interface Source {
+  service: string
+  role: string
 }
 
 export const LEVELS = ['debug', 'info', 'warn', 'error', 'fatal'] as const
@@ -147,6 +155,68 @@ export function parseCommon(q: QueryString, nowMs = Date.now()): Common {
     stepSeconds: parseStep(q, toMs - fromMs) ?? stepFor(toMs - fromMs),
     originMs: Math.floor(fromMs / 60_000) * 60_000,
   }
+}
+
+const MAX_SOURCES = 20
+const MAX_HOSTS = 50
+const MAX_TRACE_IDS = 100
+
+/** A comma list of names, empty items dropped, duplicates removed. */
+function nameList(q: QueryString, name: string, max: number): string[] | undefined {
+  const value = optString(q, name, max * 260)
+  if (value === undefined) return undefined
+  const items = [...new Set(value.split(',').map((s) => s.trim()).filter(Boolean))]
+  if (items.length > max) bad(`${name} may list at most ${max} values`)
+  return items.length ? items : undefined
+}
+
+/**
+ * `sources`: a comma list of 1–20 `service/role` (split at the last `/`) or bare `service` (every role of it),
+ * duplicates removed.
+ */
+export function parseSources(q: QueryString): Source[] | undefined {
+  const items = nameList(q, 'sources', MAX_SOURCES)
+  if (!items) return undefined
+  const help = 'sources must be a comma list of service/role or service, each part letters, digits and . _ - : / @'
+  const seen = new Set<string>()
+  const out: Source[] = []
+  for (const item of items) {
+    const cut = item.lastIndexOf('/')
+    const service = cut < 0 ? item : item.slice(0, cut)
+    const role = cut < 0 ? '' : item.slice(cut + 1)
+    if (!NAME.test(service) || (cut >= 0 && !NAME.test(role))) bad(help)
+    const key = `${service}\u0000${role}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ service, role })
+  }
+  return out
+}
+
+/** `host`: one host name or a comma list of 1–50, duplicates removed. */
+export function parseHosts(q: QueryString): string[] | undefined {
+  const hosts = nameList(q, 'host', MAX_HOSTS)
+  if (hosts?.some((h) => !NAME.test(h))) bad('host must be a comma list of host names (letters, digits and . _ - : / @)')
+  return hosts
+}
+
+/** `traceIds` (required): a comma list of 1–100 full trace ids, lower-cased, duplicates removed. */
+export function parseTraceIds(q: QueryString): string[] {
+  const value = optString(q, 'traceIds', MAX_TRACE_IDS * 40)
+  const ids = [...new Set((value ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))]
+  if (!ids.length) bad('traceIds is required: a comma list of trace ids (32 hexadecimal characters)')
+  if (ids.length > MAX_TRACE_IDS) bad(`traceIds may list at most ${MAX_TRACE_IDS} trace ids`)
+  if (ids.some((id) => !/^[0-9a-f]{32}$/.test(id))) bad('traceIds must be a comma list of trace ids (32 hexadecimal characters)')
+  return ids
+}
+
+/** /api/logs scope: parseCommon plus `sources`, which replaces service / role (not both). */
+export function parseLogScope(q: QueryString, nowMs = Date.now()): Common {
+  const c = parseCommon(q, nowMs)
+  const sources = parseSources(q)
+  if (!sources) return c
+  if (c.service || c.role) bad('use either sources or service/role')
+  return { ...c, sources }
 }
 
 /** A comma list of allowed values (lower case), e.g. sample=errors,slow. */

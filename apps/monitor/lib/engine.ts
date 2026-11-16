@@ -25,8 +25,12 @@ import type {
   ErrorsResponse,
   Health,
   JobsResponse,
+  LogPodsQuery,
+  LogPodsResponse,
   LogsQuery,
   LogsResponse,
+  LogTracesQuery,
+  LogTracesResponse,
   Meta,
   Overview,
   ReportDateItem,
@@ -140,6 +144,10 @@ export const engine = {
   meta: (q: Pick<CommonQuery, 'env' | 'service'> = {}) => engineGet<Meta>('/api/meta', q),
   overview: (q: CommonQuery) => engineGet<Overview>('/api/overview', q),
   logs: (q: LogsQuery) => engineGet<LogsResponse>('/api/logs', q),
+  /** Every line of a set of traces (the Log Timeline: whole requests across services and pods). */
+  logTraces: (q: LogTracesQuery) => engineGet<LogTracesResponse>('/api/logs/traces', q),
+  /** Pods (hosts) per service / role with line, error and warn counts; `gone` = replaced before the range ended. */
+  logPods: (q: LogPodsQuery) => engineGet<LogPodsResponse>('/api/logs/pods', q),
   traces: (q: TracesQuery) => engineGet<TracesResponse>('/api/traces', q),
   trace: (traceId: string, q: Pick<CommonQuery, 'env'> = {}) =>
     engineGet<TraceDetail>(`/api/traces/${encodeURIComponent(traceId)}`, q),

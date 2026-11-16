@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Noise groups as checkboxes (ค้นหาขั้นสูง of /logs and /traces): ticked = shown. A change writes `param`
+ * Noise groups as checkboxes (ค้นหาขั้นสูง of /traces): ticked = shown. A change writes `param`
  * (lib/noise: all | none | list, removed when it is the page's default) and drops the paging.
  *
  *   <NoiseChecks param="noise" groups={TRACE_NOISE_GROUPS} labels={…} counts={res.data.hidden} unit="trace" shown={[]} narrowed={false} />

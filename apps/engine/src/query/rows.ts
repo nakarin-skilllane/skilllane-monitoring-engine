@@ -104,7 +104,7 @@ export interface LogRow {
   requestDurationMs: number | null
   /**
    * `METHOD /route` of the request a line was written in, from the `http.request` line of the same trace +
-   * service + role (/api/logs only); null on the http.request line itself and outside a request.
+   * service + role (/api/logs and /api/logs/traces only); null on the http.request line itself and outside a request.
    */
   requestRoute: string | null
   /** The request's route was a catch-all (`/{*path}`): it ended in a middleware before a controller, requestRoute holds its real path. */

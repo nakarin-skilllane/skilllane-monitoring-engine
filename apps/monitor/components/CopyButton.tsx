@@ -67,6 +67,18 @@ function fallbackCopy(text: string, target: Element | null): boolean {
   return ok
 }
 
+/** Copy `value` (clipboard API, else execCommand, else select `target` for a manual copy); true when copied. */
+export async function copyText(value: string, target: Element | null = null): Promise<boolean> {
+  let ok = false
+  if (navigator.clipboard && window.isSecureContext) {
+    ok = await navigator.clipboard.writeText(value).then(
+      () => true,
+      () => false,
+    )
+  }
+  return ok || fallbackCopy(value, target)
+}
+
 export function CopyButton({ text, targetId, currentUrl, label, ariaLabel, variant = 'default', size, icon = 'copy', className, title }: CopyButtonProps) {
   const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle')
   const timer = useRef<number | undefined>(undefined)
@@ -74,15 +86,7 @@ export function CopyButton({ text, targetId, currentUrl, label, ariaLabel, varia
   async function onClick() {
     const target = targetId ? document.getElementById(targetId) : null
     const raw = currentUrl ? window.location.href : (text ?? target?.textContent ?? '')
-    const value = raw.replace(/^\n+|\s+$/g, '')
-    let ok = false
-    if (navigator.clipboard && window.isSecureContext) {
-      ok = await navigator.clipboard.writeText(value).then(
-        () => true,
-        () => false,
-      )
-    }
-    if (!ok) ok = fallbackCopy(value, target)
+    const ok = await copyText(raw.replace(/^\n+|\s+$/g, ''), target)
     setState(ok ? 'copied' : 'manual')
     announce(ok ? 'คัดลอกแล้ว' : 'เลือกข้อความแล้ว กด Ctrl หรือ Command กับ C เพื่อคัดลอก')
     window.clearTimeout(timer.current)

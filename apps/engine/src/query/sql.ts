@@ -36,11 +36,24 @@ export function scoped(c: Common, timeColumn = 'timestamp', w = new Where()): Wh
   return scopeOnly(c, w)
 }
 
-/** env / service / role only (no time). */
-export function scopeOnly(c: Pick<Common, 'env' | 'service' | 'role'>, w = new Where()): Where {
+/**
+ * env / service / role only (no time). `sources` (/api/logs): `service IN` the services (primary key) and one
+ * parallel `srcSvc` / `srcRole` pair matching, role '' = every role.
+ */
+export function scopeOnly(c: Pick<Common, 'env' | 'service' | 'role' | 'sources'>, w = new Where()): Where {
   if (c.env) w.add('env = {env:String}', { env: c.env })
   if (c.service) w.add('service = {service:String}', { service: c.service })
   if (c.role) w.add('role = {role:String}', { role: c.role })
+  if (c.sources?.length) {
+    w.add(
+      "service IN {srcServices:Array(String)} AND arrayExists((s, r) -> s = service AND (r = '' OR r = role), {srcSvc:Array(String)}, {srcRole:Array(String)})",
+      {
+        srcServices: [...new Set(c.sources.map((s) => s.service))],
+        srcSvc: c.sources.map((s) => s.service),
+        srcRole: c.sources.map((s) => s.role),
+      },
+    )
+  }
   return w
 }
 

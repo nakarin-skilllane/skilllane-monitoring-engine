@@ -433,7 +433,14 @@ export interface LogsQuery extends CommonQuery {
   userId?: string
   /** job_id (any queue): every attempt of one job. */
   jobId?: string
-  /** One process's host (a start-up or shutdown of it). */
+  /** Part of a job's name, any case: `queue type #id` (`report`, `report:generate`, `#88412`); lines of jobs only. */
+  job?: string
+  /**
+   * Several services / roles at once: comma list of `service/role` (split at the last `/`) or a bare `service` (every
+   * role of it), at most 20. Not together with `service` / `role`.
+   */
+  sources?: string
+  /** Hosts (pods): comma list, at most 50; one host = one process (a start-up or shutdown of it). */
   host?: string
   /** `GET /classes/:id` (the form responses use), a bare `/classes/:id`, or a job key `report report:generate` (job_queue + job_type). */
   route?: string
@@ -496,6 +503,56 @@ export interface LogsHidden {
   startup: number
   exclude: number
   total: number
+}
+
+// ---------- GET /api/logs/traces, /api/logs/pods ----------
+
+/** Every line of a set of traces (the Log Timeline view): every service, role and host. */
+export interface LogTracesQuery {
+  env?: string
+  /** The window is widened by 10 minutes on both sides, so a request that crosses from / to comes back whole. */
+  from?: string
+  to?: string
+  /** Comma list of 1–100 full trace ids (32 hex). */
+  traceIds: string
+  /** Noise groups to leave out, as /api/logs `hide`. */
+  hide?: string
+}
+
+export interface LogTracesResponse {
+  /** Newest first, at most 100 per trace (its newest) and 3000 in total; requestRoute / origin as /api/logs. */
+  rows: LogRow[]
+  /** Trace ids that had more lines in the window than came back. */
+  truncated: string[]
+}
+
+export interface LogPodsQuery extends CommonQuery {
+  /** Same as LogsQuery.sources. */
+  sources?: string
+}
+
+/** One process (host) of a service / role that wrote lines in the range. */
+export interface LogPod {
+  service: string
+  role: string
+  host: string
+  /** Every line of it in the range (noise too). */
+  lines: number
+  /** error + fatal lines. */
+  errors: number
+  warns: number
+  firstSeen: string
+  lastSeen: string
+  /**
+   * Stopped writing before the end of the range (replaced by a deploy): it wrote app.shutdown and nothing more than
+   * 30 s after it, or its last line is at least 5 minutes older than the newest line of its service / role.
+   */
+  gone: boolean
+}
+
+export interface LogPodsResponse {
+  /** By service, role; live pods (by host) before gone ones (oldest last line first). */
+  pods: LogPod[]
 }
 
 // ---------- GET /api/traces, /api/traces/:traceId ----------

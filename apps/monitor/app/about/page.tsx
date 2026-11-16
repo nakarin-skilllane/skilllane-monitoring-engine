@@ -109,16 +109,16 @@ export default async function AboutPage({ searchParams }: { searchParams: Promis
       name: 'Log',
       href: href('/logs'),
       path: '/logs',
-      question: 'เกิดอะไรขึ้นบ้าง ตอนไหน กรองตาม level, service, route, user หรือ trace',
+      question: 'เกิดอะไรขึ้นบ้าง ตอนไหน อ่านแบบ terminal ทีละ service หรือทีละ request ข้าม service',
       data: (
         <>
-          histogram ตาม level ต่อนาที · error อ่านได้ในแถว · เปิดแถวเพื่อดูทุก field ·{' '}
+          Timeline ทีละ request หรือบรรทัดดิบ · เลือกหลาย service และ pod · error อ่านได้ใต้บรรทัด · คลิกบรรทัดเพื่อดูรายละเอียด ·{' '}
           <Link className="ix-card__alt" href={href('/logs', { level: 'error,fatal' })}>
             เฉพาะ error
           </Link>
         </>
       ),
-      api: 'GET /api/logs',
+      api: 'GET /api/logs, /api/logs/traces, /api/logs/pods',
     },
     {
       icon: 'traces',
@@ -260,13 +260,13 @@ export default async function AboutPage({ searchParams }: { searchParams: Promis
                 <li>
                   <span className="ix-req__n">2</span>
                   <span>
-                    Log กิจกรรมพร้อมเวลา<span className="ix-req__where">Log: ค้นหา กรอง histogram ตาม level</span>
+                    Log กิจกรรมพร้อมเวลา<span className="ix-req__where">Log: อ่านแบบ terminal กรองช่องเดียว Timeline ทีละ request</span>
                   </span>
                 </li>
                 <li>
                   <span className="ix-req__n">3</span>
                   <span>
-                    Trace ราย request<span className="ix-req__where">Trace และ trace detail: waterfall ข้าม service</span>
+                    Trace ราย request<span className="ix-req__where">Trace และ trace detail: Timeline และ waterfall ข้าม service</span>
                   </span>
                 </li>
                 <li>

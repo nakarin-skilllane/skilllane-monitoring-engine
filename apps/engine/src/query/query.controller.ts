@@ -64,6 +64,20 @@ export class QueryController {
     return this.logsService.search(q)
   }
 
+  /** Every line of a set of traces (`traceIds`), of every service and host (the Timeline view). */
+  @RequirePermission('logs')
+  @Get('logs/traces')
+  logTraces(@Query() q: QueryString) {
+    return this.logsService.traceLines(q)
+  }
+
+  /** Pods (hosts) per service / role with their line counts and whether they are gone. */
+  @RequirePermission('logs')
+  @Get('logs/pods')
+  logPods(@Query() q: QueryString) {
+    return this.logsService.pods(q)
+  }
+
   @RequirePermission('traces')
   @Get('traces')
   traces(@Query() q: QueryString) {

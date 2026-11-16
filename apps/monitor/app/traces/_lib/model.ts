@@ -278,6 +278,22 @@ export function descendants(wf: Waterfall, w: WfSpan): WfSpan[] {
   return out
 }
 
+/**
+ * Where the time of a trace went: the first other service it ran in (every span that entered it, time summed) with
+ * the longest step inside it, and the longest step of the whole trace (the root when it has no other span).
+ */
+export function timeSplit(wf: Waterfall): { hop: WfSpan | null; hopMs: number; hopLeaf: WfSpan | null; leaf: WfSpan | null } {
+  const longestLeaf = (list: WfSpan[]) => list.filter((w) => w.childCount === 0).reduce<WfSpan | null>((a, b) => (!a || b.span.durationMs > a.span.durationMs ? b : a), null)
+  const hop = wf.spans.find((w) => w.hop && w.railAt !== null) ?? null
+  const hopSpans = hop ? wf.spans.filter((w) => w.hop && svcKey(w.span) === svcKey(hop.span)) : []
+  return {
+    hop,
+    hopMs: hopSpans.reduce((a, w) => a + w.span.durationMs, 0),
+    hopLeaf: hop ? longestLeaf(hopSpans.flatMap((w) => [w, ...descendants(wf, w)])) : null,
+    leaf: longestLeaf(wf.spans.slice(1)) ?? wf.root,
+  }
+}
+
 /** The failing span is worth naming as the failed step: a step inside the request, or the one the error line names. */
 export const namedStep = (failed: WfSpan | null, log: LogRow | null): WfSpan | null => (failed && (failed.n > 1 || !!log?.failedStep) ? failed : null)
 

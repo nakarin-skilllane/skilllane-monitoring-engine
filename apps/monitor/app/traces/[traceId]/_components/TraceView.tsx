@@ -1,17 +1,21 @@
 'use client'
 
 /**
- * Waterfall + "Span ที่เลือก" of one trace (trace-detail.html). Spans are drawn in call order (tree by start
- * time); the bars grow in that order when the waterfall scrolls into view (`.wf` + `--s`, DESIGN.md §7b) and
- * the failed span pulses red once. Log markers sit on a lane above the spans and on their own span's row.
- * Picking a span (row, Enter, or any `[data-pick]` link on the page) fills the panel below and puts
- * `?span=<spanId>` in the URL without a server round trip.
+ * Timeline, Waterfall and Network views of one trace + "Span ที่เลือก" (trace-detail.html). The section opens on
+ * the URL's `?view=`, else the view this browser used last (cookie PREF.traceView, read by the page), else Timeline;
+ * switching stays on the client (URL + cookie) and plays the waterfall's entrance again.
  *
- * Next to the waterfall, the Network view (`?view=network`, components/network) lists every span that carried
- * I/O like the DevTools Network tab; a row, or a waterfall span with I/O, opens the span panel (Headers / Payload /
- * Preview / Response / Timing, Query, Message). From 1280 px the panel sits beside the list or the waterfall,
- * below that it is a sheet over the page (full width on a phone); Esc closes it and focus goes back to the row.
- * The URL says what is on screen in both views: `?span=` the selected span, `?io=` the span whose panel is open
+ * Timeline (TraceTimeline, rows from app/traces/_lib/timeline.ts) reads the trace top to bottom. Waterfall draws the
+ * spans in call order (tree by start time); the bars grow in that order when the waterfall scrolls into view (`.wf` +
+ * `--s`, DESIGN.md §7b) and the failed span pulses red once. Log markers sit on a lane above the spans and on their
+ * own span's row. Picking a span (a Timeline or waterfall row, Enter, or any `[data-pick]` link on the page) fills
+ * the panel below and puts `?span=<spanId>` in the URL without a server round trip.
+ *
+ * The Network view (`?view=network`, components/network) lists every span that carried I/O like the DevTools
+ * Network tab; a row, or a Timeline / waterfall span with I/O, opens the span panel (Headers / Payload / Preview /
+ * Response / Timing, Query, Message). From 1280 px the panel sits beside the list or the view, below that it is a
+ * sheet over the page (full width on a phone); Esc closes it and focus goes back to the row.
+ * The URL says what is on screen in every view: `?span=` the selected span, `?io=` the span whose panel is open
  * (removed when it closes), so a reload or a copied link shows the same.
  */
 import Link from 'next/link'
@@ -19,14 +23,18 @@ import { Fragment, type CSSProperties, useCallback, useEffect, useMemo, useRef, 
 import { CopyButton } from '@/components/CopyButton'
 import { CategoryChip, HttpStatus, ServiceChip, Ts } from '@/components/badges'
 import { Icon } from '@/components/icons'
+import { replay } from '@/components/Motion'
 import { NetworkTable, rowDomId } from '@/components/network/NetworkTable'
 import { SpanIoPanel } from '@/components/network/SpanIoPanel'
 import { DurBar } from '@/components/table'
 import { fmtMs, fmtNumber, fmtTimeMs, shortId } from '@/lib/format'
 import { type NetRow, netRowsOf } from '@/lib/io'
+import { PREF, writePref } from '@/lib/prefs'
 import { svcColor } from '@/lib/services'
 import type { SpanDetail } from '@/lib/types'
 import { fmtOff, spanLabel, spanWhy, type WfSpan } from '../../_lib/model'
+import type { Timeline, TraceViewName } from '../../_lib/timeline'
+import { TraceTimeline } from './TraceTimeline'
 
 export interface LogMarker {
   /** Anchor of the log line (`log-3`). */
@@ -64,9 +72,10 @@ export interface WfModel {
   failedSpanId: string | null
   /** spanId → error group of the error line written in / about that span. */
   spanErrors: Record<string, SpanErrorRef>
-  /** `?view=network`: the Network table instead of the waterfall. */
-  view: 'waterfall' | 'network'
-  /** Span whose I/O panel is open on load (`?io=`, moved up to the nearest span with I/O), in either view. */
+  /** The view on load: `?view=`, else the remembered one (cookie), else Timeline. */
+  view: TraceViewName
+  timeline: Timeline
+  /** Span whose I/O panel is open on load (`?io=`, moved up to the nearest span with I/O), in any view. */
   openSpanId: string | null
   /** Its detail, fetched by the server (links from Log and Jobs open without a loading flash). */
   openDetail: SpanDetail | null
@@ -174,8 +183,8 @@ export function TraceView({ model }: { model: WfModel }) {
     const id = openId
     shutPanel()
     if (!id) return
-    // back to the row it was opened from: the Network row, else the span's waterfall button
-    window.setTimeout(() => (document.getElementById(rowDomId(id)) ?? document.getElementById(`wf-pick-${id}`))?.focus(), 0)
+    // back to the row it was opened from: the Network row, else the span's Timeline or waterfall button
+    window.setTimeout(() => (document.getElementById(rowDomId(id)) ?? document.getElementById(`tl-pick-${id}`) ?? document.getElementById(`wf-pick-${id}`))?.focus(), 0)
   }, [openId, shutPanel])
 
   useEffect(() => {
@@ -216,10 +225,28 @@ export function TraceView({ model }: { model: WfModel }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [openId, closePanel])
 
-  const switchView = (v: 'waterfall' | 'network') => {
-    setView(v)
-    writeUrl({ view: v === 'network' ? 'network' : null })
+  /** A Timeline or waterfall row: select the span; one with I/O opens its panel, like a row of the Network view. */
+  const pickSpan = (id: string) => {
+    pick(id, false)
+    if (netById.has(id)) openPanel(id)
+    else if (openId) shutPanel()
   }
+
+  const replayWf = useRef(false)
+  const switchView = (v: TraceViewName) => {
+    if (v === view) return
+    setView(v)
+    writeUrl({ view: v === 'timeline' ? null : v })
+    writePref(PREF.traceView, v)
+    replayWf.current = v === 'waterfall'
+  }
+
+  // the waterfall just mounted by a switch: play its entrance (replay does nothing while motion is off)
+  useEffect(() => {
+    if (!replayWf.current) return
+    replayWf.current = false
+    replay(document.querySelector('.td-wf'))
+  }, [view])
 
   // links anywhere on the page (callout, log lines, parent) pick a span: [data-pick="<spanId>"]
   useEffect(() => {
@@ -246,21 +273,28 @@ export function TraceView({ model }: { model: WfModel }) {
       <section className="section" aria-labelledby="h-wf">
         <div className="section__head">
           <h2 className="section__title" id="h-wf">
-            {view === 'network' ? 'Network' : 'Waterfall'}
+            {view === 'network' ? 'Network' : view === 'waterfall' ? 'Waterfall' : 'Timeline'}
           </h2>
           <span className="section__meta">
             {view === 'network' ? (
               <>
                 {netRows.length} รายการที่มี I/O ตามลำดับที่เรียก · request เข้า, เรียกออก, query, Redis และ queue · คลิกแถวเพื่อดู header, body, query และ message
               </>
-            ) : (
+            ) : view === 'waterfall' ? (
               <>
                 {spans.length} span ตามเวลาเริ่ม · แกน 0–{fmtOff(total)} ms นับจาก <Ts value={model.start} /> · เส้นตั้งทุก {fmtOff(model.gridMs)} ms · คลิก span เพื่อดูรายละเอียด
+              </>
+            ) : (
+              <>
+                สิ่งที่เกิดขึ้นตามลำดับ บนลงล่าง · เวลานับจาก <Ts value={model.start} /> · คลิกแถวเพื่อดู span
               </>
             )}
           </span>
           <div className="section__actions">
-            <div className="seg" role="group" aria-label="มุมมองของ trace">
+            <div className="seg td-views" role="group" aria-label="มุมมองของ trace">
+              <button className="seg__btn" type="button" aria-pressed={view === 'timeline'} onClick={() => switchView('timeline')}>
+                Timeline
+              </button>
               <button className="seg__btn" type="button" aria-pressed={view === 'waterfall'} onClick={() => switchView('waterfall')}>
                 Waterfall
               </button>
@@ -284,6 +318,8 @@ export function TraceView({ model }: { model: WfModel }) {
                   if (open || openId) openPanel(id)
                 }}
               />
+            ) : view === 'timeline' ? (
+              <TraceTimeline tl={model.timeline} traceId={model.traceId} order={order} selId={sel?.span.spanId ?? ''} withIo={(id) => netById.has(id)} onPick={pickSpan} />
             ) : (
               <div className="panel">
                 <div className="table-wrap">
@@ -350,12 +386,7 @@ export function TraceView({ model }: { model: WfModel }) {
                               id={`wf-pick-${s.spanId}`}
                               aria-controls={netById.has(s.spanId) ? 'span-detail nw-panel' : 'span-detail'}
                               aria-current={selected ? 'true' : undefined}
-                              onClick={() => {
-                                pick(s.spanId, false)
-                                // a span with I/O opens its panel, like a row of the Network view
-                                if (netById.has(s.spanId)) openPanel(s.spanId)
-                                else if (openId) shutPanel()
-                              }}
+                              onClick={() => pickSpan(s.spanId)}
                             >
                               {s.name}
                             </button>
